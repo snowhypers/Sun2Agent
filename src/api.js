@@ -2,24 +2,36 @@ const axios = require('axios');
 
 const NIM_URL = 'https://integrate.api.nvidia.com/v1/chat/completions';
 
-async function askAI(apiKey, model, messages) {
-  const response = await axios.post(
-    NIM_URL,
-    {
-      model: model,
-      messages: messages,
-      temperature: 0.7,
-      max_tokens: 1024,
-      stream: false
+// Low-level call. Returns the full assistant message object so callers can see
+// tool_calls when MCP tools are attached. `tools` is optional (OpenAI format).
+// `signal` is an optional AbortSignal so the request can be cancelled (Esc).
+async function chatCompletion(apiKey, model, messages, tools, signal) {
+  const body = {
+    model,
+    messages,
+    temperature: 0.7,
+    max_tokens: 1024,
+    stream: false
+  };
+  if (tools && tools.length) {
+    body.tools = tools;
+    body.tool_choice = 'auto';
+  }
+
+  const response = await axios.post(NIM_URL, body, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
     },
-    {
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
-      }
-    }
-  );
-  return response.data.choices[0].message.content;
+    signal
+  });
+  return response.data.choices[0].message;
 }
 
-module.exports = { askAI };
+// Backward-compatible helper that returns just the reply text.
+async function askAI(apiKey, model, messages) {
+  const msg = await chatCompletion(apiKey, model, messages);
+  return msg.content;
+}
+
+module.exports = { askAI, chatCompletion };

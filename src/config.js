@@ -1,11 +1,11 @@
-import fs from 'fs';
-import path from 'path';
-import os from 'os';
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
 
 const CONFIG_DIR = path.join(os.homedir(), '.sun2agent');
 const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
 
-export const MODELS = [
+const MODELS = [
   { id: 'meta/llama-3.1-70b-instruct', tag: 'general', name: 'Llama 3.1 70B' },
   { id: 'openai/gpt-oss-120b', tag: 'allrounder-text', name: 'GPT-OSS 120B' },
   { id: 'nvidia/nemotron-3-super-120b-a12b', tag: 'allrounder-text', name: 'Nemotron 3 Super' },
@@ -16,22 +16,31 @@ function ensureConfigDir() {
   if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
 }
 
-export function loadConfig() {
+function loadConfig() {
   ensureConfigDir();
   if (!fs.existsSync(CONFIG_FILE)) return { apiKey: '', model: MODELS[0].id };
   try {
     return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8'));
-  } catch {
+  } catch (e) {
     return { apiKey: '', model: MODELS[0].id };
   }
 }
 
-export function saveConfig(config) {
+function saveConfig(config) {
   ensureConfigDir();
-  fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2));
+  // The API key lives here — keep the file owner-only (0600) so other local
+  // users cannot read it.
+  fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), { mode: 0o600 });
+  try {
+    fs.chmodSync(CONFIG_FILE, 0o600); // enforce even if the file pre-existed
+  } catch (e) {
+    /* best effort */
+  }
 }
 
-export function deleteConfig() {
+function deleteConfig() {
   if (fs.existsSync(CONFIG_FILE)) fs.unlinkSync(CONFIG_FILE);
   if (fs.existsSync(CONFIG_DIR)) fs.rmdirSync(CONFIG_DIR, { recursive: true });
 }
+
+module.exports = { MODELS, loadConfig, saveConfig, deleteConfig, CONFIG_FILE };

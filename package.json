@@ -1,15 +1,36 @@
 {
   "name": "sun2agent",
   "version": "1.0.0",
-  "description": "Simple terminal chat agent using NVIDIA NIM API",
+  "description": "Simple terminal AI chat agent with MCP support, using the NVIDIA NIM API",
   "main": "bin/sun2agent.js",
   "bin": {
     "sun2agent": "./bin/sun2agent.js"
   },
+  "files": [
+    "bin/",
+    "src/",
+    "README.md"
+  ],
   "scripts": {
     "start": "node bin/sun2agent.js"
   },
+  "keywords": [
+    "cli",
+    "terminal",
+    "ai",
+    "chat",
+    "agent",
+    "mcp",
+    "nvidia",
+    "nim"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "axios": "^1.18.1",
     "boxen": "^5.1.2",
     "chalk": "^4.1.2",
