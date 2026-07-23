@@ -3,7 +3,7 @@
 A simple terminal AI chat agent with a **native MCP client** — connect to any [Model Context Protocol](https://modelcontextprotocol.io) server (local or remote) and let the agent use its tools to automate tasks. Powered by the [NVIDIA NIM](https://build.nvidia.com) API.
 
 ```
-╭ ☀️  sun2Agent  v1.0.0 ─────────────────────╮
+╭ ☀️  sun2Agent  v1.0.1 ─────────────────────╮
 │               Welcome back!                │
 │                     o                      │
 │                 ╭───────╮                  │
@@ -14,6 +14,16 @@ A simple terminal AI chat agent with a **native MCP client** — connect to any 
 │             Model gpt-oss-120b             │
 ╰────────────────────────────────────────────╯
 ```
+
+## Demo
+
+Connecting an MCP server and letting the agent drive its tools:
+
+<video src="https://raw.githubusercontent.com/Ppp111ppp111/Sun2Agent/main/assets/demo.mp4" poster="https://raw.githubusercontent.com/Ppp111ppp111/Sun2Agent/main/assets/demo-poster.png" controls muted playsinline width="100%"></video>
+
+[![sun2Agent demo](https://raw.githubusercontent.com/Ppp111ppp111/Sun2Agent/main/assets/demo-poster.png)](https://github.com/Ppp111ppp111/Sun2Agent/blob/main/assets/demo.mp4)
+
+*Video not playing? [Watch it here](https://github.com/Ppp111ppp111/Sun2Agent/blob/main/assets/demo.mp4).*
 
 ## Features
 
@@ -45,12 +55,6 @@ Requires **Node.js >= 18**.
 > fail with peer-dependency errors that have nothing to do with sun2Agent. Use `-g`
 > or `npx` instead.
 
-## Uninstall
-
-```bash
-sun2agent delete            # optional: remove saved config + mcp.json
-npm uninstall -g sun2agent
-```
 ## First run
 
 1. Start it: `sun2agent`
@@ -113,7 +117,12 @@ Then `/mcp` -> **Connect MCP** -> pick a server (or **Connect all MCPs**). The a
 - **`mcp.json` can launch programs.** A `stdio` server runs the `command` you specify — treat `mcp.json` like a script and only add servers you trust.
 - **Tools run automatically.** The agent executes MCP tools based on the model's decisions without a confirmation prompt. Be cautious connecting servers that fetch untrusted web content *and* servers that can take destructive actions in the same session.
 
+## Uninstall
 
+```bash
+sun2agent delete            # optional: remove saved config + mcp.json
+npm uninstall -g sun2agent
+```
 
 ## License
 
