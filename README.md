@@ -1,6 +1,10 @@
 # ☀️ sun2Agent
 
-A simple terminal AI chat agent with a **native MCP client** — connect to any [Model Context Protocol](https://modelcontextprotocol.io) server (local or remote) and let the agent use its tools to automate tasks. Powered by the [NVIDIA NIM](https://build.nvidia.com) API.
+[![npm](https://img.shields.io/npm/v/sun2agent)](https://www.npmjs.com/package/sun2agent)
+[![node](https://img.shields.io/node/v/sun2agent)](https://nodejs.org)
+![license](https://img.shields.io/npm/l/sun2agent)
+
+**A terminal AI chat agent with a native MCP client.** Connect any [Model Context Protocol](https://modelcontextprotocol.io) server — local or remote — and let the agent call its tools for you. Powered by the [NVIDIA NIM](https://build.nvidia.com) API.
 
 ```
 ╭ ☀️  sun2Agent  v1.0.1 ─────────────────────╮
@@ -15,17 +19,15 @@ A simple terminal AI chat agent with a **native MCP client** — connect to any 
 ╰────────────────────────────────────────────╯
 ```
 
-## Demo
+## Why sun2Agent
 
-▶️ **[Watch the demo](https://www.loom.com/share/c5d96ba1ab2942de91cd9081883391dd)** — connecting an MCP server and letting the agent drive its tools.
+Most MCP clients are wrapped inside a big editor or desktop app. sun2Agent is just a terminal — start it, point it at your MCP servers, and ask for things in plain language. The agent figures out which tools to call.
 
-## Features
-
-- 💬 Terminal chat with NVIDIA NIM models
-- 🔌 Built-in MCP client — connect **stdio** (local) and **remote** (HTTP / SSE) servers
-- 🧰 Connect one server, or **all servers at once** (`@allMcps`) and let the agent pick the right tool
-- ⚙️ Automatic tool-calling based on your prompt
-- ⌨️ Clean TUI: rounded input box, live tags, `Esc` to interrupt
+- 🔌 **Real MCP client** — `stdio` (local process), `http` (Streamable HTTP), and `sse` transports
+- 🧰 **One server or all at once** — connect everything and let the model pick the right tool
+- ⚙️ **Automatic tool-calling** — no tool syntax to memorize, just describe the task
+- 🎛️ **Any NIM model** — swap models anytime with `/config`
+- ⌨️ **Calm TUI** — rounded input box, live connection tags, `Esc` to interrupt anything
 
 ## Install
 
@@ -33,10 +35,15 @@ sun2Agent is a command-line tool, so install it **globally** (note the `-g`):
 
 ```bash
 npm install -g sun2agent
+```
+
+Then run it:
+
+```bash
 sun2agent
 ```
 
-Or run it **without installing anything**, using npx:
+Or try it without installing anything:
 
 ```bash
 npx sun2agent
@@ -44,41 +51,21 @@ npx sun2agent
 
 Requires **Node.js >= 18**.
 
-> ⚠️ Don't run `npm install sun2agent` (without `-g`) inside another project — that
-> adds it as a local dependency and re-resolves *that project's* packages, which can
-> fail with peer-dependency errors that have nothing to do with sun2Agent. Use `-g`
-> or `npx` instead.
+> [!WARNING]
+> Don't run `npm install sun2agent` (without `-g`) inside another project. That adds it as a local dependency and re-resolves *that project's* packages, which can fail with peer-dependency errors unrelated to sun2Agent. Use `-g` or `npx`.
 
 ## First run
 
 1. Start it: `sun2agent`
-2. Run `/config`, paste your **NVIDIA NIM API key** (get one free at [build.nvidia.com](https://build.nvidia.com) -> pick a model -> *Get API Key*, it starts with `nvapi-`), and choose a model.
-3. Start chatting.
+2. Run `/config` and paste your **NVIDIA NIM API key**, then pick a model.
+   > Get one free at [build.nvidia.com](https://build.nvidia.com) → choose a model → *Get API Key*. It starts with `nvapi-`.
+3. Start chatting. Add MCP servers whenever you're ready — see below.
 
-## Commands
+## Connecting MCP servers
 
-| Command | Action |
-|---------|--------|
-| `/help`, `/?` | Show all commands and shortcuts |
-| `/config` | Set your NVIDIA NIM API key and choose a model |
-| `/mcp` | Manage MCP servers (add/edit, connect one or all, disconnect) |
-| `/delete` | Delete saved config and data |
-| `/exit` | Quit |
+**1. Open the config.** Run `/mcp` → **Add / Edit MCP**. This opens `~/.sun2agent/mcp.json` in your editor.
 
-## Keyboard shortcuts
-
-| Key | Action |
-|-----|--------|
-| `Enter` | Send message |
-| `Esc` (while typing) | Clear the input |
-| `Esc` (empty box) | Disconnect MCP and return to simple chat |
-| `Esc` (while the agent works) | Stop the current reply / tool call |
-| `Esc` (in menus) | Go back / cancel |
-| `Ctrl+C` | Quit immediately |
-
-## Using MCP servers
-
-Run `/mcp` -> **Add / Edit MCP** to open `~/.sun2agent/mcp.json`. Add servers under `mcpServers`:
+**2. Add servers** under `mcpServers`:
 
 ```json
 {
@@ -87,6 +74,11 @@ Run `/mcp` -> **Add / Edit MCP** to open `~/.sun2agent/mcp.json`. Add servers un
       "type": "stdio",
       "command": "npx",
       "args": ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"]
+    },
+    "playwright": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@latest"]
     },
     "my-http-server": {
       "type": "http",
@@ -101,15 +93,56 @@ Run `/mcp` -> **Add / Edit MCP** to open `~/.sun2agent/mcp.json`. Add servers un
 }
 ```
 
-Supported `type` values: `stdio` (local process), `http` (Streamable HTTP, alias `remote`), `sse`.
+| `type` | Transport | Needs |
+|--------|-----------|-------|
+| `stdio` | Local child process | `command`, optional `args` / `env` |
+| `http` | Streamable HTTP (alias: `remote`) | `url`, optional `headers` |
+| `sse` | Server-Sent Events | `url`, optional `headers` |
 
-Then `/mcp` -> **Connect MCP** -> pick a server (or **Connect all MCPs**). The active server shows as a green `@tag` under the input box, and its tools become available to the agent automatically — just ask.
+Set `"enabled": false` on any server to skip it without deleting it.
+
+**3. Connect.** Run `/mcp` → **Connect MCP**, then pick a server — or **Connect all MCPs** to load every server at once.
+
+The active server appears as a green `@tag` under the input box (`@allMcps` when several are connected), and its tools are available to the agent immediately. Just ask:
+
+```
+› take a screenshot of example.com and tell me what's on it
+  ⚙ playwright__browser_navigate({"url":"https://example.com"})
+  ⚙ playwright__browser_take_screenshot()
+sun2Agent: The page is a minimal placeholder titled "Example Domain"…
+```
+
+## Commands
+
+| Command | Action |
+|---------|--------|
+| `/help`, `/?` | Show all commands and shortcuts |
+| `/config` | Set your NVIDIA NIM API key and choose a model |
+| `/mcp` | Manage MCP servers — add/edit, connect one or all, disconnect |
+| `/delete` | Delete saved config and data |
+| `/exit` | Quit |
+
+## Keyboard shortcuts
+
+| Key | Action |
+|-----|--------|
+| `Enter` | Send message |
+| `Esc` *(while typing)* | Clear the input |
+| `Esc` *(empty box)* | Disconnect MCP, return to simple chat |
+| `Esc` *(agent working)* | Stop the current reply or tool call |
+| `Esc` *(in menus)* | Go back / cancel |
+| `Ctrl+C` | Quit immediately |
+
+
+
+**Tools are listed but the model never calls them**
+Some models tool-call more reliably than others. Try a different model with `/config`, or name the tool explicitly in your prompt.
 
 ## Security & trust
 
-- Your API key and `mcp.json` are stored locally in `~/.sun2agent/` (owner-only permissions). They are never bundled with the package.
-- **`mcp.json` can launch programs.** A `stdio` server runs the `command` you specify — treat `mcp.json` like a script and only add servers you trust.
-- **Tools run automatically.** The agent executes MCP tools based on the model's decisions without a confirmation prompt. Be cautious connecting servers that fetch untrusted web content *and* servers that can take destructive actions in the same session.
+- **Your keys stay local.** The API key and `mcp.json` live in `~/.sun2agent/` with owner-only permissions, and are never bundled with the package.
+- **`mcp.json` can launch programs.** A `stdio` server runs whatever `command` you give it — treat the file like a shell script and only add servers you trust.
+- **Tools run without confirmation.** The agent executes MCP tools based on the model's decisions. Take care when a session mixes servers that read untrusted web content with servers that can take destructive actions — that combination is how prompt injection turns into real damage.
 
 ## Uninstall
 
