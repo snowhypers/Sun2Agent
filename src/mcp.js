@@ -17,14 +17,15 @@ const connections = new Map();
 let sdk = null;
 async function loadSdk() {
   if (sdk) return sdk;
-  const [{ Client }, { StdioClientTransport }, { StreamableHTTPClientTransport }, { SSEClientTransport }] =
+  const [{ Client }, { StdioClientTransport }, { StreamableHTTPClientTransport }, { SSEClientTransport }, { CallToolResultSchema }] =
     await Promise.all([
       import('@modelcontextprotocol/sdk/client/index.js'),
       import('@modelcontextprotocol/sdk/client/stdio.js'),
       import('@modelcontextprotocol/sdk/client/streamableHttp.js'),
-      import('@modelcontextprotocol/sdk/client/sse.js')
+      import('@modelcontextprotocol/sdk/client/sse.js'),
+      import('@modelcontextprotocol/sdk/types.js')
     ]);
-  sdk = { Client, StdioClientTransport, StreamableHTTPClientTransport, SSEClientTransport };
+  sdk = { Client, StdioClientTransport, StreamableHTTPClientTransport, SSEClientTransport, CallToolResultSchema };
   return sdk;
 }
 
@@ -193,17 +194,24 @@ async function callTool(routes, fullName, args, signal) {
   if (!route) throw new Error(`no MCP tool named "${fullName}"`);
   const conn = connections.get(route.server);
   if (!conn) throw new Error(`server "${route.server}" is not connected`);
-  const result = await conn.client.callTool(
-    { name: route.tool, arguments: args || {} },
-    undefined,
+  // Use client.request() directly instead of client.callTool(): callTool()
+  // rejects responses from servers that declare an outputSchema but return
+  // only text content (spec-strict). Real-world servers often do exactly
+  // that, so be lenient like most other MCP clients.
+  const S = await loadSdk();
+  const result = await conn.client.request(
+    { method: 'tools/call', params: { name: route.tool, arguments: args || {} } },
+    S.CallToolResultSchema,
     signal ? { signal } : undefined
   );
   // Flatten MCP content blocks to plain text for the model.
-  if (Array.isArray(result.content)) {
+  if (Array.isArray(result.content) && result.content.length) {
     return result.content
       .map((b) => (b.type === 'text' ? b.text : JSON.stringify(b)))
       .join('\n');
   }
+  // Servers may return structured output with no text blocks.
+  if (result.structuredContent) return JSON.stringify(result.structuredContent);
   return JSON.stringify(result);
 }
 
