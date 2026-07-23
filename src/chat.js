@@ -6,6 +6,7 @@ const { MODELS, loadConfig, saveConfig, deleteConfig } = require('./config');
 const { chatCompletion } = require('./api');
 const { getMcpFilePath, openMcpConfig, loadMcpConfig, getServers } = require('./mcpconfig');
 const mcp = require('./mcp');
+const { version: VERSION } = require('../package.json');
 const { askInput, watchEscape, waitEnterOrEsc, ESC_BACK } = require('./inputbox');
 
 // Run an inquirer prompt that the user can cancel with Esc ("back").
@@ -96,7 +97,7 @@ function printBanner(config) {
 
   console.log(
     boxen(body, {
-      title: '☀️  sun2Agent  ' + chalk.gray('v1.0.0'),
+      title: '☀️  sun2Agent  ' + chalk.gray('v' + VERSION),
       titleAlignment: 'left',
       padding: { top: 0, bottom: 0, left: 2, right: 2 },
       margin: { top: 1, bottom: 0, left: 0, right: 0 },

@@ -133,7 +133,7 @@ sun2Agent: The page is a minimal placeholder titled "Example Domain"…
 | `Esc` *(in menus)* | Go back / cancel |
 | `Ctrl+C` | Quit immediately |
 
-
+## Troubleshooting
 
 **Tools are listed but the model never calls them**
 Some models tool-call more reliably than others. Try a different model with `/config`, or name the tool explicitly in your prompt.
