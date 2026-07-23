@@ -19,7 +19,7 @@ A simple terminal AI chat agent with a **native MCP client** — connect to any 
 
 Connecting an MCP server and letting the agent drive its tools:
 
-<video src="https://raw.githubusercontent.com/Ppp111ppp111/Sun2Agent/main/assets/demo.mp4" poster="https://raw.githubusercontent.com/Ppp111ppp111/Sun2Agent/main/assets/demo-poster.png" controls muted playsinline width="100%"></video>
+<video src="https://www.loom.com/share/c5d96ba1ab2942de91cd9081883391dd" width="100%"></video>
 
 [![sun2Agent demo](https://raw.githubusercontent.com/Ppp111ppp111/Sun2Agent/main/assets/demo-poster.png)](https://github.com/Ppp111ppp111/Sun2Agent/blob/main/assets/demo.mp4)
 
