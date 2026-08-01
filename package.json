@@ -1,6 +1,6 @@
 {
   "name": "sun2agent",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "Simple terminal AI chat agent with MCP support, using the NVIDIA NIM API",
   "main": "bin/sun2agent.js",
   "bin": {
@@ -9,10 +9,12 @@
   "files": [
     "bin/",
     "src/",
+    "guardrails/",
     "README.md"
   ],
   "scripts": {
-    "start": "node bin/sun2agent.js"
+    "start": "node bin/sun2agent.js",
+    "test": "node --test \"test/*.test.js\""
   },
   "keywords": [
     "cli",

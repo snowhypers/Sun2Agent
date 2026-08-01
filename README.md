@@ -138,11 +138,46 @@ sun2Agent: The page is a minimal placeholder titled "Example Domain"…
 **Tools are listed but the model never calls them**
 Some models tool-call more reliably than others. Try a different model with `/config`, or name the tool explicitly in your prompt.
 
+## Guardrails
+
+Because MCP tools run automatically on the model's say-so, every call passes through a layer of guards first. They live in `guardrails/` and use plain pattern matching — no extra model calls, no network activity, no measurable latency.
+
+```
+User prompt ──▶ inputGuard ──▶ LLM ──▶ tool call
+                                          │
+                    commandGuard ──▶ networkGuard ──▶ filesystemGuard
+                                          │
+                                    Execute tool
+                                          │
+                                     outputGuard ──▶ Terminal
+```
+
+| Guard | Blocks |
+|-------|--------|
+| **inputGuard** | Prompt injection, jailbreaks, system-prompt extraction |
+| **commandGuard** | `rm -rf`, `sudo`, `mkfs`, `dd if=`, fork bombs, `curl … \| sh`, `git push --force` |
+| **networkGuard** | Data exfiltration (`cat .env \| curl`), uploads (`curl -d`, `scp`, `nc`) |
+| **filesystemGuard** | `.env`, `.ssh`, `.aws`, `id_rsa`, `*.pem`, path traversal, anything outside the project root |
+| **outputGuard** | Masks API keys, AWS/GitHub/Slack tokens, JWTs, private keys in tool output |
+
+A blocked call fails with a clear reason and is reported back to the model, which can then try a safe alternative.
+
+All policy lives in [`guardrails/guardConfig.js`](guardrails/guardConfig.js) — edit that one file to tighten or relax the rules. Notable knobs:
+
+- `projectRoot` — the filesystem sandbox. Defaults to the directory you launched from, so **start sun2Agent inside the project you want the agent working on.** File arguments pointing outside it are refused.
+- `strictDomains` — off by default. Turn it on to restrict outbound URLs to `allowedDomains`.
+
+Run the guard test suite (24 tests, no dependencies):
+
+```bash
+npm test
+```
+
 ## Security & trust
 
 - **Your keys stay local.** The API key and `mcp.json` live in `~/.sun2agent/` with owner-only permissions, and are never bundled with the package.
-- **`mcp.json` can launch programs.** A `stdio` server runs whatever `command` you give it — treat the file like a shell script and only add servers you trust.
-- **Tools run without confirmation.** The agent executes MCP tools based on the model's decisions. Take care when a session mixes servers that read untrusted web content with servers that can take destructive actions — that combination is how prompt injection turns into real damage.
+- **`mcp.json` can launch programs.** A `stdio` server runs whatever `command` you give it — treat the file like a shell script and only add servers you trust. The guards vet the launch command, but they can't tell a trustworthy server from a malicious one.
+- **Guards reduce risk; they don't eliminate it.** They match known-dangerous patterns, so a novel phrasing can get through. Stay careful when a session mixes servers that read untrusted web content with servers that can take destructive actions — that combination is how prompt injection turns into real damage.
 
 ## Uninstall
 

@@ -7,6 +7,7 @@ const { chatCompletion } = require('./api');
 const { getMcpFilePath, openMcpConfig, loadMcpConfig, getServers } = require('./mcpconfig');
 const mcp = require('./mcp');
 const { version: VERSION } = require('../package.json');
+const guardrails = require('../guardrails');
 const { askInput, watchEscape, waitEnterOrEsc, ESC_BACK } = require('./inputbox');
 
 // Run an inquirer prompt that the user can cancel with Esc ("back").
@@ -503,7 +504,13 @@ async function chatTurn(config, history, signal) {
           console.log(chalk.red(`     ↳ unknown tool; redirected model to available tools`));
         } else {
           try {
-            content = await mcp.callTool(routes, fnName, args, signal);
+            const raw = await mcp.callTool(routes, fnName, args, signal);
+            // Mask secrets before the result reaches the terminal, the
+            // history, or the next request to the model.
+            content = guardrails.outputGuard(raw);
+            if (content !== raw) {
+              console.log(chalk.yellow('     ⚠ output guard: secrets masked in tool result'));
+            }
             console.log(chalk.gray(`     ↳ ${truncate(content, Math.max(20, termWidth() - 8))}`));
           } catch (e) {
             if (signal && signal.aborted) return null;
@@ -609,6 +616,13 @@ async function startChat() {
     }
     if (text === '/delete') {
       await handleDelete();
+      continue;
+    }
+
+    // Screen the prompt before it ever reaches the model.
+    const inputVerdict = guardrails.inputGuard(text);
+    if (!inputVerdict.ok) {
+      console.log(chalk.red('⛔ ' + inputVerdict.reason) + '\n');
       continue;
     }
 

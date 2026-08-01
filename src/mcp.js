@@ -10,6 +10,7 @@
 
 const { getServers } = require('./mcpconfig');
 const { version: VERSION } = require('../package.json');
+const guardrails = require('../guardrails');
 
 // name -> { client, transport, tools, type }
 const connections = new Map();
@@ -61,6 +62,10 @@ function buildTransport(s, S) {
 
 // Connect a single server definition and record its tools. Throws on failure.
 async function connectServer(s) {
+  // A stdio server runs a real command — vet it before spawning anything.
+  const verdict = guardrails.validateServer(s);
+  if (!verdict.ok) throw new Error(verdict.reason);
+
   const S = await loadSdk();
   const transport = buildTransport(s, S);
   const client = new S.Client({ name: 'sun2agent', version: VERSION }, { capabilities: {} });
@@ -195,6 +200,11 @@ async function callTool(routes, fullName, args, signal) {
   if (!route) throw new Error(`no MCP tool named "${fullName}"`);
   const conn = connections.get(route.server);
   if (!conn) throw new Error(`server "${route.server}" is not connected`);
+
+  // Guardrails: command -> network -> filesystem, over every argument the
+  // model supplied. Refusing here means the tool never runs at all.
+  const verdict = guardrails.validateToolCall(route.tool, args);
+  if (!verdict.ok) throw new Error(verdict.reason);
   // Use client.request() directly instead of client.callTool(): callTool()
   // rejects responses from servers that declare an outputSchema but return
   // only text content (spec-strict). Real-world servers often do exactly
