@@ -1,3 +1,107 @@
+# --- Secrets & credentials -------------------------------------------------
+# sun2Agent's own config lives in ~/.sun2agent/, outside the repo. These
+# patterns stop a stray copy from ever being committed here.
+.env
+.env.*
+!.env.example
+*.env
+mcp.json
+.sun2agent/
+secrets.json
+credentials.json
+service-account*.json
+
+# Keys & certificates
+*.pem
+*.key
+*.p12
+*.pfx
+*.cer
+*.crt
+id_rsa*
+id_ed25519*
+id_ecdsa*
+id_dsa*
+*.ppk
+
+# Registry / cloud auth
+.npmrc
+.yarnrc
+.netrc
+.git-credentials
+.aws/
+.ssh/
+
+# --- Dependencies ----------------------------------------------------------
 node_modules/
-.playwright-mcp/
+jspm_packages/
+.pnp
+.pnp.js
+.yarn/cache
+.yarn/unplugged
+
+# --- Build & package output ------------------------------------------------
+dist/
+build/
+out/
+*.tgz
+
+# --- Logs & diagnostics ----------------------------------------------------
 *.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.npm/
+report.*.json
+
+# --- Test & coverage -------------------------------------------------------
+coverage/
+.nyc_output/
+*.lcov
+
+# --- Caches ----------------------------------------------------------------
+.cache/
+.eslintcache
+.parcel-cache/
+.node_repl_history
+
+# --- MCP server artifacts --------------------------------------------------
+.playwright-mcp/
+playwright-report/
+test-results/
+
+# --- Large media (demos belong on Loom/YouTube, not in git) ----------------
+*.mov
+*.mp4
+*.avi
+*.zip
+*.tar.gz
+
+# --- OS cruft --------------------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# --- Editors ---------------------------------------------------------------
+.vscode/
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~
+.project
+.settings/
+
+# --- Temp ------------------------------------------------------------------
+tmp/
+temp/
+*.tmp
+*.bak
+*.orig
