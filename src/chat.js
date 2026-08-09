@@ -8,6 +8,7 @@ const { getMcpFilePath, openMcpConfig, loadMcpConfig, getServers } = require('./
 const mcp = require('./mcp');
 const { version: VERSION } = require('../package.json');
 const guardrails = require('../guardrails');
+const context = require('./context');
 const { askInput, watchEscape, waitEnterOrEsc, ESC_BACK } = require('./inputbox');
 
 // Run an inquirer prompt that the user can cancel with Esc ("back").
@@ -143,6 +144,7 @@ function printHelp() {
     row('/help, /?', 'Show this help'),
     row('/config', 'Set your NVIDIA NIM API key and pick a model'),
     row('/mcp', 'Manage MCP servers (add/edit, connect one, disconnect)'),
+    row('/agent', 'Edit the project\u2019s AGENT.md instructions in your editor'),
     row('/delete', 'Delete saved config and data'),
     row('/exit', 'Quit sun2Agent'),
     '',
@@ -262,6 +264,35 @@ async function mcpAddEdit() {
     return;
   }
   console.log(chalk.green('✔ mcp.json ready. Choose "Connect MCP" to connect.\n'));
+}
+
+// Handle /agent command -> open the project's AGENT.md in the user's editor.
+// Mirrors how /mcp opens mcp.json: GUI editors return immediately, so we wait
+// for Enter (saved) / Esc (back to chat). After a save we reload the cache so
+// the next turn picks up the edited instructions.
+async function handleAgent() {
+  const file = context.getAgentMdPath();
+  console.log(chalk.gray(`\nOpening ${file}`));
+  console.log(
+    chalk.gray(
+      'AGENT.md holds repository-specific instructions. They are advisory only and\n' +
+        'cannot override Sun2Agent\u2019s core instructions, security policies, or guardrails.\n'
+    )
+  );
+  context.openAgentMd();
+  // GUI editors return immediately, so wait for the user to finish saving.
+  // Enter = reloaded, Esc = back to chat without reloading.
+  const key = await waitEnterOrEsc(
+    chalk.gray('Press ') + chalk.bold('Enter') + chalk.gray(' when you have saved AGENT.md, or ') +
+      chalk.bold('Esc') + chalk.gray(' to go back to simple chat... ')
+  );
+  if (key === 'escape') {
+    console.log(chalk.gray('\nBack to simple chat.\n'));
+    return;
+  }
+  // Reload so the next turn uses the freshly edited AGENT.md.
+  context.reload();
+  console.log(chalk.green('✔ AGENT.md reloaded. Its instructions are now active.\n'));
 }
 
 // --- MCP: option 2 -> list servers, pick ONE, connect it, show its tag ---
@@ -441,7 +472,11 @@ function buildSystemPrompt(specs) {
 async function chatTurn(config, history, signal) {
   const { specs, routes } = mcp.getOpenAiTools();
   const tools = specs.length ? specs : undefined;
-  const system = { role: 'system', content: buildSystemPrompt(specs) };
+  // Build the base system prompt (persona + tools) and append AGENT.md
+  // repository instructions when present. AGENT.md is advisory context only;
+  // it cannot override system instructions or the guardrails, which run on
+  // separate code paths.
+  const system = { role: 'system', content: context.buildSystemPrompt(buildSystemPrompt(specs)) };
   let allowTools = Boolean(tools);
 
   // Loop so the model can chain tool calls before its final answer. Browser
@@ -612,6 +647,10 @@ async function startChat() {
         const tag = mcp.getTag();
         console.log(chalk.gray('(context reset — now using ' + (tag ? '@' + tag : 'no MCP server') + ')\n'));
       }
+      continue;
+    }
+    if (text === '/agent') {
+      await handleAgent();
       continue;
     }
     if (text === '/delete') {
