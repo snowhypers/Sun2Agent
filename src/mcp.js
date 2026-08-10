@@ -11,6 +11,7 @@
 const { getServers } = require('./mcpconfig');
 const { version: VERSION } = require('../package.json');
 const guardrails = require('../guardrails');
+const observability = require('./observability');
 
 // name -> { client, transport, tools, type }
 const connections = new Map();
@@ -36,11 +37,17 @@ function buildTransport(s, S) {
   switch (s.type) {
     case 'stdio':
       if (!s.command) throw new Error('stdio server needs a "command"');
+      // Do not leak the host process's LangSmith credentials into child MCP
+      // servers. Servers can still receive explicit env vars from mcp.json.
+      const env = { ...process.env };
+      for (const key of Object.keys(env)) {
+        if (key.startsWith('LANGSMITH_')) delete env[key];
+      }
       return new S.StdioClientTransport({
         command: s.command,
         args: s.args,
         // Inherit the parent env so PATH etc. resolve, then layer overrides.
-        env: { ...process.env, ...s.env }
+        env: { ...env, ...s.env }
       });
     case 'http':
     case 'https':
@@ -205,25 +212,30 @@ async function callTool(routes, fullName, args, signal) {
   // model supplied. Refusing here means the tool never runs at all.
   const verdict = guardrails.validateToolCall(route.tool, args);
   if (!verdict.ok) throw new Error(verdict.reason);
-  // Use client.request() directly instead of client.callTool(): callTool()
-  // rejects responses from servers that declare an outputSchema but return
-  // only text content (spec-strict). Real-world servers often do exactly
-  // that, so be lenient like most other MCP clients.
-  const S = await loadSdk();
-  const result = await conn.client.request(
-    { method: 'tools/call', params: { name: route.tool, arguments: args || {} } },
-    S.CallToolResultSchema,
-    signal ? { signal } : undefined
-  );
-  // Flatten MCP content blocks to plain text for the model.
-  if (Array.isArray(result.content) && result.content.length) {
-    return result.content
-      .map((b) => (b.type === 'text' ? b.text : JSON.stringify(b)))
-      .join('\n');
-  }
-  // Servers may return structured output with no text blocks.
-  if (result.structuredContent) return JSON.stringify(result.structuredContent);
-  return JSON.stringify(result);
+
+  // The actual MCP tool execution, wrapped by LangSmith tracing when enabled.
+  // Tool args, routing, and the guardrail verdict above are unchanged.
+  return observability.traceTool(async () => {
+    // Use client.request() directly instead of client.callTool(): callTool()
+    // rejects responses from servers that declare an outputSchema but return
+    // only text content (spec-strict). Real-world servers often do exactly
+    // that, so be lenient like most other MCP clients.
+    const S = await loadSdk();
+    const result = await conn.client.request(
+      { method: 'tools/call', params: { name: route.tool, arguments: args || {} } },
+      S.CallToolResultSchema,
+      signal ? { signal } : undefined
+    );
+    // Flatten MCP content blocks to plain text for the model.
+    if (Array.isArray(result.content) && result.content.length) {
+      return result.content
+        .map((b) => (b.type === 'text' ? b.text : JSON.stringify(b)))
+        .join('\n');
+    }
+    // Servers may return structured output with no text blocks.
+    if (result.structuredContent) return JSON.stringify(result.structuredContent);
+    return JSON.stringify(result);
+  }, { toolName: route.tool, server: route.server, args });
 }
 
 async function disconnectAll() {

@@ -1,4 +1,5 @@
 const axios = require('axios');
+const observability = require('./observability');
 
 const NIM_URL = 'https://integrate.api.nvidia.com/v1/chat/completions';
 
@@ -18,14 +19,18 @@ async function chatCompletion(apiKey, model, messages, tools, signal) {
     body.tool_choice = 'auto';
   }
 
-  const response = await axios.post(NIM_URL, body, {
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json'
-    },
-    signal
-  });
-  return response.data.choices[0].message;
+  // Wrap the actual LLM call with LangSmith tracing when enabled.
+  // The response format returned to callers is unchanged.
+  return observability.traceLLM(async () => {
+    const response = await axios.post(NIM_URL, body, {
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      signal
+    });
+    return response.data.choices[0].message;
+  }, { model, provider: 'nvidia', messages });
 }
 
 // Backward-compatible helper that returns just the reply text.

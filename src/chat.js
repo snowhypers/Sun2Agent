@@ -9,6 +9,7 @@ const mcp = require('./mcp');
 const { version: VERSION } = require('../package.json');
 const guardrails = require('../guardrails');
 const context = require('./context');
+const observability = require('./observability');
 const { askInput, watchEscape, waitEnterOrEsc, ESC_BACK } = require('./inputbox');
 
 // Run an inquirer prompt that the user can cancel with Esc ("back").
@@ -180,9 +181,18 @@ function printHelp() {
 function printUserLine(text) {
   const cols = process.stdout.columns || 80;
   const time = new Date().toTimeString().slice(0, 5); // HH:MM
-  const left = '› ' + text;
+  const left = '› ' + sanitizeTerminalText(text);
   const pad = Math.max(1, cols - left.length - time.length);
-  console.log(chalk.magenta('› ') + text + ' '.repeat(pad) + chalk.gray(time));
+  console.log(chalk.magenta('› ') + sanitizeTerminalText(text) + ' '.repeat(pad) + chalk.gray(time));
+}
+
+// Strip ANSI escapes and other control characters before writing untrusted
+// text to the terminal. Tool output and model replies can both carry them.
+function sanitizeTerminalText(text) {
+  return String(text)
+    .replace(/\x1b\[[0-?]*[ -\/]*[@-~]/g, '')
+    .replace(/\x1b\][^\x07]*\x07/g, '')
+    .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '');
 }
 
 // Handle /config command
@@ -213,8 +223,64 @@ async function handleConfig() {
   ]);
   if (!a2) return; // esc -> back
 
-  saveConfig({ apiKey: a1.apiKey, model: a2.model });
-  console.log(chalk.green('\n✔ Config saved successfully!\n'));
+  // LangSmith observability — optional, off by default. Lives in the existing
+  // /config flow right after model selection. Never creates a separate command.
+  const a3 = await promptBack([
+    {
+      type: 'confirm',
+      name: 'enableLangSmith',
+      message: 'Enable LangSmith observability?  ' + chalk.gray('(esc to skip)'),
+      default: false
+    }
+  ]);
+
+  const newConfig = {
+    apiKey: a1.apiKey,
+    model: a2.model,
+    langsmith: config.langsmith || { enabled: false, project: 'sun2agent' }
+  };
+
+  if (!a3) {
+    // Esc on the LangSmith prompt: keep whatever was previously configured.
+    saveConfig(newConfig);
+    console.log(chalk.green('\n✔ Config saved successfully!\n'));
+    return;
+  }
+
+  if (a3.enableLangSmith) {
+    // Ask for the LangSmith API key (masked, never printed back).
+    const a4 = await promptBack([
+      {
+        type: 'password',
+        name: 'langsmithApiKey',
+        message: 'Paste your LangSmith API key:  ' + chalk.gray('(esc to cancel)'),
+        mask: '*'
+      }
+    ]);
+    if (!a4) {
+      // Esc while entering the key: save what we have, leave LangSmith off.
+      saveConfig(newConfig);
+      console.log(chalk.green('\n✔ Config saved successfully!\n'));
+      return;
+    }
+    newConfig.langsmithApiKey = a4.langsmithApiKey;
+    newConfig.langsmith = { enabled: true, project: 'sun2agent' };
+    // Enable tracing for the current process immediately.
+    observability.enable(a4.langsmithApiKey, 'sun2agent');
+    console.log(chalk.green('\n✔ NVIDIA API key configured'));
+    console.log(chalk.green('✔ Model configured'));
+    console.log(chalk.green('✔ LangSmith observability enabled\n'));
+    console.log(chalk.gray('Configuration complete.\n'));
+  } else {
+    newConfig.langsmith = { enabled: false, project: 'sun2agent' };
+    observability.disable();
+    console.log(chalk.green('\n✔ NVIDIA API key configured'));
+    console.log(chalk.green('✔ Model configured'));
+    console.log(chalk.green('✔ LangSmith observability: Disabled\n'));
+    console.log(chalk.gray('Configuration complete.\n'));
+  }
+
+  saveConfig(newConfig);
 }
 
 // Handle /delete command
@@ -546,11 +612,11 @@ async function chatTurn(config, history, signal) {
             if (content !== raw) {
               console.log(chalk.yellow('     ⚠ output guard: secrets masked in tool result'));
             }
-            console.log(chalk.gray(`     ↳ ${truncate(content, Math.max(20, termWidth() - 8))}`));
+            console.log(chalk.gray(`     ↳ ${truncate(sanitizeTerminalText(content), Math.max(20, termWidth() - 8))}`));
           } catch (e) {
             if (signal && signal.aborted) return null;
             content = 'Tool error: ' + e.message;
-            console.log(chalk.red(`     ↳ ${content}`));
+            console.log(chalk.red(`     ↳ ${sanitizeTerminalText(content)}`));
           }
         }
         history.push({ role: 'tool', tool_call_id: call.id, content });
@@ -598,6 +664,11 @@ async function startChat() {
     console.log(chalk.yellow('No API key found. Please run /config first.\n'));
     await handleConfig();
     config = loadConfig();
+  }
+
+  // Enable LangSmith tracing for this session if a saved config has it on.
+  if (config.langsmith && config.langsmith.enabled && config.langsmithApiKey) {
+    observability.enable(config.langsmithApiKey, config.langsmith.project || 'sun2agent');
   }
 
   const history = [];
@@ -677,7 +748,7 @@ async function startChat() {
       if (controller.signal.aborted) {
         console.log(chalk.gray('⎋ stopped\n'));
       } else {
-        console.log(chalk.yellow.bold('sun2Agent: ') + (reply || '') + '\n');
+        console.log(chalk.yellow.bold('sun2Agent: ') + sanitizeTerminalText(reply || '') + '\n');
       }
     } catch (err) {
       if (controller.signal.aborted) {
