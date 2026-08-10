@@ -62,6 +62,23 @@ Requires **Node.js >= 18**.
    > Get one free at [build.nvidia.com](https://build.nvidia.com) → choose a model → *Get API Key*. It starts with `nvapi-`.
 3. Start chatting. Add MCP servers whenever you're ready — see below.
 
+## LangSmith observability
+
+sun2Agent can optionally trace LLM calls and MCP tool execution with LangSmith.
+
+1. Run `/config`.
+2. After choosing a model, answer `Yes` to **Enable LangSmith observability?**.
+3. Paste your LangSmith API key when prompted.
+
+When enabled, sun2Agent sets `LANGSMITH_TRACING`, `LANGSMITH_PROJECT`, and `LANGSMITH_API_KEY` for the current session and sends sanitized prompt, response, and tool metadata to LangSmith.
+
+Key points:
+
+- Off by default.
+- Traced content is sanitized with the output guard before it is sent.
+- LangSmith credentials are stored in `~/.sun2agent/config.json` with owner-only permissions.
+- You can disable tracing later by running `/config` again and choosing `No` when asked.
+
 ## Repository Instructions (AGENT.md)
 
 sun2Agent can read project-specific instructions from an `AGENT.md` file in the directory you launch from. This is how you tell the agent about your project's conventions without repeating yourself every prompt.
