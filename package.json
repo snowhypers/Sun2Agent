@@ -1,7 +1,7 @@
 {
   "name": "sun2agent",
   "version": "1.3.0",
-  "description": "Simple terminal AI chat agent with MCP support, using the NVIDIA NIM API",
+  "description": "Terminal AI agent with a native MCP client — automatic tool-calling, 5-layer security guardrails, optional Docker sandbox, and LangSmith observability. Powered by NVIDIA NIM.",
   "main": "bin/sun2agent.js",
   "bin": {
     "sun2agent": "./bin/sun2agent.js"
@@ -19,12 +19,23 @@
   "keywords": [
     "cli",
     "terminal",
+    "tui",
     "ai",
+    "ai-agent",
     "chat",
+    "chatbot",
     "agent",
+    "llm",
     "mcp",
+    "model-context-protocol",
+    "mcp-client",
     "nvidia",
-    "nim"
+    "nim",
+    "docker",
+    "sandbox",
+    "developer-tools",
+    "langsmith",
+    "observability"
   ],
   "author": "",
   "license": "MIT",

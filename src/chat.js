@@ -12,6 +12,62 @@ const context = require('./context');
 const observability = require('./observability');
 const { askInput, watchEscape, waitEnterOrEsc, ESC_BACK } = require('./inputbox');
 
+// Check whether the Docker sandbox is enabled and Docker has gone down.
+// Returns a human-readable warning string, or null if everything is fine.
+// Used when MCP tool calls or server connections fail unexpectedly.
+// Inside the sandbox container there is no docker CLI, so the check is
+// skipped — the process is already isolated.
+function dockerDownWarning() {
+  if (process.env.SUN2AGENT_SANDBOX === '1') return null;
+  try {
+    const config = loadConfig();
+    if (config.sandbox && config.sandbox.enabled && config.sandbox.mode === 'docker') {
+      const { isDockerRunning } = require('./sandbox');
+      if (!isDockerRunning()) {
+        return 'Docker sandbox is enabled but Docker is not running. MCP tool calls will fail until Docker is restarted.';
+      }
+    }
+  } catch (_) { /* ignore */ }
+  return null;
+}
+
+// --- Session persistence (Docker outage resume) -----------------------------
+//
+// The conversation history is saved to ~/.sun2agent/session.json after every
+// completed exchange. The file lives in the config dir, which is bind-mounted
+// into the sandbox container — so it survives the container dying when the
+// Docker engine stops. When the host launcher relaunches the sandbox after
+// Docker comes back, it sets SUN2AGENT_RESUME=1 and the agent restores the
+// saved messages, continuing exactly where the user was interrupted.
+
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+
+function sessionFile() {
+  return path.join(os.homedir(), '.sun2agent', 'session.json');
+}
+
+function saveSession(history) {
+  try {
+    const dir = path.dirname(sessionFile());
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(sessionFile(), JSON.stringify({ savedAt: Date.now(), messages: history }), { mode: 0o600 });
+  } catch (_) { /* best effort — resume is a nicety, never a hard failure */ }
+}
+
+function loadSession() {
+  try {
+    const raw = JSON.parse(fs.readFileSync(sessionFile(), 'utf-8'));
+    if (Array.isArray(raw.messages) && raw.messages.length) return raw.messages;
+  } catch (_) { /* no session or corrupt file — start fresh */ }
+  return null;
+}
+
+function clearSession() {
+  try { fs.unlinkSync(sessionFile()); } catch (_) { /* already gone */ }
+}
+
 // Run an inquirer prompt that the user can cancel with Esc ("back").
 // Resolves with the answers object, or null if Esc was pressed.
 function promptBack(questions) {
@@ -449,7 +505,14 @@ async function mcpConnect() {
           chalk.gray('\nJust ask; the agent will pick the right tool from any server.\n')
       );
     } else {
-      console.log(chalk.red('\n✗ No servers connected.\n'));
+      console.log(chalk.red('\n✗ No servers connected.'));
+      // If Docker went down, tell the user clearly instead of leaving them
+      // to guess why every stdio server failed.
+      const dockerWarn = dockerDownWarning();
+      if (dockerWarn) {
+        console.log(chalk.red('⛔ ' + dockerWarn));
+      }
+      console.log();
     }
     return;
   }
@@ -460,7 +523,13 @@ async function mcpConnect() {
     r = await mcp.connectSelected(choice);
   } catch (e) {
     spinner.stop();
-    console.log(chalk.red('Failed to connect: ' + e.message + '\n'));
+    console.log(chalk.red('Failed to connect: ' + e.message));
+    // If Docker went down, tell the user clearly.
+    const dockerWarn = dockerDownWarning();
+    if (dockerWarn) {
+      console.log(chalk.red('⛔ ' + dockerWarn));
+    }
+    console.log();
     return;
   }
   spinner.stop();
@@ -617,6 +686,11 @@ async function chatTurn(config, history, signal) {
             if (signal && signal.aborted) return null;
             content = 'Tool error: ' + e.message;
             console.log(chalk.red(`     ↳ ${sanitizeTerminalText(content)}`));
+            // If Docker went down mid-session, warn the user clearly.
+            const dockerWarn = dockerDownWarning();
+            if (dockerWarn) {
+              console.log(chalk.red('  ⛔ ' + dockerWarn));
+            }
           }
         }
         history.push({ role: 'tool', tool_call_id: call.id, content });
@@ -671,7 +745,33 @@ async function startChat() {
     observability.enable(config.langsmithApiKey, config.langsmith.project || 'sun2agent');
   }
 
+  // If the Docker sandbox is enabled, Docker MUST be running. Do NOT silently
+  // fall back to host execution — fail clearly so the user knows to start
+  // Docker (or disable the sandbox) before continuing. This check only runs
+  // on the host; inside the sandbox container the env marker is set instead.
+  if (process.env.SUN2AGENT_SANDBOX === '1') {
+    console.log(chalk.green('🐳 Docker sandbox active — running isolated at /workspace.\n'));
+  } else if (config.sandbox && config.sandbox.enabled && config.sandbox.mode === 'docker') {
+    const { isDockerRunning } = require('./sandbox');
+    if (!isDockerRunning()) {
+      console.log(chalk.red('\nDocker sandbox is enabled, but Docker is not running.'));
+      console.log(chalk.gray('\nPlease start Docker Desktop/Engine and run sun2agent again,'));
+      console.log(chalk.gray('or run the agent on your host instead: sun2agent sandbox disable\n'));
+      process.exit(1);
+    }
+  }
+
   const history = [];
+
+  // Relaunch after a Docker outage (the host launcher sets SUN2AGENT_RESUME=1):
+  // restore the saved conversation so the session continues where it stopped.
+  if (process.env.SUN2AGENT_RESUME === '1') {
+    const saved = loadSession();
+    if (saved && saved.length) {
+      history.push(...saved);
+      console.log(chalk.green(`↩ Session restored — continuing your conversation from before the Docker interruption (${saved.length} messages).\n`));
+    }
+  }
 
   while (true) {
     const input = await askInput({ model: config.model, tag: mcp.getTag() });
@@ -699,6 +799,7 @@ async function startChat() {
     }
     if (text === '/exit') {
       await mcp.disconnectAll();
+      clearSession(); // clean exit — nothing to resume next time
       console.log(chalk.yellow('Goodbye! 👋'));
       process.exit(0);
     }
@@ -750,6 +851,9 @@ async function startChat() {
       } else {
         console.log(chalk.yellow.bold('sun2Agent: ') + sanitizeTerminalText(reply || '') + '\n');
       }
+      // Persist after every completed exchange so an abrupt stop (Docker
+      // outage, crash) can resume exactly from here.
+      saveSession(history);
     } catch (err) {
       if (controller.signal.aborted) {
         console.log(chalk.gray('⎋ stopped\n'));

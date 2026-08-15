@@ -37,15 +37,32 @@ function buildTransport(s, S) {
   switch (s.type) {
     case 'stdio':
       if (!s.command) throw new Error('stdio server needs a "command"');
-      // Do not leak the host process's LangSmith credentials into child MCP
-      // servers. Servers can still receive explicit env vars from mcp.json.
-      const env = { ...process.env };
-      for (const key of Object.keys(env)) {
-        if (key.startsWith('LANGSMITH_')) delete env[key];
+      // Never leak the host process's environment (API keys, AWS/GitHub/OpenAI
+      // credentials, LangSmith secrets) into child MCP servers. Child processes
+      // get an explicit allowlist of safe vars only; mcp.json `env` entries are
+      // layered on top as deliberate overrides.
+      // Exact-match safe vars (no prefix) and prefix-match groups.
+      // LANG matches only "LANG" — not "LANGSMITH_*" — which is correct
+      // because LangSmith keys must never reach child MCP processes.
+      const SAFE_ENV = new Set([
+        'PATH', 'HOME', 'LANG', 'TERM', 'TMPDIR', 'SHELL', 'USER',
+        'PYTHONPATH', 'PYTHONHOME'
+      ]);
+      const SAFE_ENV_PREFIXES = ['LC_', 'NODE_', 'NPM_', 'XDG_'];
+      const env = {};
+      for (const [key, value] of Object.entries(process.env)) {
+        if (SAFE_ENV.has(key) || SAFE_ENV_PREFIXES.some((p) => key.startsWith(p))) {
+          env[key] = value;
+        }
       }
+      // When the Docker sandbox is enabled, wrap the MCP server command so it
+      // runs inside an isolated container with the project at /workspace.
+      // Guardrails already vetted s.command/s.args in connectServer() above.
+      const sandbox = require('./sandbox');
+      const wrapped = sandbox.wrapStdioCommand(s.command, s.args);
       return new S.StdioClientTransport({
-        command: s.command,
-        args: s.args,
+        command: wrapped.command,
+        args: wrapped.args,
         // Inherit the parent env so PATH etc. resolve, then layer overrides.
         env: { ...env, ...s.env }
       });

@@ -18,14 +18,16 @@ function ensureConfigDir() {
 
 function loadConfig() {
   ensureConfigDir();
-  if (!fs.existsSync(CONFIG_FILE)) return { apiKey: '', model: MODELS[0].id, langsmith: { enabled: false, project: 'sun2agent' } };
+  if (!fs.existsSync(CONFIG_FILE)) return { apiKey: '', model: MODELS[0].id, langsmith: { enabled: false, project: 'sun2agent' }, sandbox: { enabled: false, mode: 'host' } };
   try {
     const raw = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8'));
     // Ensure langsmith section exists for configs saved before the feature.
     if (!raw.langsmith) raw.langsmith = { enabled: false, project: 'sun2agent' };
+    // Ensure sandbox section exists for configs saved before the feature.
+    if (!raw.sandbox) raw.sandbox = { enabled: false, mode: 'host' };
     return raw;
   } catch (e) {
-    return { apiKey: '', model: MODELS[0].id, langsmith: { enabled: false, project: 'sun2agent' } };
+    return { apiKey: '', model: MODELS[0].id, langsmith: { enabled: false, project: 'sun2agent' }, sandbox: { enabled: false, mode: 'host' } };
   }
 }
 

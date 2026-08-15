@@ -42,6 +42,19 @@ function sanitize(text) {
   return guardrails.outputGuard(text);
 }
 
+// Sanitize structured tool arguments: round-trip through JSON so the output
+// guard's secret patterns run over every string value, then parse back.
+// If anything goes wrong, fall back to a redacted placeholder rather than
+// sending raw secrets to LangSmith.
+function sanitizeArgs(args) {
+  if (args === null || args === undefined) return args;
+  try {
+    return JSON.parse(sanitize(JSON.stringify(args)));
+  } catch (_) {
+    return { redacted: 'arguments could not be sanitized for tracing' };
+  }
+}
+
 // Sanitize messages array for tracing: keep role + content, mask secrets.
 function sanitizeMessages(messages) {
   if (!Array.isArray(messages)) return messages;
@@ -114,7 +127,7 @@ async function traceTool(fn, { toolName, server, args } = {}) {
     run_type: 'tool',
     inputs: {
       server: server || 'unknown',
-      arguments: args || {}
+      arguments: sanitizeArgs(args) || {}
     }
   });
 

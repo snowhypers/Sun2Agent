@@ -60,7 +60,20 @@ const blockedCommands = [
   // curl/wget piped straight into a shell
   /\b(curl|wget)\b[^|]*\|\s*(sudo\s+)?(ba|z|k|d)?sh\b/i,
   /\b(curl|wget)\b[^|]*\|\s*(sudo\s+)?python[0-9.]*\b/i,
-  /\b(curl|wget)\b[^|]*\|\s*(sudo\s+)?node\b/i
+  /\b(curl|wget)\b[^|]*\|\s*(sudo\s+)?node\b/i,
+  // Reverse shells — a remote attacker getting an interactive shell back.
+  /\b(nc|ncat|netcat)\b[^|]*\s-e\b/i,         // nc -e /bin/sh host port
+  /\b(nc|ncat|netcat)\b[^|]*\s-c\b/i,         // nc -c 'command'
+  /\b(nc|ncat|netcat)\b[^|]*\s--exec\b/i,     // ncat --exec
+  /\b(nc|ncat|netcat)\b[^|]*\s--sh-exec\b/i,  // ncat --sh-exec
+  /\bbash\b[^|]*\s-c\b[^|]*&?[><&]\s*\/dev\/tcp\//i, // bash /dev/tcp reverse shell
+  /\bsh\b[^|]*-i[^|]*&?[><&]\s*\/dev\/tcp\//i,
+  // Listening servers — open a port anyone on the network can reach.
+  /\bpython[0-9.]*\s+-m\s+http\.server\b/i,   // python HTTP server
+  /\bruby\b[^|]*-run[^|]*httpd\b/i,           // ruby httpd
+  /\bphp\s+(-S|--server)\b/i,                 // php built-in server
+  /\bbusybox\s+httpd\b/i,                     // busybox httpd
+  /\bnmap\b/i                                 // network/port scanning
 ];
 
 // Credential and secret material that must never be read, written, or sent.
