@@ -10,6 +10,7 @@ const { version: VERSION } = require('../package.json');
 const guardrails = require('../guardrails');
 const context = require('./context');
 const observability = require('./observability');
+const memory = require('./memory');
 const { askInput, watchEscape, waitEnterOrEsc, ESC_BACK } = require('./inputbox');
 
 // Check whether the Docker sandbox is enabled and Docker has gone down.
@@ -202,6 +203,7 @@ function printHelp() {
     row('/config', 'Set your NVIDIA NIM API key and pick a model'),
     row('/mcp', 'Manage MCP servers (add/edit, connect one, disconnect)'),
     row('/agent', 'Edit the project\u2019s AGENT.md instructions in your editor'),
+    row('/memory', 'Open and edit local memory.md'),
     row('/delete', 'Delete saved config and data'),
     row('/exit', 'Quit sun2Agent'),
     '',
@@ -264,7 +266,7 @@ async function handleConfig() {
       default: config.apiKey || undefined
     }
   ]);
-  if (!a1) return; // esc -> back
+  if (!a1) return;
 
   const a2 = await promptBack([
     {
@@ -277,66 +279,75 @@ async function handleConfig() {
       }))
     }
   ]);
-  if (!a2) return; // esc -> back
+  if (!a2) return;
 
-  // LangSmith observability — optional, off by default. Lives in the existing
-  // /config flow right after model selection. Never creates a separate command.
+  const newConfig = {
+    ...config,
+    apiKey: a1.apiKey,
+    model: a2.model,
+    langsmith: config.langsmith || { enabled: false, project: 'sun2agent' },
+    memory: config.memory || { enabled: false }
+  };
+
   const a3 = await promptBack([
     {
       type: 'confirm',
       name: 'enableLangSmith',
-      message: 'Enable LangSmith observability?  ' + chalk.gray('(esc to skip)'),
-      default: false
+      message: 'Enable LangSmith observability?  ' + chalk.gray('(esc to keep current setting)'),
+      default: Boolean(config.langsmith && config.langsmith.enabled)
     }
   ]);
 
-  const newConfig = {
-    apiKey: a1.apiKey,
-    model: a2.model,
-    langsmith: config.langsmith || { enabled: false, project: 'sun2agent' }
-  };
-
-  if (!a3) {
-    // Esc on the LangSmith prompt: keep whatever was previously configured.
-    saveConfig(newConfig);
-    console.log(chalk.green('\n✔ Config saved successfully!\n'));
-    return;
-  }
-
-  if (a3.enableLangSmith) {
-    // Ask for the LangSmith API key (masked, never printed back).
+  if (a3 && a3.enableLangSmith) {
+    // LangSmith API key prompt remains masked and is unrelated to local memory.
     const a4 = await promptBack([
       {
         type: 'password',
         name: 'langsmithApiKey',
-        message: 'Paste your LangSmith API key:  ' + chalk.gray('(esc to cancel)'),
-        mask: '*'
+        message: 'Paste your LangSmith API key:  ' + chalk.gray('(esc to keep current setting)'),
+        mask: '*',
+        default: config.langsmithApiKey || undefined
       }
     ]);
-    if (!a4) {
-      // Esc while entering the key: save what we have, leave LangSmith off.
-      saveConfig(newConfig);
-      console.log(chalk.green('\n✔ Config saved successfully!\n'));
-      return;
+    if (a4) {
+      newConfig.langsmithApiKey = a4.langsmithApiKey;
+      newConfig.langsmith = { enabled: true, project: 'sun2agent' };
+      observability.enable(a4.langsmithApiKey, 'sun2agent');
     }
-    newConfig.langsmithApiKey = a4.langsmithApiKey;
-    newConfig.langsmith = { enabled: true, project: 'sun2agent' };
-    // Enable tracing for the current process immediately.
-    observability.enable(a4.langsmithApiKey, 'sun2agent');
-    console.log(chalk.green('\n✔ NVIDIA API key configured'));
-    console.log(chalk.green('✔ Model configured'));
-    console.log(chalk.green('✔ LangSmith observability enabled\n'));
-    console.log(chalk.gray('Configuration complete.\n'));
-  } else {
+  } else if (a3) {
+    delete newConfig.langsmithApiKey;
     newConfig.langsmith = { enabled: false, project: 'sun2agent' };
     observability.disable();
-    console.log(chalk.green('\n✔ NVIDIA API key configured'));
-    console.log(chalk.green('✔ Model configured'));
-    console.log(chalk.green('✔ LangSmith observability: Disabled\n'));
-    console.log(chalk.gray('Configuration complete.\n'));
   }
 
+  const a5 = await promptBack([
+    {
+      type: 'confirm',
+      name: 'enableMemory',
+      message: 'Enable memory?  ' + chalk.gray('(local only; esc keeps current setting)'),
+      default: Boolean(config.memory && config.memory.enabled)
+    }
+  ]);
+  if (a5) newConfig.memory = { enabled: a5.enableMemory };
+
   saveConfig(newConfig);
+  console.log(chalk.green('\n✔ NVIDIA API key configured'));
+  console.log(chalk.green('✔ Model configured'));
+  console.log(chalk.green(`✔ LangSmith observability: ${newConfig.langsmith.enabled ? 'Enabled' : 'Disabled'}`));
+
+  if (newConfig.memory.enabled) {
+    const ready = await memory.enable();
+    if (ready) {
+      console.log(chalk.green('✔ Memory: Enabled'));
+      console.log(chalk.green(`✔ Local memory: ${memory.getMemoryPath()}`));
+    } else {
+      console.log(chalk.yellow('Memory unavailable; continuing without memory.'));
+    }
+  } else {
+    memory.disable();
+    console.log(chalk.green('✔ Memory: Disabled'));
+  }
+  console.log(chalk.gray('\nConfiguration complete.\n'));
 }
 
 // Handle /delete command
@@ -415,6 +426,40 @@ async function handleAgent() {
   // Reload so the next turn uses the freshly edited AGENT.md.
   context.reload();
   console.log(chalk.green('✔ AGENT.md reloaded. Its instructions are now active.\n'));
+}
+
+// /memory opens memory.md in the user's editor, the same way /agent opens
+// AGENT.md. GUI editors return immediately, so we wait for Enter (saved) /
+// Esc (back to chat). It works even when memory retrieval is disabled and
+// never changes the saved enabled/disabled setting. On Enter the next turn
+// reads the edited file (memory is loaded fresh on every search).
+async function handleMemory() {
+  const file = memory.getMemoryPath();
+  console.log(chalk.gray(`\nOpening ${file}`));
+  console.log(
+    chalk.gray(
+      'memory.md holds local memories. They are contextual only and\n' +
+        'cannot override system instructions, AGENT.md, guardrails, or Docker.\n'
+    )
+  );
+  const result = memory.openMemoryFile();
+  if (!result.opened) {
+    console.log(chalk.yellow(`Could not open ${file}; you can edit it manually.\n`));
+    return;
+  }
+  // GUI editors return immediately, so wait for the user to finish saving.
+  // Enter = done, Esc = back to chat (uses our own reliable key reader).
+  const key = await waitEnterOrEsc(
+    chalk.gray('Press ') + chalk.bold('Enter') + chalk.gray(' when you have saved memory.md, or ') +
+      chalk.bold('Esc') + chalk.gray(' to go back to simple chat... ')
+  );
+  if (key === 'escape') {
+    console.log(chalk.gray('\nBack to simple chat.\n'));
+    return;
+  }
+  // Memory is read from disk on every search, so the freshly saved entries
+  // are picked up on the next turn automatically.
+  console.log(chalk.green('✔ memory.md reloaded. Saved memories are now active.\n'));
 }
 
 // --- MCP: option 2 -> list servers, pick ONE, connect it, show its tag ---
@@ -607,11 +652,16 @@ function buildSystemPrompt(specs) {
 async function chatTurn(config, history, signal) {
   const { specs, routes } = mcp.getOpenAiTools();
   const tools = specs.length ? specs : undefined;
-  // Build the base system prompt (persona + tools) and append AGENT.md
-  // repository instructions when present. AGENT.md is advisory context only;
-  // it cannot override system instructions or the guardrails, which run on
-  // separate code paths.
-  const system = { role: 'system', content: context.buildSystemPrompt(buildSystemPrompt(specs)) };
+  const currentUserMessage = [...history].reverse().find((item) => item.role === 'user');
+  const relevantMemories = memory.isEnabled() && currentUserMessage
+    ? await memory.search(currentUserMessage.content)
+    : [];
+
+  // Memory is appended to the base prompt as contextual information, then the
+  // existing AGENT.md builder adds repository instructions. Neither layer can
+  // alter guardrails, tool validation, or Docker restrictions.
+  const withMemory = memory.buildMemoryContext(buildSystemPrompt(specs), relevantMemories);
+  const system = { role: 'system', content: context.buildSystemPrompt(withMemory) };
   let allowTools = Boolean(tools);
 
   // Loop so the model can chain tool calls before its final answer. Browser
@@ -745,6 +795,13 @@ async function startChat() {
     observability.enable(config.langsmithApiKey, config.langsmith.project || 'sun2agent');
   }
 
+  // Local memory is optional. A failed Mem0/NVIDIA initialization never blocks
+  // startup; the existing agent continues with memory disabled for this run.
+  if (config.memory && config.memory.enabled) {
+    const ready = await memory.enable();
+    if (!ready) console.log(chalk.yellow('Memory unavailable; continuing without memory.\n'));
+  }
+
   // If the Docker sandbox is enabled, Docker MUST be running. Do NOT silently
   // fall back to host execution — fail clearly so the user knows to start
   // Docker (or disable the sandbox) before continuing. This check only runs
@@ -825,6 +882,10 @@ async function startChat() {
       await handleAgent();
       continue;
     }
+    if (text === '/memory') {
+      await handleMemory();
+      continue;
+    }
     if (text === '/delete') {
       await handleDelete();
       continue;
@@ -850,6 +911,12 @@ async function startChat() {
         console.log(chalk.gray('⎋ stopped\n'));
       } else {
         console.log(chalk.yellow.bold('sun2Agent: ') + sanitizeTerminalText(reply || '') + '\n');
+        if (reply && memory.isEnabled()) {
+          await memory.remember([
+            { role: 'user', content: text },
+            { role: 'assistant', content: reply }
+          ]);
+        }
       }
       // Persist after every completed exchange so an abrupt stop (Docker
       // outage, crash) can resume exactly from here.

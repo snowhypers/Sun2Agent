@@ -16,18 +16,30 @@ function ensureConfigDir() {
   if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
 }
 
+function defaultConfig() {
+  return {
+    apiKey: '',
+    model: MODELS[0].id,
+    langsmith: { enabled: false, project: 'sun2agent' },
+    sandbox: { enabled: false, mode: 'host' },
+    memory: { enabled: false }
+  };
+}
+
 function loadConfig() {
   ensureConfigDir();
-  if (!fs.existsSync(CONFIG_FILE)) return { apiKey: '', model: MODELS[0].id, langsmith: { enabled: false, project: 'sun2agent' }, sandbox: { enabled: false, mode: 'host' } };
+  if (!fs.existsSync(CONFIG_FILE)) return defaultConfig();
   try {
     const raw = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8'));
     // Ensure langsmith section exists for configs saved before the feature.
     if (!raw.langsmith) raw.langsmith = { enabled: false, project: 'sun2agent' };
     // Ensure sandbox section exists for configs saved before the feature.
     if (!raw.sandbox) raw.sandbox = { enabled: false, mode: 'host' };
+    // Memory is optional and remains off for configs saved before the feature.
+    if (!raw.memory) raw.memory = { enabled: false };
     return raw;
   } catch (e) {
-    return { apiKey: '', model: MODELS[0].id, langsmith: { enabled: false, project: 'sun2agent' }, sandbox: { enabled: false, mode: 'host' } };
+    return defaultConfig();
   }
 }
 

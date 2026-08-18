@@ -21,7 +21,7 @@ automatically, and runs 5 layers of guardrails on every call.
 ---
 
 ```
-╭ ☀️  sun2Agent  v1.3.0 ─────────────────────╮
+╭ ☀️  sun2Agent  v1.4.0 ─────────────────────╮
 │               Welcome back!                │
 │                                            │
 │                     o                      │
@@ -114,6 +114,7 @@ sun2agent          # 1. start the agent
 | `/config` | Set your NVIDIA NIM API key and choose a model |
 | `/mcp` | Manage MCP servers — add/edit, connect one or all, disconnect |
 | `/agent` | Open the project's AGENT.md in your editor (creates a template on first use) |
+| `/memory` | Open and edit local `~/.sun2agent/memory.md` |
 | `/delete` | Delete saved config and data |
 | `/exit` | Quit |
 
@@ -212,6 +213,17 @@ The file is appended to the system prompt as clearly-labelled advisory context. 
 
 > [!IMPORTANT]
 > **AGENT.md is advisory only.** It cannot override, disable, or bypass sun2Agent's guardrails. The guardrails run on entirely separate code paths (user prompts, tool arguments, tool output) and are not affected by system-prompt text.
+
+## Local memory (optional)
+
+Enable memory from `/config` to let sun2Agent retain explicit preferences between sessions. Memory lives in a local file and runs entirely on the local machine: it makes no model, embedding, telemetry, or memory-service requests.
+
+- Editable memories live in `~/.sun2agent/memory.md` (stored as JSON inside the `.md` file).
+- A stable anonymous installation UUID lives in `~/.sun2agent/user-id`.
+- `/memory` opens `memory.md` even when automatic memory is disabled.
+- Local keyword relevance selects up to five memories; the full file is never injected.
+- Explicit phrases such as “remember that…”, “I prefer…”, and “always…” can be saved automatically.
+- Memory is contextual only and cannot override AGENT.md, guardrails, security policy, or Docker restrictions.
 
 ## LangSmith observability
 
