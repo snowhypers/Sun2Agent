@@ -22,7 +22,8 @@ function defaultConfig() {
     model: MODELS[0].id,
     langsmith: { enabled: false, project: 'sun2agent' },
     sandbox: { enabled: false, mode: 'host' },
-    memory: { enabled: false }
+    memory: { enabled: false },
+    hitl: { mcpApproval: true }
   };
 }
 
@@ -37,6 +38,8 @@ function loadConfig() {
     if (!raw.sandbox) raw.sandbox = { enabled: false, mode: 'host' };
     // Memory is optional and remains off for configs saved before the feature.
     if (!raw.memory) raw.memory = { enabled: false };
+    // HITL (MCP approval) defaults to on for configs saved before the feature.
+    if (!raw.hitl) raw.hitl = { mcpApproval: true };
     return raw;
   } catch (e) {
     return defaultConfig();

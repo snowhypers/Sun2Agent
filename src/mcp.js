@@ -12,6 +12,7 @@ const { getServers } = require('./mcpconfig');
 const { version: VERSION } = require('../package.json');
 const guardrails = require('../guardrails');
 const observability = require('./observability');
+const hitl = require('./HITL/mcpApproval');
 
 // name -> { client, transport, tools, type }
 const connections = new Map();
@@ -229,6 +230,22 @@ async function callTool(routes, fullName, args, signal) {
   // model supplied. Refusing here means the tool never runs at all.
   const verdict = guardrails.validateToolCall(route.tool, args);
   if (!verdict.ok) throw new Error(verdict.reason);
+
+  // Human-in-the-Loop: the call is blocked unless a human approves it. This
+  // sits at the execution boundary (after guardrails, before the tool runs) —
+  // outside the LLM/ReAct logic — so every proposed call is vetted here.
+  const approved = await hitl.checkApproval({
+    server: route.server,
+    tool: route.tool,
+    args: args || {}
+  });
+  if (!approved) {
+    return (
+      `MCP call to "${route.tool}" was NOT executed — a human declined ` +
+      `approval. Tell the user which call was blocked and why the task ` +
+      `could not proceed as proposed.`
+    );
+  }
 
   // The actual MCP tool execution, wrapped by LangSmith tracing when enabled.
   // Tool args, routing, and the guardrail verdict above are unchanged.
