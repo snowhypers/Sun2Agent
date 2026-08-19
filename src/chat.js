@@ -6,6 +6,7 @@ const { MODELS, loadConfig, saveConfig, deleteConfig } = require('./config');
 const { chatCompletion } = require('./api');
 const { getMcpFilePath, openMcpConfig, loadMcpConfig, getServers } = require('./mcpconfig');
 const mcp = require('./mcp');
+const hitl = require('./HITL/mcpApproval');
 const { version: VERSION } = require('../package.json');
 const guardrails = require('../guardrails');
 const context = require('./context');
@@ -650,6 +651,11 @@ function buildSystemPrompt(specs) {
 // Run one chat turn, resolving any MCP tool calls the model requests.
 // `signal` (optional AbortSignal) lets the user interrupt with Esc.
 async function chatTurn(config, history, signal) {
+  // A new user prompt begins here: reset the HITL decision so the first MCP
+  // call asks Allow/Don't allow once, and that answer governs every call made
+  // while resolving THIS prompt (not later questions).
+  hitl.startPrompt();
+
   const { specs, routes } = mcp.getOpenAiTools();
   const tools = specs.length ? specs : undefined;
   const currentUserMessage = [...history].reverse().find((item) => item.role === 'user');
@@ -837,6 +843,7 @@ async function startChat() {
     if (input === ESC_BACK) {
       if (mcp.getActiveName()) {
         await mcp.disconnectAll();
+        hitl.resetApprovals(); // new chat — approvals start clean
         console.log(chalk.gray('⎋ Disconnected MCP. Back to simple chat.\n'));
       }
       continue;
@@ -873,6 +880,7 @@ async function startChat() {
       // doesn't keep referencing a previous server's tools from history.
       if (before !== after) {
         history.length = 0;
+        hitl.resetApprovals(); // approvals belong to a chat, not the process
         const tag = mcp.getTag();
         console.log(chalk.gray('(context reset — now using ' + (tag ? '@' + tag : 'no MCP server') + ')\n'));
       }

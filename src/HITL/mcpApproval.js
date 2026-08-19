@@ -6,6 +6,11 @@
 // human confirms or rejects them before anything executes.
 //
 // Behavior:
+//   * One decision per user prompt. The FIRST MCP call of a user question is
+//     put to the human; the Allow / Don't allow answer then applies to EVERY
+//     later MCP call made while resolving that same prompt — no repeated
+//     confirmation for each tool in the chain. The decision resets when the
+//     next user prompt starts (chatTurn calls hitl.startPrompt()).
 //   * Non-interactive (not a TTY, e.g. scripts / CI) -> auto-allow. There is
 //     nobody to ask, and the guardrails still run, so nothing is weakened.
 //   * Interactive TTY -> a plain two-choice prompt, like other CLI agents:
@@ -29,25 +34,29 @@ function isEnabled() {
   return !(config.hitl && config.hitl.mcpApproval === false);
 }
 
-// Session-scoped approval memory. Once a tool is allowed, every later call to
-// the same tool (same server) skips the prompt — retries, follow-up calls, and
-// re-runs during the current session just keep working without re-asking.
-const approved = new Set(); // 'server:tool' allowed once this session
+// Per-prompt decision. undefined = not decided yet (ask on the first MCP call
+// of this prompt); true = allow every MCP call for this prompt; false = deny
+// every MCP call for this prompt. chatTurn() calls startPrompt() when a new
+// user prompt begins, so the decision never leaks across questions.
+let promptDecision;
 
-function approvalKey(server, tool) {
-  return `${server}:${tool}`;
+function startPrompt() {
+  promptDecision = undefined;
 }
 
-function isApproved(server, tool) {
-  return approved.has(approvalKey(server, tool));
-}
-
-function rememberApproval(server, tool) {
-  approved.add(approvalKey(server, tool));
-}
-
+// Backwards-compatible alias: approvals now belong to a prompt, not the process.
 function resetApprovals() {
-  approved.clear();
+  startPrompt();
+}
+
+// A single decision covers every tool, so "is this tool approved?" just
+// reports the current prompt decision.
+function isApproved() {
+  return promptDecision === true;
+}
+
+function rememberApproval() {
+  promptDecision = true;
 }
 
 // Cap a value so one huge argument (e.g. a file body) cannot flood the prompt.
@@ -71,7 +80,8 @@ function render({ server, tool, args }, selected) {
     server ? '  Server:    ' + server : '',
     '  Arguments: ' + formatArgs(args),
     '',
-    '  Allow this call?'
+    '  Allow this call?',
+    chalk.gray('  One-time choice — applies to every MCP call for this prompt')
   ];
   const choiceAllow = allow ? chalk.cyan.bold('❯ Allow') : chalk.dim('  Allow');
   const choiceDeny = deny ? chalk.cyan.bold("❯ Don't allow") : chalk.dim("  Don't allow");
@@ -128,18 +138,21 @@ function interactivePrompt(opts) {
   });
 }
 
-// The HITL gate. Once a tool has been allowed this session it is not asked
-// about again. `enabled` overrides the config toggle, and `_prompt` injects a
-// prompt function (used by tests).
+// The HITL gate. The first MCP call of a user prompt asks the human once; that
+// Allow / Don't allow decision is then applied to every later MCP call made
+// while resolving the same prompt. `enabled` overrides the config toggle, and
+// `_prompt` injects a prompt function (used by tests).
 async function checkApproval({ server, tool, args, enabled, _prompt } = {}) {
   const on = enabled !== undefined ? enabled : isEnabled();
   if (!on) return true;
-  if (isApproved(server, tool)) return true;
+  if (promptDecision !== undefined) return promptDecision;
   const ask = _prompt || (process.stdin.isTTY ? interactivePrompt : null);
-  if (!ask) return true; // nobody to ask; guardrails still apply
-  const ok = await ask({ server, tool, args: args || {} });
-  if (ok) rememberApproval(server, tool);
-  return ok;
+  if (!ask) {
+    promptDecision = true; // nobody to ask; guardrails still apply
+    return true;
+  }
+  promptDecision = await ask({ server, tool, args: args || {} });
+  return promptDecision;
 }
 
-module.exports = { checkApproval, isEnabled, isApproved, rememberApproval, resetApprovals };
+module.exports = { checkApproval, isEnabled, startPrompt, isApproved, rememberApproval, resetApprovals };

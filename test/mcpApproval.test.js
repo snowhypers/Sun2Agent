@@ -32,8 +32,8 @@ test('HITL: auto-approves on non-interactive stdin (no one to ask)', async () =>
   assert.strictEqual(ok, true);
 });
 
-test('HITL: once allowed, the same tool is not asked about again this session', async () => {
-  hitl.resetApprovals();
+test('HITL: one decision covers every MCP call within a prompt', async () => {
+  hitl.startPrompt();
   let calls = 0;
   const fakePrompt = async () => {
     calls++;
@@ -41,29 +41,29 @@ test('HITL: once allowed, the same tool is not asked about again this session', 
   };
   const first = await hitl.checkApproval({ server: 'fs', tool: 'read_file', args: {}, _prompt: fakePrompt });
   assert.strictEqual(first, true);
-  // Follow-up / retry call for the same tool: prompt is skipped entirely.
-  const second = await hitl.checkApproval({ server: 'fs', tool: 'read_file', args: {}, _prompt: fakePrompt });
+  // Follow-up / retry call — even a different server or tool: no re-asking.
+  const second = await hitl.checkApproval({ server: 'other', tool: 'write_file', args: {}, _prompt: fakePrompt });
   assert.strictEqual(second, true);
   assert.strictEqual(calls, 1);
 });
 
-test('HITL: approval memory is per server+tool, not global', async () => {
-  hitl.resetApprovals();
+test('HITL: a new prompt resets the decision and asks again', async () => {
+  hitl.startPrompt();
   let calls = 0;
   const fakePrompt = async () => {
     calls++;
     return true;
   };
   await hitl.checkApproval({ server: 'fs', tool: 'read_file', args: {}, _prompt: fakePrompt });
-  // Different server, same tool name -> still prompts.
-  await hitl.checkApproval({ server: 'other', tool: 'read_file', args: {}, _prompt: fakePrompt });
-  // Same server, different tool -> still prompts.
-  await hitl.checkApproval({ server: 'fs', tool: 'write_file', args: {}, _prompt: fakePrompt });
-  assert.strictEqual(calls, 3);
+  assert.strictEqual(calls, 1);
+  // Next user prompt: approval starts clean.
+  hitl.startPrompt();
+  await hitl.checkApproval({ server: 'fs', tool: 'read_file', args: {}, _prompt: fakePrompt });
+  assert.strictEqual(calls, 2);
 });
 
-test('HITL: a denied tool is not remembered and is asked again next time', async () => {
-  hitl.resetApprovals();
+test('HITL: a denied decision blocks every MCP call for the prompt, then resets', async () => {
+  hitl.startPrompt();
   let calls = 0;
   const fakePrompt = async () => {
     calls++;
@@ -72,7 +72,12 @@ test('HITL: a denied tool is not remembered and is asked again next time', async
   const first = await hitl.checkApproval({ server: 'fs', tool: 'write_file', args: {}, _prompt: fakePrompt });
   assert.strictEqual(first, false);
   assert.strictEqual(hitl.isApproved('fs', 'write_file'), false);
+  // Rest of the prompt: denied without asking again.
   const second = await hitl.checkApproval({ server: 'fs', tool: 'write_file', args: {}, _prompt: fakePrompt });
   assert.strictEqual(second, false);
+  assert.strictEqual(calls, 1);
+  // Next prompt asks again.
+  hitl.startPrompt();
+  await hitl.checkApproval({ server: 'fs', tool: 'write_file', args: {}, _prompt: fakePrompt });
   assert.strictEqual(calls, 2);
 });
