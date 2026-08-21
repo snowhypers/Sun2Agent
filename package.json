@@ -38,6 +38,14 @@
   ],
   "author": "",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Ppp111ppp111/Sun2Agent.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Ppp111ppp111/Sun2Agent/issues"
+  },
+  "homepage": "https://github.com/Ppp111ppp111/Sun2Agent#readme",
   "engines": {
     "node": ">=18"
   },

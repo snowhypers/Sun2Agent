@@ -19,7 +19,7 @@ automatically, and runs 5 layers of guardrails on every call.
 </div>
 
 <p align="center">
-  <img src="assets/sun2agent-demo.png" alt="sun2Agent Terminal Demo" width="100%" />
+  <img src="https://raw.githubusercontent.com/Ppp111ppp111/Sun2Agent/main/assets/sun2agent-demo.png" alt="sun2Agent Terminal Demo" width="100%" />
 </p>
 
 ```
