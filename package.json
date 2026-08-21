@@ -9,7 +9,6 @@
   "files": [
     "bin/",
     "src/",
-    "guardrails/",
     "README.md"
   ],
   "scripts": {

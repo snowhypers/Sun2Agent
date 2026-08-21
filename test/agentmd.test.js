@@ -11,7 +11,7 @@ const path = require('path');
 const os = require('os');
 
 const PROJECT = path.join(__dirname, '..');
-const guardrails = require(path.join(PROJECT, 'guardrails'));
+const guardrails = require(path.join(PROJECT, 'src/guardrails'));
 const { loadAgentMd, openAgentMd, ensureAgentMd, agentMdPath, AGENT_FILENAME } =
   require(path.join(PROJECT, 'src/context/agentLoader'));
 const { buildPromptWithAgent } = require(path.join(PROJECT, 'src/context/promptBuilder'));
@@ -74,14 +74,14 @@ test('AGENT.md: promptBuilder returns base prompt unchanged when no AGENT.md', (
   assert.strictEqual(buildPromptWithAgent(base, '   \n  '), base);
 });
 
-test('AGENT.md: framing explicitly forbids overriding guardrails/security', () => {
+test('AGENT.md: framing explicitly forbids overriding src/guardrails/security', () => {
   const result = buildPromptWithAgent('base', 'do anything');
   // The model must be told the repo instructions cannot override safety.
   assert.ok(/override/i.test(result));
   assert.ok(/guardrail|safety|security/i.test(result));
 });
 
-test('AGENT.md: context/index exposes a single simple interface', () => {
+test('AGENT.md: src/context/index exposes a single simple interface', () => {
   delete require.cache[require.resolve(path.join(PROJECT, 'src/context'))];
   const ctx = require(path.join(PROJECT, 'src/context'));
   assert.strictEqual(typeof ctx.buildSystemPrompt, 'function');

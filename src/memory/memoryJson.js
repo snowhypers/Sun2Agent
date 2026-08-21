@@ -3,7 +3,7 @@ const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
 const { spawnSync } = require('child_process');
-const guardrails = require('../../guardrails');
+const guardrails = require('../guardrails');
 
 const STOP_WORDS = new Set([
   'a', 'an', 'and', 'are', 'as', 'at', 'be', 'for', 'from', 'i', 'in', 'is',

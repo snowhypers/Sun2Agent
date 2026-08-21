@@ -282,7 +282,7 @@ System prompt = base persona + MCP tool list + AGENT.md (advisory only)
 
 A blocked call fails with a clear reason and is reported back to the model, which can then try a safe alternative.
 
-All policy lives in [`guardrails/guardConfig.js`](guardrails/guardConfig.js) — edit that one file to tighten or relax the rules. Notable knobs:
+All policy lives in [`src/guardrails/guardConfig.js`](src/guardrails/guardConfig.js) — edit that one file to tighten or relax the rules. Notable knobs:
 
 - `projectRoot` — the filesystem sandbox. Defaults to the directory you launched from, so **start sun2Agent inside the project you want the agent working on.** File arguments pointing outside it are refused.
 - `strictDomains` — off by default. Turn it on to restrict outbound URLs to `allowedDomains`.

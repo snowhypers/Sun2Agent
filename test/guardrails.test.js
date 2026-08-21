@@ -7,8 +7,8 @@ const assert = require('node:assert');
 const path = require('path');
 const os = require('os');
 
-const guardrails = require('../guardrails');
-const { projectRoot } = require('../guardrails/guardConfig');
+const guardrails = require('../src/guardrails');
+const { projectRoot } = require('../src/guardrails/guardConfig');
 
 // --- helpers ---------------------------------------------------------------
 const blocked = (v, msg) => assert.strictEqual(v.ok, false, msg || 'should be blocked');
@@ -94,7 +94,7 @@ test('filesystemGuard allows paths inside the project root', () => {
 });
 
 test('looksLikePath does not treat URLs or flags as paths', () => {
-  const { looksLikePath } = require('../guardrails/filesystemGuard');
+  const { looksLikePath } = require('../src/guardrails/filesystemGuard');
   assert.strictEqual(looksLikePath('https://example.com/a/b'), false);
   assert.strictEqual(looksLikePath('--headless'), false);
   assert.strictEqual(looksLikePath('hello world'), false);

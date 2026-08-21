@@ -364,7 +364,7 @@ test('sandbox: AGENT.md + LangSmith + sandbox modules remain independent', () =>
   const observDeps = requires(observSource);
   const sandboxDeps = requires(sandboxSource);
 
-  // context/ must not require sandbox or observability modules
+  // src/context/ must not require sandbox or observability modules
   assert.ok(
     !contextDeps.some((d) => d.includes('sandbox')),
     'context must not require sandbox'
@@ -374,7 +374,7 @@ test('sandbox: AGENT.md + LangSmith + sandbox modules remain independent', () =>
     'context must not require observability'
   );
 
-  // observability/ must not require sandbox or context modules
+  // src/observability/ must not require sandbox or context modules
   assert.ok(
     !observDeps.some((d) => d.includes('sandbox')),
     'observability must not require sandbox'
@@ -384,7 +384,7 @@ test('sandbox: AGENT.md + LangSmith + sandbox modules remain independent', () =>
     'observability must not require context'
   );
 
-  // sandbox/ must not require observability or context modules
+  // src/sandbox/ must not require observability or context modules
   assert.ok(
     !sandboxDeps.some((d) => d.includes('observability')),
     'sandbox must not require observability'

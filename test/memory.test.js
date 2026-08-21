@@ -9,7 +9,7 @@ const memoryJson = require('../src/memory/memoryJson');
 const userId = require('../src/memory/userId');
 const memory = require('../src/memory');
 const localAdapter = require('../src/memory/mem0');
-const guardrails = require('../guardrails');
+const guardrails = require('../src/guardrails');
 
 let counter = 0;
 function tmpHome() {
@@ -251,7 +251,7 @@ test('chat wiring includes config prompt, startup, retrieval, save, help, and /m
 
 test('memory feature does not modify AGENT.md, guardrail, Docker, or LangSmith modules', () => {
   const memoryReferences = [];
-  for (const relative of ['src/context', 'guardrails', 'src/sandbox', 'src/observability']) {
+  for (const relative of ['context', 'guardrails', 'sandbox', 'observability']) {
     const root = path.join(PROJECT, relative);
     for (const name of fs.readdirSync(root)) {
       if (!name.endsWith('.js')) continue;

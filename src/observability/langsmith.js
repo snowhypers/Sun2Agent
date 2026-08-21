@@ -9,7 +9,7 @@
 // what is allowed; this module only observes.
 
 const { RunTree } = require('langsmith');
-const guardrails = require('../../guardrails');
+const guardrails = require('../guardrails');
 
 let enabled = false;
 

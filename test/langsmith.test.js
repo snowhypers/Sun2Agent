@@ -16,7 +16,7 @@ const path = require('path');
 const os = require('os');
 
 const PROJECT = path.join(__dirname, '..');
-const guardrails = require(path.join(PROJECT, 'guardrails'));
+const guardrails = require(path.join(PROJECT, 'src/guardrails'));
 const observability = require(path.join(PROJECT, 'src/observability'));
 const langsmith = require(path.join(PROJECT, 'src/observability/langsmith'));
 const { sanitize } = langsmith;
@@ -281,7 +281,7 @@ test('chat.js: requires observability module', () => {
 
 test('chat.js: /config asks about LangSmith after model selection', () => {
   const src = fs.readFileSync(path.join(PROJECT, 'src/chat.js'), 'utf-8');
-  assert.ok(/LangSmith observability/.test(src), 'must prompt for LangSmith');
+  assert.ok(/LangSmith src/observability/.test(src), 'must prompt for LangSmith');
   // The prompt must come AFTER model selection, not before.
   const modelIdx = src.indexOf("Select a model");
   const lsIdx = src.indexOf("Enable LangSmith observability");
@@ -310,7 +310,7 @@ test('security: AGENT.md, guardrails, observability are independent modules', ()
   // other (except observability reusing outputGuard for sanitization).
   const obsSrc = fs.readFileSync(path.join(PROJECT, 'src/observability/langsmith.js'), 'utf-8');
   assert.ok(obsSrc.includes('guardrails'), 'observability reuses outputGuard for sanitize');
-  // observability must NOT import the context/AGENT.md module.
+  // observability must NOT import the src/context/AGENT.md module.
   assert.ok(!obsSrc.includes('context'), 'observability must not depend on AGENT.md');
 
   const ctxSrc = fs.readFileSync(path.join(PROJECT, 'src/context/index.js'), 'utf-8');

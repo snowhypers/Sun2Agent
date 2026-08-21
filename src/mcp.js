@@ -10,7 +10,7 @@
 
 const { getServers } = require('./mcpconfig');
 const { version: VERSION } = require('../package.json');
-const guardrails = require('../guardrails');
+const guardrails = require('./guardrails');
 const observability = require('./observability');
 const hitl = require('./HITL/mcpApproval');
 
