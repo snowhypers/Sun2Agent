@@ -14,9 +14,46 @@ automatically, and runs 5 layers of guardrails on every call.
 [![License: MIT](https://img.shields.io/npm/l/sun2agent?color=blue)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-Node%20Test-brightgreen)](#guardrails)
 
-[Install](#install) · [Setup](#first-run-setup) · [MCP Servers](#connecting-mcp-servers) · [Safety](#guardrails) · [Reference](#commands)
+[Install](#install) · [Quick Start](#quick-start) · [MCP Servers](#connecting-mcp-servers) · [Docker Sandbox](#docker-sandbox-optional) · [Guardrails](#guardrails) · [Context (AGENT.md)](#repository-instructions-agentmd) · [Memory](#local-memory-optional)
 
 </div>
+
+<p align="center">
+  <img src="assets/sun2agent-demo.png" alt="sun2Agent Terminal Demo" width="100%" />
+</p>
+
+```
+› Go to example.com, inspect the page, take a screenshot,
+and click the More information link
+  ⚙ playwright__browser_navigate({"url":"https://example.com"})
+  ⚙ playwright__browser_take_screenshot()
+  ⚙ playwright__browser_click({"selector":"a"})...
+sun2Agent: The page is a minimal placeholder titled "Example Domain"…
+
+› read my AGENT.md and run the test suite the way it says
+  ⚙ filesystem__read_file({"path":"AGENT.md"})
+  ⚙ filesystem__run_command({"cmd":"npm test"})
+sun2Agent: Test suite complete — following your AGENT.md instructions.
+```
+## Why sun2Agent
+
+Most MCP clients bury the agent inside a heavy editor or desktop app. sun2Agent is
+**just a terminal** — start it, point it at your MCP servers, and ask for things in
+plain language. The agent figures out which tools to call.
+
+|  | Feature |
+|---|---|
+| 🔌 | **Native MCP client** — `stdio`, `http` (Streamable HTTP), and `sse` transports, local or remote |
+| 🧰 | **One server or all at once** — connect everything and let the model pick the right tool |
+| ⚙️ | **Automatic tool-calling** — no tool syntax to memorize, just describe the task |
+| 🛡️ | **5-layer guardrails** — destructive commands, exfiltration, credential files, and secret leaks are blocked before anything runs |
+| ✋ | **Human-in-the-Loop (HITL)** — interactive per-session tool call approval (`Allow` / `Don't allow`) before any proposed tool executes |
+| 🐳 | **Optional Docker sandbox** — run the entire agent isolated in a container, with automatic session resume when Docker restarts |
+| 🧠 | **Local preference memory (`memory.md`)** — retain explicit user preferences across sessions with local search; zero telemetry or external API calls |
+| 📄 | **AGENT.md support** — drop an `AGENT.md` in your project and the agent follows your repo's conventions |
+| 📊 | **LangSmith observability** — opt-in tracing of LLM calls and tool execution, sanitized before it leaves your machine |
+| 🎛️ | **Any NIM model** — Llama, GPT-OSS, Nemotron… swap anytime with `/config` |
+| ⌨️ | **Calm TUI** — rounded input box, live connection tags, `Esc` interrupts anything |
 
 ## Install
 
@@ -47,7 +84,7 @@ npx sun2agent
 > [!NOTE]
 > Do not run `npm install sun2agent` inside another project. Use `-g` above or `npx sun2agent`; installing it locally can trigger unrelated dependency resolution errors in that project.
 
-## First-run setup
+## Quick Start
 
 Your first useful tool call takes four short steps:
 
@@ -71,55 +108,6 @@ Allow — Don't allow
 An allowed tool is remembered only for the current chat session; a denied call is skipped.
 
 ---
-
-```
-╭ ☀️  sun2Agent  v1.4.0 ─────────────────────╮
-│               Welcome back!                │
-│                                            │
-│                     o                      │
-│                     │                      │
-│                 ╭───────╮                  │
-│                ─┤ ⬡   ⬡ ├─                 │
-│                 │  >_   │                  │
-│                 ╰───────╯                  │
-│                     │                      │
-│                    ─┴─                     │
-│                                            │
-│      Model nemotron-3-super-120b-a12b      │
-│    Tools: /mcp   ·   /help for commands    │
-╰────────────────────────────────────────────╯
-```
-
-```
-› take a screenshot of example.com and tell me what's on it
-  ⚙ playwright__browser_navigate({"url":"https://example.com"})
-  ⚙ playwright__browser_take_screenshot()
-sun2Agent: The page is a minimal placeholder titled "Example Domain"…
-
-› read my AGENT.md and run the test suite the way it says
-  ⚙ filesystem__read_file({"path":"AGENT.md"})
-  ⚙ filesystem__run_command({"cmd":"npm test"})
-sun2Agent: Test suite complete — following your AGENT.md instructions.
-```
-
-## Why sun2Agent
-
-Most MCP clients bury the agent inside a heavy editor or desktop app. sun2Agent is
-**just a terminal** — start it, point it at your MCP servers, and ask for things in
-plain language. The agent figures out which tools to call.
-
-|  | Feature |
-|---|---|
-| 🔌 | **Native MCP client** — `stdio`, `http` (Streamable HTTP), and `sse` transports, local or remote |
-| 🧰 | **One server or all at once** — connect everything and let the model pick the right tool |
-| ⚙️ | **Automatic tool-calling** — no tool syntax to memorize, just describe the task |
-| 🛡️ | **5-layer guardrails** — destructive commands, exfiltration, credential files, and secret leaks are blocked before anything runs |
-| 🐳 | **Optional Docker sandbox** — run the entire agent isolated in a container, with automatic session resume when Docker restarts |
-| 📊 | **LangSmith observability** — opt-in tracing of LLM calls and tool execution, sanitized before it leaves your machine |
-| 📄 | **AGENT.md support** — drop an `AGENT.md` in your project and the agent follows your repo's conventions |
-| 🎛️ | **Any NIM model** — Llama, GPT-OSS, Nemotron… swap anytime with `/config` |
-| ⌨️ | **Calm TUI** — rounded input box, live connection tags, `Esc` interrupts anything |
-
 ## Commands
 
 | Command | Action |

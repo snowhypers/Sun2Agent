@@ -251,7 +251,7 @@ test('chat wiring includes config prompt, startup, retrieval, save, help, and /m
 
 test('memory feature does not modify AGENT.md, guardrail, Docker, or LangSmith modules', () => {
   const memoryReferences = [];
-  for (const relative of ['context', 'guardrails', 'sandbox', 'observability']) {
+  for (const relative of ['src/context', 'src/guardrails', 'src/sandbox', 'src/observability']) {
     const root = path.join(PROJECT, relative);
     for (const name of fs.readdirSync(root)) {
       if (!name.endsWith('.js')) continue;

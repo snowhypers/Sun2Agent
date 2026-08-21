@@ -281,7 +281,7 @@ test('chat.js: requires observability module', () => {
 
 test('chat.js: /config asks about LangSmith after model selection', () => {
   const src = fs.readFileSync(path.join(PROJECT, 'src/chat.js'), 'utf-8');
-  assert.ok(/LangSmith src/observability/.test(src), 'must prompt for LangSmith');
+  assert.ok(/Enable LangSmith observability/.test(src), 'must prompt for LangSmith');
   // The prompt must come AFTER model selection, not before.
   const modelIdx = src.indexOf("Select a model");
   const lsIdx = src.indexOf("Enable LangSmith observability");
