@@ -1,158 +1,145 @@
-// Human-in-the-Loop (HITL): MCP tool-call approval.
-//
-// The approval sits at the MCP execution boundary — inside mcp.callTool(),
-// right after the guardrails pass and before the tool actually runs — not
-// inside any LLM/ReAct logic. The model proposes a tool and arguments; a
-// human confirms or rejects them before anything executes.
-//
-// Behavior:
-//   * One decision per user prompt. The FIRST MCP call of a user question is
-//     put to the human; the Allow / Don't allow answer then applies to EVERY
-//     later MCP call made while resolving that same prompt — no repeated
-//     confirmation for each tool in the chain. The decision resets when the
-//     next user prompt starts (chatTurn calls hitl.startPrompt()).
-//   * Non-interactive (not a TTY, e.g. scripts / CI) -> auto-allow. There is
-//     nobody to ask, and the guardrails still run, so nothing is weakened.
-//   * Interactive TTY -> a plain two-choice prompt, like other CLI agents:
-//       ↑/↓ or ←/→    move the ❯ between Allow / Don't allow
-//       Enter          confirm the selection
-//       y / n          inline shorthand
-//       Esc            Don't allow
-//
-// Uses the same raw-keypress approach as inputbox.js / waitEnterOrEsc(), so it
-// works reliably even after inquirer menus or an external editor have handled
-// the terminal.
+// Human-in-the-Loop (HITL): MCP tool-call approval — per session.
+// Once a tool is approved, it's remembered for the entire chat session.
+// Designed for continuous indicator: spinner runs through thinking → waiting → running.
 
 const readline = require('readline');
 const chalk = require('chalk');
 const { loadConfig } = require('../config');
 
-// Config toggle: config.hitl.mcpApproval === false turns the gate off.
-// On by default so every MCP call is visible until the user opts out.
+const HIDE_CURSOR = '\x1b[?25l';
+const SHOW_CURSOR = '\x1b[?25h';
+
 function isEnabled() {
   const config = loadConfig();
   return !(config.hitl && config.hitl.mcpApproval === false);
 }
 
-// Per-prompt decision. undefined = not decided yet (ask on the first MCP call
-// of this prompt); true = allow every MCP call for this prompt; false = deny
-// every MCP call for this prompt. chatTurn() calls startPrompt() when a new
-// user prompt begins, so the decision never leaks across questions.
-let promptDecision;
+// Per-session allowed tools (keyed by tool name only). This is intentionally
+// in memory only: every call to startSession() begins with an empty set.
+const allowedTools = new Set();
 
-function startPrompt() {
-  promptDecision = undefined;
+// Single pending approval at a time (simplifies continuous UI).
+let pendingEntry = null;
+let resolvePending = null;
+
+// Called by chat.js to get a continuous spinner that we can update.
+let activeSpinner = null;
+function setSpinner(spinner) {
+  activeSpinner = spinner;
 }
 
-// Backwards-compatible alias: approvals now belong to a prompt, not the process.
-function resetApprovals() {
-  startPrompt();
-}
-
-// A single decision covers every tool, so "is this tool approved?" just
-// reports the current prompt decision.
-function isApproved() {
-  return promptDecision === true;
-}
-
-function rememberApproval() {
-  promptDecision = true;
-}
-
-// Cap a value so one huge argument (e.g. a file body) cannot flood the prompt.
-function formatArgs(args) {
-  const trimmed = {};
-  for (const [k, v] of Object.entries(args || {})) {
-    const s = typeof v === 'string' ? v : JSON.stringify(v);
-    trimmed[k] = s.length > 220 ? s.slice(0, 220) + '…' : s;
+function updateSpinner(text) {
+  if (activeSpinner && activeSpinner.isSpinning) {
+    activeSpinner.text = chalk.gray(text);
   }
-  const raw = JSON.stringify(trimmed, null, 2);
-  return raw.length > 1400 ? raw.slice(0, 1400) + '\n  …' : raw;
 }
 
-// Plain-text prompt body (no box). The ❯ marks the highlighted choice.
-function render({ server, tool, args }, selected) {
-  const allow = selected === 0;
-  const deny = selected === 1;
-  const lines = [
-    chalk.yellow.bold('⚠  MCP tool call'),
-    '  Tool:      ' + chalk.bold(tool),
-    server ? '  Server:    ' + server : '',
-    '  Arguments: ' + formatArgs(args),
-    '',
-    '  Allow this call?',
-    chalk.gray('  One-time choice — applies to every MCP call for this prompt')
-  ];
-  const choiceAllow = allow ? chalk.cyan.bold('❯ Allow') : chalk.dim('  Allow');
-  const choiceDeny = deny ? chalk.cyan.bold("❯ Don't allow") : chalk.dim("  Don't allow");
-  lines.push('  ' + choiceAllow + '             ' + choiceDeny);
-  lines.push(chalk.gray('  Enter confirm') + chalk.gray('            Esc = No'));
-  return lines.filter((l) => l !== null).join('\n');
+function startSession() {
+  allowedTools.clear();
 }
 
-// Raw-key prompt on the interactive TTY. Resolves true (Allow) or false
-// (Don't Allow / Esc).
-function interactivePrompt(opts) {
-  const stdin = process.stdin;
-  const stdout = process.stdout;
-  let selected = 0; // Allow is the default highlight
-
-  function panelLines() {
-    return render(opts, selected).split('\n').length;
-  }
-
-  function redraw() {
-    stdout.write(`\x1b[${panelLines()}A\r${render(opts, selected)}\n`);
-  }
-
-  function done(result) {
-    stdin.removeListener('keypress', onKey);
-    if (stdin.isTTY) stdin.setRawMode(false);
-    stdout.write('\n');
-    resolve(result);
-  }
-
-  function onKey(str, key) {
-    if (key && key.ctrl && key.name === 'c') {
-      stdout.write('\n');
-      process.exit(0);
-    }
-    if (key && (key.name === 'left' || key.name === 'up' || key.name === 'down' || key.name === 'right')) {
-      selected = key.name === 'left' || key.name === 'up' ? 0 : 1;
-      redraw();
-      return;
-    }
-    if (key && (key.name === 'return' || key.name === 'enter')) return done(selected === 0);
-    if (key && key.name === 'escape') return done(false);
-  }
-
-  let resolve;
-  return new Promise((r) => {
-    resolve = r;
+// Inline approval prompt — minimal, runs alongside spinner.
+async function promptApproval({ server, tool, args }) {
+  return new Promise((resolve) => {
+    const stdin = process.stdin;
     readline.emitKeypressEvents(stdin);
     stdin.removeAllListeners('keypress');
     stdin.setRawMode(true);
     stdin.resume();
-    stdout.write(render(opts, selected) + '\n');
+    process.stdout.write(HIDE_CURSOR);
+
+    const argsStr = JSON.stringify(args || {}).slice(0, 120);
+    const promptLine =
+      `\n  ${chalk.yellow('⚠')}  ${chalk.bold('Allow this MCP tool call?')}\n` +
+      `  ${chalk.bold(tool)}  ${chalk.gray(argsStr)}\n` +
+      `  ${chalk.cyan('Allow')}  ${chalk.gray('—')}  ${chalk.red("Don't allow")}\n` +
+      `  ${chalk.gray('[Enter]')} ${chalk.cyan('Allow')}    ${chalk.gray('[Esc]')} ${chalk.red("Don't allow")}: `;
+    process.stdout.write(promptLine);
+
+    function onKey(str, key) {
+      if (key && key.ctrl && key.name === 'c') {
+        process.stdout.write(SHOW_CURSOR + '\n');
+        process.exit(0);
+      }
+      if (str === 'y' || str === 'Y' || (key && key.name === 'return')) {
+        cleanup(true);
+      } else if (str === 'n' || str === 'N' || (key && key.name === 'escape')) {
+        cleanup(false);
+      }
+    }
+
+    function cleanup(allowed) {
+      stdin.removeListener('keypress', onKey);
+      if (stdin.isTTY) stdin.setRawMode(false);
+      process.stdout.write(SHOW_CURSOR + '\n');
+      if (allowed) allowedTools.add(tool);
+      resolve(allowed);
+    }
+
     stdin.on('keypress', onKey);
   });
 }
 
-// The HITL gate. The first MCP call of a user prompt asks the human once; that
-// Allow / Don't allow decision is then applied to every later MCP call made
-// while resolving the same prompt. `enabled` overrides the config toggle, and
-// `_prompt` injects a prompt function (used by tests).
 async function checkApproval({ server, tool, args, enabled, _prompt } = {}) {
   const on = enabled !== undefined ? enabled : isEnabled();
   if (!on) return true;
-  if (promptDecision !== undefined) return promptDecision;
-  const ask = _prompt || (process.stdin.isTTY ? interactivePrompt : null);
-  if (!ask) {
-    promptDecision = true; // nobody to ask; guardrails still apply
+
+  // Already allowed in this chat session: do not ask again, but keep the
+  // same spinner alive and make the reason visible before execution begins.
+  if (allowedTools.has(tool)) {
+    updateSpinner(`✓ already approved this session — running tool: ${tool}...`);
     return true;
   }
-  promptDecision = await ask({ server, tool, args: args || {} });
-  return promptDecision;
+
+  // Test override
+  if (_prompt) {
+    const result = await _prompt({ server, tool, args: args || {} });
+    if (result) allowedTools.add(tool);
+    return result;
+  }
+
+  // There is no user to make the required Allow/Don't allow decision in a
+  // non-interactive process, so fail closed. Users can explicitly turn this
+  // feature off in config for deliberate automation.
+  if (!process.stdin.isTTY) {
+    return false;
+  }
+
+  // Continuous indicator: update spinner to "waiting for approval"
+  updateSpinner(`waiting for approval: ${tool}...`);
+
+  const allowed = await promptApproval({ server, tool, args });
+
+  // Continuous indicator: update spinner to "running tool"
+  updateSpinner(`running tool: ${tool}...`);
+
+  return allowed;
 }
 
-module.exports = { checkApproval, isEnabled, startPrompt, isApproved, rememberApproval, resetApprovals };
+// log() behaves like console.log (used by chat.js for tool output).
+function log(line) {
+  console.log(line);
+}
+
+// Start of a new chat session. The allow-list must never persist across
+// sessions or process restarts.
+function startPrompt() { startSession(); }
+function resetApprovals() { startSession(); }
+
+// Internal: clear session approvals (for tests only)
+function _resetForTesting() {
+  startSession();
+  pendingEntry = null;
+  resolvePending = null;
+  activeSpinner = null;
+}
+
+module.exports = {
+  checkApproval,
+  isEnabled,
+  startPrompt,
+  resetApprovals,
+  log,
+  setSpinner,
+  _resetForTesting
+};

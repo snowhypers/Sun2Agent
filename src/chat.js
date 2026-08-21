@@ -650,12 +650,8 @@ function buildSystemPrompt(specs) {
 
 // Run one chat turn, resolving any MCP tool calls the model requests.
 // `signal` (optional AbortSignal) lets the user interrupt with Esc.
+// Uses a single continuous spinner: thinking → waiting for approval → running tool.
 async function chatTurn(config, history, signal) {
-  // A new user prompt begins here: reset the HITL decision so the first MCP
-  // call asks Allow/Don't allow once, and that answer governs every call made
-  // while resolving THIS prompt (not later questions).
-  hitl.startPrompt();
-
   const { specs, routes } = mcp.getOpenAiTools();
   const tools = specs.length ? specs : undefined;
   const currentUserMessage = [...history].reverse().find((item) => item.role === 'user');
@@ -670,15 +666,21 @@ async function chatTurn(config, history, signal) {
   const system = { role: 'system', content: context.buildSystemPrompt(withMemory) };
   let allowTools = Boolean(tools);
 
-  // Loop so the model can chain tool calls before its final answer. Browser
-  // automation and multi-step tasks need many calls, so allow a generous cap.
+  // Continuous spinner for the entire turn.
+  const spinner = ora(chalk.gray('sun2Agent is thinking...  (⎋ esc to stop)')).start();
+  hitl.setSpinner(spinner);
+
+  // Loop so the model can chain tool calls before its final answer.
   const MAX_TOOL_STEPS = 30;
   for (let step = 0; step < MAX_TOOL_STEPS; step++) {
-    if (signal && signal.aborted) return null; // interrupted between steps
+    if (signal && signal.aborted) {
+      spinner.stop();
+      hitl.setSpinner(null);
+      return null;
+    }
 
     // System prompt is prepended per-call and kept out of persistent history.
     const messages = [system, ...history];
-    const spinner = ora(chalk.gray('sun2Agent is thinking...  (⎋ esc to stop)')).start();
     let msg;
     try {
       msg = await chatCompletion(
@@ -688,26 +690,28 @@ async function chatTurn(config, history, signal) {
         allowTools ? tools : undefined,
         signal
       );
-      spinner.stop();
     } catch (e) {
-      spinner.stop();
-      if (signal && signal.aborted) return null; // aborted request
+      if (signal && signal.aborted) {
+        spinner.stop();
+        hitl.setSpinner(null);
+        return null;
+      }
       const detail = e.response?.data?.detail || e.response?.data?.error?.message || e.message || '';
       // Some models reject the `tools` param — retry once without tools.
       if (allowTools && /tool|function/i.test(String(detail))) {
-        console.log(
-          chalk.yellow(`  ⚠ model "${config.model}" can't use tools — answering without them.`)
-        );
+        spinner.text = chalk.gray(`model "${config.model}" can't use tools — continuing without them...`);
         allowTools = false;
         continue;
       }
+      spinner.stop();
+      hitl.setSpinner(null);
       throw e;
     }
     history.push(msg);
 
     if (allowTools && msg.tool_calls && msg.tool_calls.length) {
-      for (const call of msg.tool_calls) {
-        if (signal && signal.aborted) return null; // interrupted mid tool loop
+      // Show every proposed action up front so the user sees the batch.
+      const batch = msg.tool_calls.map((call) => {
         const fnName = call.function.name;
         let args = {};
         try {
@@ -715,52 +719,78 @@ async function chatTurn(config, history, signal) {
         } catch (_) {
           /* leave args empty on malformed JSON */
         }
-        // Show the action so the user can see the agent working. Keep it to
-        // one line that fits the current terminal width.
         const argRoom = Math.max(16, termWidth() - fnName.length - 8);
         console.log(chalk.magenta(`  ⚙ ${fnName}`) + chalk.gray(`(${truncate(JSON.stringify(args), argRoom)})`));
-        let content;
-        if (!routes.has(fnName)) {
-          // Stale/hallucinated tool (e.g. from a previous MCP server). Tell the
-          // model exactly which tools exist now so it retries correctly.
-          const available = [...routes.keys()].join(', ') || '(none)';
-          content =
-            `Tool "${fnName}" does not exist. The only available tools are: ${available}. ` +
-            `Call one of those, or answer directly if none fit.`;
-          console.log(chalk.red(`     ↳ unknown tool; redirected model to available tools`));
-        } else {
-          try {
-            const raw = await mcp.callTool(routes, fnName, args, signal);
-            // Mask secrets before the result reaches the terminal, the
-            // history, or the next request to the model.
-            content = guardrails.outputGuard(raw);
-            if (content !== raw) {
-              console.log(chalk.yellow('     ⚠ output guard: secrets masked in tool result'));
-            }
-            console.log(chalk.gray(`     ↳ ${truncate(sanitizeTerminalText(content), Math.max(20, termWidth() - 8))}`));
-          } catch (e) {
-            if (signal && signal.aborted) return null;
-            content = 'Tool error: ' + e.message;
-            console.log(chalk.red(`     ↳ ${sanitizeTerminalText(content)}`));
-            // If Docker went down mid-session, warn the user clearly.
-            const dockerWarn = dockerDownWarning();
-            if (dockerWarn) {
-              console.log(chalk.red('  ⛔ ' + dockerWarn));
-            }
-          }
+        return { call, fnName, args };
+      });
+
+      // Run tools sequentially so spinner updates cleanly: waiting → running → thinking...
+      const contents = [];
+      for (const { call, fnName, args } of batch) {
+        if (signal && signal.aborted) {
+          contents.push('interrupted');
+          continue;
         }
-        history.push({ role: 'tool', tool_call_id: call.id, content });
+        if (!routes.has(fnName)) {
+          const available = [...routes.keys()].join(', ') || '(none)';
+          console.log(chalk.red(`     ↳ unknown tool; redirected model to available tools`));
+          contents.push(
+            `Tool "${fnName}" does not exist. The only available tools are: ${available}. ` +
+            `Call one of those, or answer directly if none fit.`
+          );
+          continue;
+        }
+        try {
+          const raw = await mcp.callTool(routes, fnName, args, signal);
+          const content = guardrails.outputGuard(raw);
+          if (content !== raw) {
+            console.log(chalk.yellow('     ⚠ output guard: secrets masked in tool result'));
+          }
+          console.log(chalk.gray(`     ↳ ${truncate(sanitizeTerminalText(content), Math.max(20, termWidth() - 8))}`));
+          contents.push(content);
+          // Spinner updates back to "thinking" for next model call.
+          spinner.text = chalk.gray('sun2Agent is thinking...  (⎋ esc to stop)');
+        } catch (e) {
+          if (signal && signal.aborted) {
+            contents.push('interrupted');
+            continue;
+          }
+          const content = 'Tool error: ' + e.message;
+          console.log(chalk.red(`     ↳ ${sanitizeTerminalText(content)}`));
+          // If Docker went down mid-session, warn the user clearly.
+          const dockerWarn = dockerDownWarning();
+          if (dockerWarn) {
+            console.log(chalk.red('  ⛔ ' + dockerWarn));
+          }
+          contents.push(content);
+        }
+      }
+
+      // Inject results back into the running agent, preserving the model's
+      // original call order.
+      for (let i = 0; i < batch.length; i++) {
+        history.push({
+          role: 'tool',
+          tool_call_id: batch[i].call.id,
+          content: contents[i] === null || contents[i] === undefined ? 'interrupted' : contents[i]
+        });
       }
       continue; // ask the model again now that it has tool results
     }
 
+    spinner.stop();
+    hitl.setSpinner(null);
     return msg.content; // final answer
   }
 
   // Hit the tool-call cap. Don't dead-end — ask the model once more WITHOUT
   // tools so it must summarize a result from everything it gathered.
-  if (signal && signal.aborted) return null;
-  const spinner = ora(chalk.gray('wrapping up...')).start();
+  if (signal && signal.aborted) {
+    spinner.stop();
+    hitl.setSpinner(null);
+    return null;
+  }
+  spinner.text = chalk.gray('wrapping up...');
   try {
     const wrapMessages = [
       system,
@@ -775,9 +805,11 @@ async function chatTurn(config, history, signal) {
     ];
     const finalMsg = await chatCompletion(config.apiKey, config.model, wrapMessages, undefined, signal);
     spinner.stop();
+    hitl.setSpinner(null);
     return finalMsg.content || '(no final answer produced)';
   } catch (e) {
     spinner.stop();
+    hitl.setSpinner(null);
     if (signal && signal.aborted) return null;
     return 'Reached the tool-call limit and could not summarize: ' + (e.message || e);
   }
@@ -785,6 +817,9 @@ async function chatTurn(config, history, signal) {
 
 // Main loop
 async function startChat() {
+  // HITL approvals are scoped to one interactive chat, never to a saved
+  // config or a later invocation of the CLI.
+  hitl.startPrompt();
   let config = loadConfig();
   printBanner(config);
   printIntro();
@@ -843,7 +878,6 @@ async function startChat() {
     if (input === ESC_BACK) {
       if (mcp.getActiveName()) {
         await mcp.disconnectAll();
-        hitl.resetApprovals(); // new chat — approvals start clean
         console.log(chalk.gray('⎋ Disconnected MCP. Back to simple chat.\n'));
       }
       continue;
@@ -880,7 +914,6 @@ async function startChat() {
       // doesn't keep referencing a previous server's tools from history.
       if (before !== after) {
         history.length = 0;
-        hitl.resetApprovals(); // approvals belong to a chat, not the process
         const tag = mcp.getTag();
         console.log(chalk.gray('(context reset — now using ' + (tag ? '@' + tag : 'no MCP server') + ')\n'));
       }

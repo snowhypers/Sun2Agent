@@ -9,6 +9,7 @@ const STOP_WORDS = new Set([
   'a', 'an', 'and', 'are', 'as', 'at', 'be', 'for', 'from', 'i', 'in', 'is',
   'it', 'my', 'of', 'on', 'or', 'the', 'this', 'to', 'use', 'user', 'with'
 ]);
+const MAX_LOCAL_MEMORIES = 200;
 
 function getMemoryPath(homeDir = os.homedir()) {
   return path.join(homeDir, '.sun2agent', 'memory.md');
@@ -24,6 +25,26 @@ function legacyJsonPath(homeDir = os.homedir()) {
 // consistent with AGENT.md; the JSON shape keeps it programmatically safe.
 function serializeMarkdown(entries) {
   return JSON.stringify({ memories: entries }, null, 2) + '\n';
+}
+
+function normalizeEntry(item) {
+  if (!item || typeof item.content !== 'string') return null;
+  const content = item.content.replace(/\s+/g, ' ').trim();
+  if (!content || containsSensitiveData(content)) return null;
+  return { ...item, content };
+}
+
+function uniqueEntries(entries) {
+  const seen = new Set();
+  return (Array.isArray(entries) ? entries : []).reduce((safe, item) => {
+    const normalized = normalizeEntry(item);
+    if (!normalized) return safe;
+    const key = normalized.content.toLowerCase();
+    if (seen.has(key)) return safe;
+    seen.add(key);
+    safe.push(normalized);
+    return safe;
+  }, []);
 }
 
 function ensureMemoryFile(homeDir = os.homedir()) {
@@ -67,9 +88,7 @@ function loadLocalMemory(homeDir = os.homedir()) {
     try {
       const parsed = JSON.parse(raw);
       if (parsed && Array.isArray(parsed.memories)) {
-        return parsed.memories
-          .filter((item) => item && typeof item.content === 'string' && item.content.trim())
-          .map((item) => ({ ...item, content: item.content.replace(/\s+/g, ' ').trim() }));
+        return uniqueEntries(parsed.memories);
       }
     } catch (_) {
       /* not JSON — fall through to legacy markdown bullets */
@@ -83,7 +102,7 @@ function loadLocalMemory(homeDir = os.homedir()) {
       const content = match[1].replace(/\s+/g, ' ').trim();
       if (content) memories.push({ content });
     }
-    return memories;
+    return uniqueEntries(memories);
   } catch (_) {
     return [];
   }
@@ -98,9 +117,7 @@ function containsSensitiveData(content) {
 
 function saveLocalMemory(memories, homeDir = os.homedir()) {
   const file = ensureMemoryFile(homeDir);
-  const safe = Array.isArray(memories)
-    ? memories.filter((item) => item && typeof item.content === 'string' && !containsSensitiveData(item.content))
-    : [];
+  const safe = uniqueEntries(memories).slice(-MAX_LOCAL_MEMORIES);
   fs.writeFileSync(file, serializeMarkdown(safe), { mode: 0o600 });
   return safe;
 }
@@ -142,7 +159,7 @@ function searchLocalMemory(query, memories, limit = 5) {
       return { ...item, score: overlap / Math.max(queryTokens.length, 1) + phrase };
     })
     .filter((item) => item.score > 0)
-    .sort((a, b) => b.score - a.score)
+    .sort((a, b) => b.score - a.score || String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || '')))
     .slice(0, limit);
 }
 
@@ -178,5 +195,6 @@ module.exports = {
   addLocalMemory,
   searchLocalMemory,
   containsSensitiveData,
-  openMemoryFile
+  openMemoryFile,
+  MAX_LOCAL_MEMORIES
 };

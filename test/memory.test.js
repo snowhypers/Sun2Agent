@@ -167,6 +167,18 @@ test('malformed memory.md never crashes local memory loading', () => {
   assert.deepStrictEqual(memoryJson.loadLocalMemory(home), []);
 });
 
+test('manual sensitive or duplicate entries are never returned to the prompt', () => {
+  const home = tmpHome();
+  const file = memoryJson.ensureMemoryFile(home);
+  const secret = 'nvapi-' + 'a'.repeat(30);
+  fs.writeFileSync(file, JSON.stringify({ memories: [
+    { content: 'Use JavaScript.' },
+    { content: ' use javascript. ' },
+    { content: `API key is ${secret}` }
+  ] }));
+  assert.deepStrictEqual(memoryJson.loadLocalMemory(home).map((item) => item.content), ['Use JavaScript.']);
+});
+
 test('memory.md: markdown-bullet files from an older version still load', () => {
   const home = tmpHome();
   const file = memoryJson.ensureMemoryFile(home);

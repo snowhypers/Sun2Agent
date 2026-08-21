@@ -2,7 +2,7 @@
 
 # ☀️ sun2Agent
 
-**Your terminal. Your MCP servers. One agent.**
+**Your terminal. Your MCP servers. One safe AI agent.**
 
 A fast, security-hardened AI agent that lives in your terminal — connects to any
 [Model Context Protocol](https://modelcontextprotocol.io) server, calls tools
@@ -12,11 +12,63 @@ automatically, and runs 5 layers of guardrails on every call.
 [![npm downloads](https://img.shields.io/npm/dm/sun2agent?color=cb3837&logo=npm)](https://www.npmjs.com/package/sun2agent)
 [![Node.js](https://img.shields.io/node/v/sun2agent?color=339933&logo=node.js&logoColor=white)](https://nodejs.org)
 [![License: MIT](https://img.shields.io/npm/l/sun2agent?color=blue)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-118%2F118-brightgreen)](#guardrails)
+[![Tests](https://img.shields.io/badge/tests-Node%20Test-brightgreen)](#guardrails)
 
-[Install](#install) · [Quick Start](#quick-start) · [MCP Servers](#connecting-mcp-servers) · [Docker Sandbox](#docker-sandbox-optional) · [Guardrails](#guardrails)
+[Install](#install) · [Setup](#first-run-setup) · [MCP Servers](#connecting-mcp-servers) · [Safety](#guardrails) · [Reference](#commands)
 
 </div>
+
+## Install
+
+> **Recommended — install sun2Agent globally so it is available in every terminal.**
+
+```bash
+npm install -g sun2agent
+```
+
+Then launch it anywhere:
+
+```bash
+sun2agent
+```
+
+<details>
+<summary>Prefer not to install globally?</summary>
+
+Run the latest release on demand instead:
+
+```bash
+npx sun2agent
+```
+</details>
+
+**Requirements:** Node.js 18 or newer and an NVIDIA NIM API key.
+
+> [!NOTE]
+> Do not run `npm install sun2agent` inside another project. Use `-g` above or `npx sun2agent`; installing it locally can trigger unrelated dependency resolution errors in that project.
+
+## First-run setup
+
+Your first useful tool call takes four short steps:
+
+```text
+1. sun2agent       Start the agent
+2. /config         Add an NVIDIA NIM API key and choose a model
+3. /mcp            Add and connect an MCP server
+4. Ask naturally    “Read AGENT.md and run the tests”
+```
+
+Get an API key from [NVIDIA Build](https://build.nvidia.com): choose a model, then select **Get API Key**. Keys begin with `nvapi-`.
+
+When a connected MCP tool is needed, sun2Agent shows the proposed call and asks:
+
+```text
+Allow this MCP tool call?
+Allow — Don't allow
+[Enter] Allow    [Esc] Don't allow
+```
+
+An allowed tool is remembered only for the current chat session; a denied call is skipped.
 
 ---
 
@@ -47,7 +99,7 @@ sun2Agent: The page is a minimal placeholder titled "Example Domain"…
 › read my AGENT.md and run the test suite the way it says
   ⚙ filesystem__read_file({"path":"AGENT.md"})
   ⚙ filesystem__run_command({"cmd":"npm test"})
-sun2Agent: 118 tests, all passing — exactly as your AGENT.md specifies.
+sun2Agent: Test suite complete — following your AGENT.md instructions.
 ```
 
 ## Why sun2Agent
@@ -67,44 +119,6 @@ plain language. The agent figures out which tools to call.
 | 📄 | **AGENT.md support** — drop an `AGENT.md` in your project and the agent follows your repo's conventions |
 | 🎛️ | **Any NIM model** — Llama, GPT-OSS, Nemotron… swap anytime with `/config` |
 | ⌨️ | **Calm TUI** — rounded input box, live connection tags, `Esc` interrupts anything |
-
-## Install
-
-sun2Agent is a command-line tool, so install it **globally** (note the `-g`):
-
-```bash
-npm install -g sun2agent
-```
-
-Then run it:
-
-```bash
-sun2agent
-```
-
-Or try it without installing anything:
-
-```bash
-npx sun2agent
-```
-
-Requires **Node.js >= 18**.
-
-> [!WARNING]
-> Don't run `npm install sun2agent` (without `-g`) inside another project. That adds it as a local dependency and re-resolves *that project's* packages, which can fail with peer-dependency errors unrelated to sun2Agent. Use `-g` or `npx`.
-
-## Quick Start
-
-**30 seconds to your first tool call:**
-
-```bash
-sun2agent          # 1. start the agent
-/config            # 2. paste your NVIDIA NIM API key, pick a model
-/mcp               # 3. add a server, connect, done
-```
-
-> Get a free API key at [build.nvidia.com](https://build.nvidia.com) → choose a
-> model → *Get API Key*. It starts with `nvapi-`.
 
 ## Commands
 
@@ -216,7 +230,7 @@ The file is appended to the system prompt as clearly-labelled advisory context. 
 
 ## Local memory (optional)
 
-Enable memory from `/config` to let sun2Agent retain explicit preferences between sessions. Memory lives in a local file and runs entirely on the local machine: it makes no model, embedding, telemetry, or memory-service requests.
+Enable memory from `/config` to let sun2Agent retain explicit preferences between sessions. Memory lives locally and makes no model, embedding, telemetry, or memory-service requests.
 
 - Editable memories live in `~/.sun2agent/memory.md` (stored as JSON inside the `.md` file).
 - A stable anonymous installation UUID lives in `~/.sun2agent/user-id`.
@@ -273,7 +287,7 @@ All policy lives in [`guardrails/guardConfig.js`](guardrails/guardConfig.js) —
 - `projectRoot` — the filesystem sandbox. Defaults to the directory you launched from, so **start sun2Agent inside the project you want the agent working on.** File arguments pointing outside it are refused.
 - `strictDomains` — off by default. Turn it on to restrict outbound URLs to `allowedDomains`.
 
-Run the full test suite (118 tests, no test dependencies):
+Run the full test suite (Node's built-in test runner; no test dependencies):
 
 ```bash
 npm test
