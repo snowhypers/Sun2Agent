@@ -1,6 +1,6 @@
 {
   "name": "sun2agent",
-  "version": "1.4.2",
+  "version": "1.4.3",
   "description": "Terminal AI agent with a native MCP client — automatic tool-calling, 5-layer security guardrails, optional Docker sandbox, and LangSmith observability. Powered by NVIDIA NIM.",
   "main": "bin/sun2agent.js",
   "bin": {
