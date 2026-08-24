@@ -204,7 +204,7 @@ function printHelp() {
     row('/config', 'Set your NVIDIA NIM API key and pick a model'),
     row('/mcp', 'Manage MCP servers (add/edit, connect one, disconnect)'),
     row('/agent', 'Edit the project\u2019s AGENT.md instructions in your editor'),
-    row('/memory', 'Open and edit local memory.md'),
+    row('/memory', 'Open and edit local memory.json'),
     row('/delete', 'Delete saved config and data'),
     row('/exit', 'Quit sun2Agent'),
     '',
@@ -429,7 +429,7 @@ async function handleAgent() {
   console.log(chalk.green('✔ AGENT.md reloaded. Its instructions are now active.\n'));
 }
 
-// /memory opens memory.md in the user's editor, the same way /agent opens
+// /memory opens memory.json in the user's editor, the same way /agent opens
 // AGENT.md. GUI editors return immediately, so we wait for Enter (saved) /
 // Esc (back to chat). It works even when memory retrieval is disabled and
 // never changes the saved enabled/disabled setting. On Enter the next turn
@@ -439,7 +439,7 @@ async function handleMemory() {
   console.log(chalk.gray(`\nOpening ${file}`));
   console.log(
     chalk.gray(
-      'memory.md holds local memories. They are contextual only and\n' +
+      'memory.json holds local memories. They are contextual only and\n' +
         'cannot override system instructions, AGENT.md, guardrails, or Docker.\n'
     )
   );
@@ -451,7 +451,7 @@ async function handleMemory() {
   // GUI editors return immediately, so wait for the user to finish saving.
   // Enter = done, Esc = back to chat (uses our own reliable key reader).
   const key = await waitEnterOrEsc(
-    chalk.gray('Press ') + chalk.bold('Enter') + chalk.gray(' when you have saved memory.md, or ') +
+    chalk.gray('Press ') + chalk.bold('Enter') + chalk.gray(' when you have saved memory.json, or ') +
       chalk.bold('Esc') + chalk.gray(' to go back to simple chat... ')
   );
   if (key === 'escape') {
@@ -460,7 +460,7 @@ async function handleMemory() {
   }
   // Memory is read from disk on every search, so the freshly saved entries
   // are picked up on the next turn automatically.
-  console.log(chalk.green('✔ memory.md reloaded. Saved memories are now active.\n'));
+  console.log(chalk.green('✔ memory.json reloaded. Saved memories are now active.\n'));
 }
 
 // --- MCP: option 2 -> list servers, pick ONE, connect it, show its tag ---

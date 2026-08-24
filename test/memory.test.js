@@ -6,9 +6,8 @@ const os = require('os');
 
 const PROJECT = path.join(__dirname, '..');
 const memoryJson = require('../src/memory/memoryJson');
-const userId = require('../src/memory/userId');
 const memory = require('../src/memory');
-const localAdapter = require('../src/memory/mem0');
+const localAdapter = require('../src/memory/localMemory');
 const guardrails = require('../src/guardrails');
 
 let counter = 0;
@@ -45,40 +44,44 @@ test('config: old config without memory receives disabled default', () => {
   assert.deepStrictEqual(config.memory, { enabled: false });
 });
 
-test('memory.md: created with an empty JSON array', () => {
+test('memory.json: created with an empty JSON array', () => {
   const home = tmpHome();
   const file = memoryJson.ensureMemoryFile(home);
-  assert.strictEqual(file, path.join(home, '.sun2agent', 'memory.md'));
+  assert.strictEqual(file, path.join(home, '.sun2agent', 'memory.json'));
   assert.deepStrictEqual(JSON.parse(fs.readFileSync(file, 'utf-8')), { memories: [] });
 });
 
-test('memory.md: add and load persistent memory', () => {
+test('memory: enabling creates no user ID or legacy memory.md file', async () => {
+  const home = tmpHome();
+  const originalHome = os.homedir;
+  os.homedir = () => home;
+  try {
+    memory.disable();
+    await memory.enable();
+    assert.ok(fs.existsSync(path.join(home, '.sun2agent', 'memory.json')));
+    assert.ok(!fs.existsSync(path.join(home, '.sun2agent', 'memory.md')));
+    assert.ok(!fs.existsSync(path.join(home, '.sun2agent', 'user-id')));
+  } finally {
+    os.homedir = originalHome;
+    memory.disable();
+  }
+});
+
+test('memory.json: add and load persistent memory', () => {
   const home = tmpHome();
   const added = memoryJson.addLocalMemory('User prefers JavaScript.', { homeDir: home });
   assert.ok(added.id);
   assert.strictEqual(memoryJson.loadLocalMemory(home)[0].content, 'User prefers JavaScript.');
 });
 
-test('memory.md: save keeps the documented editable JSON shape', () => {
+test('memory.json: save keeps the documented editable JSON shape', () => {
   const home = tmpHome();
   memoryJson.saveLocalMemory([{ id: '1', content: 'Use simple implementations.' }], home);
   const data = JSON.parse(fs.readFileSync(memoryJson.getMemoryPath(home), 'utf-8'));
   assert.deepStrictEqual(data, { memories: [{ id: '1', content: 'Use simple implementations.' }] });
 });
 
-test('memory.md: legacy memory.json is migrated on first load', () => {
-  const home = tmpHome();
-  const legacy = path.join(home, '.sun2agent', 'memory.json');
-  fs.mkdirSync(path.dirname(legacy), { recursive: true });
-  fs.writeFileSync(legacy, JSON.stringify({ memories: [{ id: 'old', content: 'Old memory.' }] }));
-  const loaded = memoryJson.loadLocalMemory(home);
-  assert.strictEqual(loaded.length, 1);
-  assert.strictEqual(loaded[0].content, 'Old memory.');
-  assert.ok(fs.existsSync(path.join(home, '.sun2agent', 'memory.md')));
-  assert.ok(!fs.existsSync(legacy), 'legacy file must be removed after migration');
-});
-
-test('/memory: opens memory.md independently of enabled state', () => {
+test('/memory: opens memory.json independently of enabled state', () => {
   const home = tmpHome();
   const oldEditor = process.env.EDITOR;
   const oldVisual = process.env.VISUAL;
@@ -96,16 +99,6 @@ test('/memory: opens memory.md independently of enabled state', () => {
     if (oldVisual === undefined) delete process.env.VISUAL;
     else process.env.VISUAL = oldVisual;
   }
-});
-
-test('user ID: generated automatically as a UUID', () => {
-  const id = userId.getUserId(tmpHome());
-  assert.match(id, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
-});
-
-test('user ID: remains stable between reads', () => {
-  const home = tmpHome();
-  assert.strictEqual(userId.getUserId(home), userId.getUserId(home));
 });
 
 test('local relevance: relevant manual memory is included and irrelevant memory excluded', () => {
@@ -152,14 +145,14 @@ test('memory context itself enforces the five-memory cap', () => {
   assert.ok(!prompt.includes('memory-5'));
 });
 
-test('secrets are rejected instead of being written to memory.md', () => {
+test('secrets are rejected instead of being written to memory.json', () => {
   const home = tmpHome();
   const token = 'nvapi-' + 'a'.repeat(30);
   assert.strictEqual(memoryJson.addLocalMemory(`API key is ${token}`, { homeDir: home }), null);
   assert.deepStrictEqual(memoryJson.loadLocalMemory(home), []);
 });
 
-test('malformed memory.md never crashes local memory loading', () => {
+test('malformed memory.json never crashes local memory loading', () => {
   const home = tmpHome();
   const file = memoryJson.ensureMemoryFile(home);
   fs.writeFileSync(file, '{not valid json');
@@ -179,15 +172,6 @@ test('manual sensitive or duplicate entries are never returned to the prompt', (
   assert.deepStrictEqual(memoryJson.loadLocalMemory(home).map((item) => item.content), ['Use JavaScript.']);
 });
 
-test('memory.md: markdown-bullet files from an older version still load', () => {
-  const home = tmpHome();
-  const file = memoryJson.ensureMemoryFile(home);
-  fs.writeFileSync(file, '# Local Memory\n\n- Always use JavaScript for MCP examples.\n');
-  const loaded = memoryJson.loadLocalMemory(home);
-  assert.strictEqual(loaded.length, 1);
-  assert.strictEqual(loaded[0].content, 'Always use JavaScript for MCP examples.');
-});
-
 test('disabled local-memory search and remember are safe no-ops', async () => {
   memory.disable();
   assert.deepStrictEqual(await memory.search('anything'), []);
@@ -202,7 +186,7 @@ test('security: malicious memory cannot change command or filesystem guards', ()
 });
 
 test('local adapter performs no model, embedding, telemetry, or network calls', () => {
-  const source = fs.readFileSync(path.join(PROJECT, 'src/memory/mem0.js'), 'utf-8');
+  const source = fs.readFileSync(path.join(PROJECT, 'src/memory/localMemory.js'), 'utf-8');
   assert.ok(!source.includes("require('mem0ai"));
   assert.ok(!source.includes('MemoryClient'));
   assert.ok(!source.includes('api.mem0.ai'));
@@ -230,9 +214,8 @@ test('project configuration and source never define a Mem0 API key', () => {
     path.join(PROJECT, 'src/config.js'),
     path.join(PROJECT, 'src/chat.js'),
     path.join(PROJECT, 'src/memory/index.js'),
-    path.join(PROJECT, 'src/memory/mem0.js'),
+    path.join(PROJECT, 'src/memory/localMemory.js'),
     path.join(PROJECT, 'src/memory/memoryJson.js'),
-    path.join(PROJECT, 'src/memory/userId.js')
   ];
   for (const file of files) {
     assert.ok(!fs.readFileSync(file, 'utf-8').includes('MEM0_API_KEY'), `${file} must not define MEM0_API_KEY`);

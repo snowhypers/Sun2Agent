@@ -12,18 +12,10 @@ const STOP_WORDS = new Set([
 const MAX_LOCAL_MEMORIES = 200;
 
 function getMemoryPath(homeDir = os.homedir()) {
-  return path.join(homeDir, '.sun2agent', 'memory.md');
-}
-
-// Path of the legacy JSON file, so older installs can be migrated in place.
-function legacyJsonPath(homeDir = os.homedir()) {
   return path.join(homeDir, '.sun2agent', 'memory.json');
 }
 
-// The memory file is named memory.md but its content is JSON: a single
-// { memories: [...] } object. The .md name keeps it editor-friendly and
-// consistent with AGENT.md; the JSON shape keeps it programmatically safe.
-function serializeMarkdown(entries) {
+function serializeJson(entries) {
   return JSON.stringify({ memories: entries }, null, 2) + '\n';
 }
 
@@ -51,26 +43,7 @@ function ensureMemoryFile(homeDir = os.homedir()) {
   const file = getMemoryPath(homeDir);
   fs.mkdirSync(path.dirname(file), { recursive: true });
   if (!fs.existsSync(file)) {
-    // One-time migration: an older memory.json is converted to memory.md and
-    // then removed, so no memories are lost when upgrading.
-    let entries = [];
-    const legacy = legacyJsonPath(homeDir);
-    if (fs.existsSync(legacy)) {
-      try {
-        const parsed = JSON.parse(fs.readFileSync(legacy, 'utf-8'));
-        if (parsed && Array.isArray(parsed.memories)) {
-          entries = parsed.memories.filter((item) => item && typeof item.content === 'string');
-        }
-      } catch (_) {
-        /* corrupt legacy file — start empty */
-      }
-      try {
-        fs.unlinkSync(legacy);
-      } catch (_) {
-        /* best effort */
-      }
-    }
-    fs.writeFileSync(file, serializeMarkdown(entries), { mode: 0o600 });
+    fs.writeFileSync(file, serializeJson([]), { mode: 0o600 });
   }
   try {
     fs.chmodSync(file, 0o600); // enforce even if the file pre-existed
@@ -84,25 +57,8 @@ function loadLocalMemory(homeDir = os.homedir()) {
   const file = ensureMemoryFile(homeDir);
   try {
     const raw = fs.readFileSync(file, 'utf-8');
-    // Current format: JSON. Parse it first.
-    try {
-      const parsed = JSON.parse(raw);
-      if (parsed && Array.isArray(parsed.memories)) {
-        return uniqueEntries(parsed.memories);
-      }
-    } catch (_) {
-      /* not JSON — fall through to legacy markdown bullets */
-    }
-    // Intermediate format: markdown bullets ("- some memory"). Convert so
-    // nothing written by an earlier version is lost.
-    const memories = [];
-    for (const line of raw.split(/\r?\n/)) {
-      const match = line.match(/^\s*[-*+]\s+(.+)$/);
-      if (!match) continue;
-      const content = match[1].replace(/\s+/g, ' ').trim();
-      if (content) memories.push({ content });
-    }
-    return uniqueEntries(memories);
+    const parsed = JSON.parse(raw);
+    return parsed && Array.isArray(parsed.memories) ? uniqueEntries(parsed.memories) : [];
   } catch (_) {
     return [];
   }
@@ -118,7 +74,7 @@ function containsSensitiveData(content) {
 function saveLocalMemory(memories, homeDir = os.homedir()) {
   const file = ensureMemoryFile(homeDir);
   const safe = uniqueEntries(memories).slice(-MAX_LOCAL_MEMORIES);
-  fs.writeFileSync(file, serializeMarkdown(safe), { mode: 0o600 });
+  fs.writeFileSync(file, serializeJson(safe), { mode: 0o600 });
   return safe;
 }
 

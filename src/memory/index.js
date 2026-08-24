@@ -1,10 +1,8 @@
-const localAdapter = require('./mem0');
+const localAdapter = require('./localMemory');
 const memoryJson = require('./memoryJson');
-const userId = require('./userId');
 
 async function enable() {
   memoryJson.ensureMemoryFile();
-  userId.getUserId();
   return localAdapter.initialize();
 }
 
@@ -32,6 +30,5 @@ module.exports = {
   loadLocalMemory: memoryJson.loadLocalMemory,
   addLocalMemory: memoryJson.addLocalMemory,
   getMemoryPath: memoryJson.getMemoryPath,
-  openMemoryFile: memoryJson.openMemoryFile,
-  getUserId: userId.getUserId
+  openMemoryFile: memoryJson.openMemoryFile
 };
