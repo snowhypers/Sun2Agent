@@ -26,16 +26,36 @@ function* strings(value, depth = 0) {
   }
 }
 
+// Some MCP services use slash-prefixed resource identifiers (for example
+// Context7's "/nodejs/node/v25.9.0"). They are not local filesystem paths.
+// Keep this exception narrow: it applies only to the libraryId field and to
+// identifier-shaped values, never to arbitrary path arguments.
+function isLibraryIdentifier(key, value) {
+  return key === 'libraryId' &&
+    typeof value === 'string' &&
+    /^\/[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._-]+)+$/.test(value.trim());
+}
+
+function* keyedStrings(value, key = null, depth = 0) {
+  if (depth > 8) return;
+  if (typeof value === 'string') yield { key, value };
+  else if (Array.isArray(value)) {
+    for (const v of value) yield* keyedStrings(v, key, depth + 1);
+  } else if (value && typeof value === 'object') {
+    for (const [k, v] of Object.entries(value)) yield* keyedStrings(v, k, depth + 1);
+  }
+}
+
 // Full check for one MCP tool call. Returns { ok } or { ok:false, reason }.
 function validateToolCall(toolName, args) {
-  for (const value of strings(args)) {
+  for (const { key, value } of keyedStrings(args)) {
     const cmd = validateCommand(value);
     if (!cmd.ok) return { ...cmd, tool: toolName, value };
 
     const net = validateNetwork(value);
     if (!net.ok) return { ...net, tool: toolName, value };
 
-    if (looksLikePath(value)) {
+    if (looksLikePath(value) && !isLibraryIdentifier(key, value)) {
       const fs = validatePath(value);
       if (!fs.ok) return { ...fs, tool: toolName, value };
     }

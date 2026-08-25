@@ -44,22 +44,22 @@ test('config: old config without memory receives disabled default', () => {
   assert.deepStrictEqual(config.memory, { enabled: false });
 });
 
-test('memory.json: created with an empty JSON array', () => {
+test('memory.md: created with an empty JSON array', () => {
   const home = tmpHome();
   const file = memoryJson.ensureMemoryFile(home);
-  assert.strictEqual(file, path.join(home, '.sun2agent', 'memory.json'));
+  assert.strictEqual(file, path.join(home, '.sun2agent', 'memory.md'));
   assert.deepStrictEqual(JSON.parse(fs.readFileSync(file, 'utf-8')), { memories: [] });
 });
 
-test('memory: enabling creates no user ID or legacy memory.md file', async () => {
+test('memory: enabling creates memory.md JSON and no user ID or memory.json', async () => {
   const home = tmpHome();
   const originalHome = os.homedir;
   os.homedir = () => home;
   try {
     memory.disable();
     await memory.enable();
-    assert.ok(fs.existsSync(path.join(home, '.sun2agent', 'memory.json')));
-    assert.ok(!fs.existsSync(path.join(home, '.sun2agent', 'memory.md')));
+    assert.ok(fs.existsSync(path.join(home, '.sun2agent', 'memory.md')));
+    assert.ok(!fs.existsSync(path.join(home, '.sun2agent', 'memory.json')));
     assert.ok(!fs.existsSync(path.join(home, '.sun2agent', 'user-id')));
   } finally {
     os.homedir = originalHome;
@@ -67,21 +67,27 @@ test('memory: enabling creates no user ID or legacy memory.md file', async () =>
   }
 });
 
-test('memory.json: add and load persistent memory', () => {
+test('memory.md: add and load persistent memory', () => {
   const home = tmpHome();
   const added = memoryJson.addLocalMemory('User prefers JavaScript.', { homeDir: home });
   assert.ok(added.id);
   assert.strictEqual(memoryJson.loadLocalMemory(home)[0].content, 'User prefers JavaScript.');
 });
 
-test('memory.json: save keeps the documented editable JSON shape', () => {
+test('memory.md: save keeps only sequential IDs and content', () => {
   const home = tmpHome();
-  memoryJson.saveLocalMemory([{ id: '1', content: 'Use simple implementations.' }], home);
+  memoryJson.saveLocalMemory([
+    { id: 'old-id', content: 'Use simple implementations.', createdAt: 'ignored' },
+    { id: 42, content: 'Prefer JavaScript.' }
+  ], home);
   const data = JSON.parse(fs.readFileSync(memoryJson.getMemoryPath(home), 'utf-8'));
-  assert.deepStrictEqual(data, { memories: [{ id: '1', content: 'Use simple implementations.' }] });
+  assert.deepStrictEqual(data, { memories: [
+    { id: 1, content: 'Use simple implementations.' },
+    { id: 2, content: 'Prefer JavaScript.' }
+  ] });
 });
 
-test('/memory: opens memory.json independently of enabled state', () => {
+test('/memory: opens memory.md independently of enabled state', () => {
   const home = tmpHome();
   const oldEditor = process.env.EDITOR;
   const oldVisual = process.env.VISUAL;
@@ -127,7 +133,7 @@ test('manual memory entries can be retrieved without Mem0 persistence', () => {
   const file = memoryJson.ensureMemoryFile(home);
   fs.writeFileSync(file, JSON.stringify({ memories: [{ id: 'manual', content: 'Always use JavaScript for MCP examples.' }] }));
   const result = memoryJson.searchLocalMemory('Build an MCP example', memoryJson.loadLocalMemory(home));
-  assert.strictEqual(result[0].id, 'manual');
+  assert.strictEqual(result[0].id, 1);
 });
 
 test('memory context is clearly separated and explicitly non-authoritative', () => {
@@ -145,14 +151,14 @@ test('memory context itself enforces the five-memory cap', () => {
   assert.ok(!prompt.includes('memory-5'));
 });
 
-test('secrets are rejected instead of being written to memory.json', () => {
+test('secrets are rejected instead of being written to memory.md', () => {
   const home = tmpHome();
   const token = 'nvapi-' + 'a'.repeat(30);
   assert.strictEqual(memoryJson.addLocalMemory(`API key is ${token}`, { homeDir: home }), null);
   assert.deepStrictEqual(memoryJson.loadLocalMemory(home), []);
 });
 
-test('malformed memory.json never crashes local memory loading', () => {
+test('malformed memory.md never crashes local memory loading', () => {
   const home = tmpHome();
   const file = memoryJson.ensureMemoryFile(home);
   fs.writeFileSync(file, '{not valid json');
@@ -201,6 +207,13 @@ test('local adapter saves explicit preferences but ignores ordinary conversation
     { role: 'user', content: 'What time is it?' }
   ]);
   assert.deepStrictEqual(extracted, ['I prefer JavaScript over TypeScript.']);
+});
+
+test('local adapter extracts a preference embedded in a normal task', () => {
+  const extracted = localAdapter.extractUsefulLocalMemory([
+    { role: 'user', content: 'Write simple REST API code; I prefer JavaScript.' }
+  ]);
+  assert.deepStrictEqual(extracted, ['I prefer JavaScript']);
 });
 
 test('package has no mem0ai dependency', () => {

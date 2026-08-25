@@ -93,6 +93,16 @@ test('filesystemGuard allows paths inside the project root', () => {
   allowed(guardrails.filesystemGuard('src/../src/mcp.js'));
 });
 
+test('tool guard allows slash-prefixed MCP library identifiers', () => {
+  allowed(guardrails.validateToolCall('query-docs', {
+    libraryId: '/nodejs/node/v25.9.0',
+    query: 'making an HTTP GET request'
+  }));
+  blocked(guardrails.validateToolCall('read-file', {
+    path: '/etc/passwd'
+  }));
+});
+
 test('looksLikePath does not treat URLs or flags as paths', () => {
   const { looksLikePath } = require('../src/guardrails/filesystemGuard');
   assert.strictEqual(looksLikePath('https://example.com/a/b'), false);

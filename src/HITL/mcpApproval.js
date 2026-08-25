@@ -110,8 +110,11 @@ async function checkApproval({ server, tool, args, enabled, _prompt } = {}) {
 
   const allowed = await promptApproval({ server, tool, args });
 
-  // Continuous indicator: update spinner to "running tool"
-  updateSpinner(`running tool: ${tool}...`);
+  // Keep the indicator alive after the decision as well.  A denied call is
+  // still part of the running turn, but must not claim that execution began.
+  updateSpinner(allowed
+    ? `running tool: ${tool}...`
+    : `tool not allowed: ${tool} — continuing...`);
 
   return allowed;
 }

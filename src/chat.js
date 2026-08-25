@@ -204,7 +204,7 @@ function printHelp() {
     row('/config', 'Set your NVIDIA NIM API key and pick a model'),
     row('/mcp', 'Manage MCP servers (add/edit, connect one, disconnect)'),
     row('/agent', 'Edit the project\u2019s AGENT.md instructions in your editor'),
-    row('/memory', 'Open and edit local memory.json'),
+    row('/memory', 'Open and edit local memory.md'),
     row('/delete', 'Delete saved config and data'),
     row('/exit', 'Quit sun2Agent'),
     '',
@@ -429,7 +429,7 @@ async function handleAgent() {
   console.log(chalk.green('✔ AGENT.md reloaded. Its instructions are now active.\n'));
 }
 
-// /memory opens memory.json in the user's editor, the same way /agent opens
+// /memory opens memory.md in the user's editor, the same way /agent opens
 // AGENT.md. GUI editors return immediately, so we wait for Enter (saved) /
 // Esc (back to chat). It works even when memory retrieval is disabled and
 // never changes the saved enabled/disabled setting. On Enter the next turn
@@ -439,7 +439,7 @@ async function handleMemory() {
   console.log(chalk.gray(`\nOpening ${file}`));
   console.log(
     chalk.gray(
-      'memory.json holds local memories. They are contextual only and\n' +
+      'memory.md holds local memories. They are contextual only and\n' +
         'cannot override system instructions, AGENT.md, guardrails, or Docker.\n'
     )
   );
@@ -451,7 +451,7 @@ async function handleMemory() {
   // GUI editors return immediately, so wait for the user to finish saving.
   // Enter = done, Esc = back to chat (uses our own reliable key reader).
   const key = await waitEnterOrEsc(
-    chalk.gray('Press ') + chalk.bold('Enter') + chalk.gray(' when you have saved memory.json, or ') +
+    chalk.gray('Press ') + chalk.bold('Enter') + chalk.gray(' when you have saved memory.md, or ') +
       chalk.bold('Esc') + chalk.gray(' to go back to simple chat... ')
   );
   if (key === 'escape') {
@@ -460,7 +460,7 @@ async function handleMemory() {
   }
   // Memory is read from disk on every search, so the freshly saved entries
   // are picked up on the next turn automatically.
-  console.log(chalk.green('✔ memory.json reloaded. Saved memories are now active.\n'));
+  console.log(chalk.green('✔ memory.md reloaded. Saved memories are now active.\n'));
 }
 
 // --- MCP: option 2 -> list servers, pick ONE, connect it, show its tag ---
@@ -651,7 +651,7 @@ function buildSystemPrompt(specs) {
 // Run one chat turn, resolving any MCP tool calls the model requests.
 // `signal` (optional AbortSignal) lets the user interrupt with Esc.
 // Uses a single continuous spinner: thinking → waiting for approval → running tool.
-async function chatTurn(config, history, signal) {
+async function chatTurn(config, history, signal, onToken, onToolTurn) {
   const { specs, routes } = mcp.getOpenAiTools();
   const tools = specs.length ? specs : undefined;
   const currentUserMessage = [...history].reverse().find((item) => item.role === 'user');
@@ -669,6 +669,22 @@ async function chatTurn(config, history, signal) {
   // Continuous spinner for the entire turn.
   const spinner = ora(chalk.gray('sun2Agent is thinking...  (⎋ esc to stop)')).start();
   hitl.setSpinner(spinner);
+  const streamText = typeof onToken === 'function'
+    ? (token) => {
+        // Keep generated text clean. If this response later turns out to be
+        // a tool-call turn, the spinner is reattached immediately before the
+        // HITL/tool boundary below.
+        if (spinner.isSpinning) spinner.stop();
+        hitl.setSpinner(null);
+        onToken(token);
+      }
+    : undefined;
+
+  const ensureIndicator = (text) => {
+    if (!spinner.isSpinning) spinner.start();
+    spinner.text = chalk.gray(text);
+    hitl.setSpinner(spinner);
+  };
 
   // Loop so the model can chain tool calls before its final answer.
   const MAX_TOOL_STEPS = 30;
@@ -688,7 +704,8 @@ async function chatTurn(config, history, signal) {
         config.model,
         messages,
         allowTools ? tools : undefined,
-        signal
+        signal,
+        streamText
       );
     } catch (e) {
       if (signal && signal.aborted) {
@@ -710,6 +727,10 @@ async function chatTurn(config, history, signal) {
     history.push(msg);
 
     if (allowTools && msg.tool_calls && msg.tool_calls.length) {
+      // Tokens received while the model was constructing a tool call are not
+      // assistant output. Start a fresh output buffer for the answer that is
+      // generated after the tool result is returned.
+      if (typeof onToolTurn === 'function') onToolTurn();
       // Show every proposed action up front so the user sees the batch.
       const batch = msg.tool_calls.map((call) => {
         const fnName = call.function.name;
@@ -741,6 +762,10 @@ async function chatTurn(config, history, signal) {
           continue;
         }
         try {
+          // A streamed partial response may have stopped the spinner for
+          // clean output. Reattach it before HITL asks for approval, so the
+          // indicator is active for the complete approval/execution phase.
+          ensureIndicator(`thinking... deciding whether to run ${fnName}...`);
           const raw = await mcp.callTool(routes, fnName, args, signal);
           const content = guardrails.outputGuard(raw);
           if (content !== raw) {
@@ -803,7 +828,7 @@ async function chatTurn(config, history, signal) {
           'not be completed, say clearly what worked and what failed.'
       }
     ];
-    const finalMsg = await chatCompletion(config.apiKey, config.model, wrapMessages, undefined, signal);
+    const finalMsg = await chatCompletion(config.apiKey, config.model, wrapMessages, undefined, signal, streamText);
     spinner.stop();
     hitl.setSpinner(null);
     return finalMsg.content || '(no final answer produced)';
@@ -945,13 +970,41 @@ async function startChat() {
     history.push({ role: 'user', content: text });
 
     const controller = new AbortController();
+    let streamed = false;
+    let streamRaw = '';
+    let streamPrinted = 0;
+    const onToken = (token) => {
+      streamRaw += token;
+      const safe = guardrails.outputGuard(streamRaw);
+      // Emit the safe portion immediately. Holding back a suffix can make a
+      // completed tool-assisted answer appear blank when the final flush
+      // starts at the wrong offset.
+      const printable = safe.length;
+      if (printable <= streamPrinted) return;
+      if (!streamed) {
+        streamed = true;
+        process.stdout.write(chalk.yellow.bold('sun2Agent: '));
+      }
+      process.stdout.write(safe.slice(streamPrinted, printable));
+      streamPrinted = printable;
+    };
+    const onToolTurn = () => {
+      streamRaw = '';
+      streamPrinted = 0;
+      streamed = false;
+    };
     const stopWatch = watchEscape(() => controller.abort());
     try {
-      const reply = await chatTurn(config, history, controller.signal);
+      const reply = await chatTurn(config, history, controller.signal, onToken, onToolTurn);
       if (controller.signal.aborted) {
         console.log(chalk.gray('⎋ stopped\n'));
       } else {
-        console.log(chalk.yellow.bold('sun2Agent: ') + sanitizeTerminalText(reply || '') + '\n');
+        if (streamed) {
+          const safe = guardrails.outputGuard(reply || streamRaw);
+          process.stdout.write(safe.slice(streamPrinted) + '\n\n');
+        } else {
+          console.log(chalk.yellow.bold('sun2Agent: ') + sanitizeTerminalText(reply || '') + '\n');
+        }
         if (reply && memory.isEnabled()) {
           await memory.remember([
             { role: 'user', content: text },

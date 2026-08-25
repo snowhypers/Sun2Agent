@@ -1,7 +1,6 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const crypto = require('crypto');
 const { spawnSync } = require('child_process');
 const guardrails = require('../guardrails');
 
@@ -12,9 +11,11 @@ const STOP_WORDS = new Set([
 const MAX_LOCAL_MEMORIES = 200;
 
 function getMemoryPath(homeDir = os.homedir()) {
-  return path.join(homeDir, '.sun2agent', 'memory.json');
+  return path.join(homeDir, '.sun2agent', 'memory.md');
 }
 
+// memory.md is intentionally JSON so it stays both editor-friendly and
+// machine-safe while matching the user's preferred file name.
 function serializeJson(entries) {
   return JSON.stringify({ memories: entries }, null, 2) + '\n';
 }
@@ -23,7 +24,7 @@ function normalizeEntry(item) {
   if (!item || typeof item.content !== 'string') return null;
   const content = item.content.replace(/\s+/g, ' ').trim();
   if (!content || containsSensitiveData(content)) return null;
-  return { ...item, content };
+  return { content };
 }
 
 function uniqueEntries(entries) {
@@ -34,7 +35,7 @@ function uniqueEntries(entries) {
     const key = normalized.content.toLowerCase();
     if (seen.has(key)) return safe;
     seen.add(key);
-    safe.push(normalized);
+    safe.push({ id: safe.length + 1, content: normalized.content });
     return safe;
   }, []);
 }
@@ -73,7 +74,9 @@ function containsSensitiveData(content) {
 
 function saveLocalMemory(memories, homeDir = os.homedir()) {
   const file = ensureMemoryFile(homeDir);
-  const safe = uniqueEntries(memories).slice(-MAX_LOCAL_MEMORIES);
+  const safe = uniqueEntries(memories)
+    .slice(-MAX_LOCAL_MEMORIES)
+    .map((item, index) => ({ id: index + 1, content: item.content }));
   fs.writeFileSync(file, serializeJson(safe), { mode: 0o600 });
   return safe;
 }
@@ -87,16 +90,10 @@ function addLocalMemory(content, options = {}) {
   const duplicate = memories.find((item) => item.content.toLowerCase() === text.toLowerCase());
   if (duplicate) return duplicate;
 
-  const now = new Date().toISOString();
-  const entry = {
-    id: options.id || crypto.randomUUID(),
-    content: text,
-    createdAt: options.createdAt || now,
-    updatedAt: options.updatedAt || now
-  };
+  const entry = { id: memories.length + 1, content: text };
   memories.push(entry);
-  saveLocalMemory(memories, homeDir);
-  return entry;
+  const saved = saveLocalMemory(memories, homeDir);
+  return saved[saved.length - 1] || null;
 }
 
 function tokens(text) {
@@ -115,7 +112,7 @@ function searchLocalMemory(query, memories, limit = 5) {
       return { ...item, score: overlap / Math.max(queryTokens.length, 1) + phrase };
     })
     .filter((item) => item.score > 0)
-    .sort((a, b) => b.score - a.score || String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || '')))
+    .sort((a, b) => b.score - a.score || Number(a.id) - Number(b.id))
     .slice(0, limit);
 }
 

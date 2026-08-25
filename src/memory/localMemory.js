@@ -44,6 +44,11 @@ function extractUsefulLocalMemory(messages) {
     .filter(Boolean);
 
   const useful = [];
+  const add = (content) => {
+    const value = String(content || '').replace(/\s+/g, ' ').trim();
+    const key = value.toLowerCase().replace(/[.!?]+$/, '');
+    if (value && !useful.some((item) => item.toLowerCase().replace(/[.!?]+$/, '') === key)) useful.push(value);
+  };
   const patterns = [
     /^(?:please\s+)?remember(?:\s+that)?\s+(.+)$/i,
     /^(i\s+(?:prefer|like|love|use|want|need)\b.+)$/i,
@@ -56,9 +61,18 @@ function extractUsefulLocalMemory(messages) {
     for (const pattern of patterns) {
       const match = message.match(pattern);
       if (!match) continue;
-      useful.push((match[1] || match[0]).trim());
+      add((match[1] || match[0]).trim());
       break;
     }
+
+    // A normal task can contain a clear preference clause, for example:
+    // "write a REST API; I prefer JavaScript". Save only the preference,
+    // not the task itself.
+    const embedded = message.match(/\b(i\s+(?:prefer|like|love|use|want|need)\s+[^.!?;,\n]+)/i);
+    if (embedded) add(embedded[1]);
+
+    const embeddedDefault = message.match(/\b(my\s+(?:preference|preferred|default)\b[^.!?;,\n]+)/i);
+    if (embeddedDefault) add(embeddedDefault[1]);
   }
   return useful;
 }

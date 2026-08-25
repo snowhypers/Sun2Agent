@@ -49,7 +49,7 @@ plain language. The agent figures out which tools to call.
 | 🛡️ | **5-layer guardrails** — destructive commands, exfiltration, credential files, and secret leaks are blocked before anything runs |
 | ✋ | **Human-in-the-Loop (HITL)** — interactive per-session tool call approval (`Allow` / `Don't allow`) before any proposed tool executes |
 | 🐳 | **Optional Docker sandbox** — run the entire agent isolated in a container, with automatic session resume when Docker restarts |
-| 🧠 | **Local preference memory (`memory.json`)** — retain explicit user preferences across sessions with local search; zero telemetry or external API calls |
+| 🧠 | **Local preference memory (`memory.md`)** — retain explicit user preferences across sessions with local search; zero telemetry or external API calls |
 | 📄 | **AGENT.md support** — drop an `AGENT.md` in your project and the agent follows your repo's conventions |
 | 📊 | **LangSmith observability** — opt-in tracing of LLM calls and tool execution, sanitized before it leaves your machine |
 | 🎛️ | **Any NIM model** — Llama, GPT-OSS, Nemotron… swap anytime with `/config` |
@@ -116,7 +116,7 @@ An allowed tool is remembered only for the current chat session; a denied call i
 | `/config` | Set your NVIDIA NIM API key and choose a model |
 | `/mcp` | Manage MCP servers — add/edit, connect one or all, disconnect |
 | `/agent` | Open the project's AGENT.md in your editor (creates a template on first use) |
-| `/memory` | Open and edit local `~/.sun2agent/memory.json` |
+| `/memory` | Open and edit local `~/.sun2agent/memory.md` |
 | `/delete` | Delete saved config and data |
 | `/exit` | Quit |
 
@@ -220,8 +220,8 @@ The file is appended to the system prompt as clearly-labelled advisory context. 
 
 Enable memory from `/config` to let sun2Agent retain explicit preferences between sessions. Memory lives locally and makes no model, embedding, telemetry, or memory-service requests.
 
-- Editable memories live in `~/.sun2agent/memory.json`.
-- `/memory` opens `memory.json` even when automatic memory is disabled.
+- Editable memories live in `~/.sun2agent/memory.md`.
+- `/memory` opens `memory.md` even when automatic memory is disabled.
 - Local keyword relevance selects up to five memories; the full file is never injected.
 - Explicit phrases such as “remember that…”, “I prefer…”, and “always…” can be saved automatically.
 - Memory is contextual only and cannot override AGENT.md, guardrails, security policy, or Docker restrictions.
