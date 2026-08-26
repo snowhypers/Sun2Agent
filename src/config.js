@@ -23,7 +23,8 @@ function defaultConfig() {
     langsmith: { enabled: false, project: 'sun2agent' },
     sandbox: { enabled: false, mode: 'host' },
     memory: { enabled: false },
-    hitl: { mcpApproval: true }
+    hitl: { mcpApproval: true },
+    search: { enabled: false, provider: 'tavily', apiKey: '' }
   };
 }
 
@@ -40,6 +41,8 @@ function loadConfig() {
     if (!raw.memory) raw.memory = { enabled: false };
     // HITL (MCP approval) defaults to on for configs saved before the feature.
     if (!raw.hitl) raw.hitl = { mcpApproval: true };
+    // Web search is optional and remains off for configs saved before the feature.
+    if (!raw.search) raw.search = { enabled: false, provider: 'tavily', apiKey: '' };
     return raw;
   } catch (e) {
     return defaultConfig();

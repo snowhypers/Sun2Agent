@@ -12,7 +12,10 @@ async function chatCompletion(apiKey, model, messages, tools, signal, onToken) {
     model,
     messages,
     temperature: 0.7,
-    max_tokens: 1024,
+    // Reasoning-style models spend hidden "thinking" tokens before any visible
+    // content; a tight cap here produced empty replies when the budget ran out
+    // mid-thought. 4096 leaves room for the answer after the thinking phase.
+    max_tokens: 4096,
     stream: typeof onToken === 'function'
   };
   if (tools && tools.length) {

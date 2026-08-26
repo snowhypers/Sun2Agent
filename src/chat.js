@@ -12,6 +12,7 @@ const guardrails = require('./guardrails');
 const context = require('./context');
 const observability = require('./observability');
 const memory = require('./memory');
+const search = require('./search');
 const { askInput, watchEscape, waitEnterOrEsc, ESC_BACK } = require('./inputbox');
 
 // Check whether the Docker sandbox is enabled and Docker has gone down.
@@ -68,6 +69,31 @@ function loadSession() {
 
 function clearSession() {
   try { fs.unlinkSync(sessionFile()); } catch (_) { /* already gone */ }
+}
+
+// --- Empty-assistant-message hygiene -----------------------------------------
+//
+// Occasionally the model returns an assistant message with NO content and NO
+// tool calls (prematurely closed SSE stream, or the token budget exhausted by
+// hidden reasoning). These messages carry no information, and worse: sending
+// one back as conversation context makes the model likelier to answer with
+// silence again — turning one glitch into a streak of blank replies.
+//
+// cleanHistory() drops exactly those messages everywhere history is consumed
+// (the outgoing request and the persisted session file) while keeping every
+// other role untouched: user, system, and tool results are preserved, and an
+// assistant message WITH tool_calls is always kept even if its content is
+// empty, because its matching tool result depends on it.
+function isEmptyAssistantMessage(m) {
+  if (!m || m.role !== 'assistant') return false;
+  if (Array.isArray(m.tool_calls) && m.tool_calls.length) return false;
+  if (m.content === null || m.content === undefined) return true;
+  return typeof m.content !== 'string' || !m.content.trim();
+}
+
+function cleanHistory(messages) {
+  if (!Array.isArray(messages)) return [];
+  return messages.filter((m) => !isEmptyAssistantMessage(m));
 }
 
 // Run an inquirer prompt that the user can cancel with Esc ("back").
@@ -287,8 +313,39 @@ async function handleConfig() {
     apiKey: a1.apiKey,
     model: a2.model,
     langsmith: config.langsmith || { enabled: false, project: 'sun2agent' },
-    memory: config.memory || { enabled: false }
+    memory: config.memory || { enabled: false },
+    search: config.search || { enabled: false, provider: 'tavily', apiKey: '' }
   };
+
+  // --- Web search -----------------------------------------------------------
+  const aSearch = await promptBack([
+    {
+      type: 'confirm',
+      name: 'enableSearch',
+      message: 'Enable web search (Tavily)?  ' + chalk.gray('(esc to keep current setting)'),
+      default: Boolean(config.search && config.search.enabled)
+    }
+  ]);
+
+  if (aSearch && aSearch.enableSearch) {
+    const aSearchKey = await promptBack([
+      {
+        type: 'password',
+        name: 'tavilyApiKey',
+        message: 'Paste your Tavily API key:  ' + chalk.gray('(esc to keep current setting)'),
+        mask: '*',
+        default: (config.search && config.search.apiKey) || undefined
+      }
+    ]);
+    if (aSearchKey && aSearchKey.tavilyApiKey) {
+      newConfig.search = { enabled: true, provider: 'tavily', apiKey: aSearchKey.tavilyApiKey };
+    } else {
+      // Esc on the key prompt: keep search enabled with the existing key (if any).
+      newConfig.search = { ...newConfig.search, enabled: true };
+    }
+  } else if (aSearch) {
+    newConfig.search = { enabled: false, provider: 'tavily', apiKey: newConfig.search.apiKey || '' };
+  }
 
   const a3 = await promptBack([
     {
@@ -335,6 +392,16 @@ async function handleConfig() {
   console.log(chalk.green('\n✔ NVIDIA API key configured'));
   console.log(chalk.green('✔ Model configured'));
   console.log(chalk.green(`✔ LangSmith observability: ${newConfig.langsmith.enabled ? 'Enabled' : 'Disabled'}`));
+
+  // Web search confirmation (never print the full key).
+  if (newConfig.search && newConfig.search.enabled) {
+    const maskedKey = search.maskApiKey(process.env.TAVILY_API_KEY || newConfig.search.apiKey);
+    console.log(chalk.green('✔ Web Search: Enabled'));
+    console.log(chalk.green(`✔ Provider: Tavily`));
+    console.log(chalk.green(`✔ API Key: ${maskedKey}`));
+  } else {
+    console.log(chalk.green('✔ Web Search: Disabled'));
+  }
 
   if (newConfig.memory.enabled) {
     const ready = await memory.enable();
@@ -632,15 +699,16 @@ function termWidth() {
 // Build a fresh system prompt each turn so it always reflects the tools that
 // are connected right now. This is what actually drives the model to *use*
 // the MCP tools instead of guessing.
-function buildSystemPrompt(specs) {
+// `allSpecs` includes both MCP specs and the web_search spec (when enabled).
+function buildSystemPrompt(allSpecs) {
   const persona =
     'You are sun2Agent, a helpful assistant running in a terminal. ' +
     'Be concise and accurate.';
-  if (!specs.length) return persona;
-  const list = specs.map((s) => `- ${s.function.name}: ${s.function.description}`).join('\n');
+  if (!allSpecs.length) return persona;
+  const list = allSpecs.map((s) => `- ${s.function.name}: ${s.function.description}`).join('\n');
   return (
     persona +
-    '\n\nYou have access to the MCP tools listed below. When the user asks for ' +
+    '\n\nYou have access to the tools listed below. When the user asks for ' +
     'something one of these tools can do, CALL THE TOOL instead of answering from ' +
     'memory, and base your final reply on the tool result. Ask for any required ' +
     'arguments you are missing. If no tool fits, answer normally.\n\nAvailable tools:\n' +
@@ -653,7 +721,12 @@ function buildSystemPrompt(specs) {
 // Uses a single continuous spinner: thinking → waiting for approval → running tool.
 async function chatTurn(config, history, signal, onToken, onToolTurn) {
   const { specs, routes } = mcp.getOpenAiTools();
-  const tools = specs.length ? specs : undefined;
+
+  // Merge web_search spec when search is enabled. MCP tools are unchanged.
+  const searchSpec = search.getToolSpec(config);
+  const allSpecs = searchSpec ? [...specs, searchSpec] : specs;
+  const tools = allSpecs.length ? allSpecs : undefined;
+
   const currentUserMessage = [...history].reverse().find((item) => item.role === 'user');
   const relevantMemories = memory.isEnabled() && currentUserMessage
     ? await memory.search(currentUserMessage.content)
@@ -662,7 +735,7 @@ async function chatTurn(config, history, signal, onToken, onToolTurn) {
   // Memory is appended to the base prompt as contextual information, then the
   // existing AGENT.md builder adds repository instructions. Neither layer can
   // alter guardrails, tool validation, or Docker restrictions.
-  const withMemory = memory.buildMemoryContext(buildSystemPrompt(specs), relevantMemories);
+  const withMemory = memory.buildMemoryContext(buildSystemPrompt(allSpecs), relevantMemories);
   const system = { role: 'system', content: context.buildSystemPrompt(withMemory) };
   let allowTools = Boolean(tools);
 
@@ -688,6 +761,12 @@ async function chatTurn(config, history, signal, onToken, onToolTurn) {
 
   // Loop so the model can chain tool calls before its final answer.
   const MAX_TOOL_STEPS = 30;
+  // One silent retry when the model answers with a completely empty message
+  // (no content, no tool calls). The retry runs in NON-STREAMING mode: an
+  // empty reply is almost always a prematurely closed SSE stream, and a plain
+  // JSON response cannot suffer chunk loss the way a stream can.
+  const EMPTY_RESPONSE_RETRIES = 1;
+  let emptyRetries = 0;
   for (let step = 0; step < MAX_TOOL_STEPS; step++) {
     if (signal && signal.aborted) {
       spinner.stop();
@@ -696,7 +775,8 @@ async function chatTurn(config, history, signal, onToken, onToolTurn) {
     }
 
     // System prompt is prepended per-call and kept out of persistent history.
-    const messages = [system, ...history];
+    // cleanHistory guards against messages saved by older versions of the app.
+    const messages = [system, ...cleanHistory(history)];
     let msg;
     try {
       msg = await chatCompletion(
@@ -705,7 +785,9 @@ async function chatTurn(config, history, signal, onToken, onToolTurn) {
         messages,
         allowTools ? tools : undefined,
         signal,
-        streamText
+        // Retry attempts run NON-STREAMING: a plain JSON response cannot lose
+        // chunks the way a prematurely closed SSE stream can.
+        emptyRetries ? undefined : streamText
       );
     } catch (e) {
       if (signal && signal.aborted) {
@@ -724,6 +806,31 @@ async function chatTurn(config, history, signal, onToken, onToolTurn) {
       hitl.setSpinner(null);
       throw e;
     }
+
+    // Empty-response recovery. If the model returned nothing at all (and did
+    // not request a tool), retry once without streaming; if it happens again,
+    // fail with a clear message instead of printing a bare "sun2Agent:" label.
+    if (
+      (!msg.tool_calls || !msg.tool_calls.length) &&
+      !(typeof msg.content === 'string' && msg.content.trim())
+    ) {
+      if (signal && signal.aborted) {
+        spinner.stop();
+        hitl.setSpinner(null);
+        return null;
+      }
+      if (emptyRetries < EMPTY_RESPONSE_RETRIES) {
+        emptyRetries += 1;
+        // Reset the streamed-output buffers for the retried attempt.
+        if (typeof onToolTurn === 'function') onToolTurn();
+        spinner.text = chalk.gray('empty response from model — retrying...');
+        continue;
+      }
+      spinner.stop();
+      hitl.setSpinner(null);
+      throw new Error('Model returned an empty response — please try again.');
+    }
+
     history.push(msg);
 
     if (allowTools && msg.tool_calls && msg.tool_calls.length) {
@@ -752,6 +859,18 @@ async function chatTurn(config, history, signal, onToken, onToolTurn) {
           contents.push('interrupted');
           continue;
         }
+
+        // --- web_search: built-in tool, no HITL needed (read-only API call) ---
+        if (fnName === 'web_search') {
+          ensureIndicator(`searching the web: ${args.query || ''}...`);
+          const content = await search.executeTool(args.query, config);
+          console.log(chalk.gray(`     ↳ ${truncate(sanitizeTerminalText(content), Math.max(20, termWidth() - 8))}`));
+          contents.push(content);
+          spinner.text = chalk.gray('sun2Agent is thinking...  (⎋ esc to stop)');
+          continue;
+        }
+
+        // --- MCP tools ---
         if (!routes.has(fnName)) {
           const available = [...routes.keys()].join(', ') || '(none)';
           console.log(chalk.red(`     ↳ unknown tool; redirected model to available tools`));
@@ -819,7 +938,7 @@ async function chatTurn(config, history, signal, onToken, onToolTurn) {
   try {
     const wrapMessages = [
       system,
-      ...history,
+      ...cleanHistory(history),
       {
         role: 'user',
         content:
@@ -891,7 +1010,9 @@ async function startChat() {
   if (process.env.SUN2AGENT_RESUME === '1') {
     const saved = loadSession();
     if (saved && saved.length) {
-      history.push(...saved);
+      // Defensive: sessions saved by older versions may contain empty
+      // assistant messages — never restore those into context.
+      history.push(...cleanHistory(saved));
       console.log(chalk.green(`↩ Session restored — continuing your conversation from before the Docker interruption (${saved.length} messages).\n`));
     }
   }
@@ -1013,8 +1134,9 @@ async function startChat() {
         }
       }
       // Persist after every completed exchange so an abrupt stop (Docker
-      // outage, crash) can resume exactly from here.
-      saveSession(history);
+      // outage, crash) can resume exactly from here. Empty assistant
+      // placeholders are stripped so a bad turn never poisons the resume.
+      saveSession(cleanHistory(history));
     } catch (err) {
       if (controller.signal.aborted) {
         console.log(chalk.gray('⎋ stopped\n'));
