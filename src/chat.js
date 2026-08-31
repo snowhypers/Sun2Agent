@@ -807,9 +807,11 @@ async function chatTurn(config, history, signal, onToken, onToolTurn) {
       throw e;
     }
 
-    // Empty-response recovery. If the model returned nothing at all (and did
-    // not request a tool), retry once without streaming; if it happens again,
-    // fail with a clear message instead of printing a bare "sun2Agent:" label.
+    // Empty-response recovery. If the model returned nothing at all (no
+    // content, no tool calls), silently retry ONCE; if it is still empty,
+    // fail with a clear message instead of printing a bare "sun2Agent:"
+    // label. Nothing is pushed to history, so the blank turn never poisons
+    // later requests.
     if (
       (!msg.tool_calls || !msg.tool_calls.length) &&
       !(typeof msg.content === 'string' && msg.content.trim())
@@ -823,7 +825,6 @@ async function chatTurn(config, history, signal, onToken, onToolTurn) {
         emptyRetries += 1;
         // Reset the streamed-output buffers for the retried attempt.
         if (typeof onToolTurn === 'function') onToolTurn();
-        spinner.text = chalk.gray('empty response from model — retrying...');
         continue;
       }
       spinner.stop();
@@ -1094,13 +1095,41 @@ async function startChat() {
     let streamed = false;
     let streamRaw = '';
     let streamPrinted = 0;
+    // Fixed tail always held back from live printing: long enough that any
+    // secret START marker fully forms inside the unprinted region before any
+    // of its characters can reach the terminal (longest marker is 11 chars).
+    const STREAM_TAIL_CHARS = 20;
     const onToken = (token) => {
       streamRaw += token;
       const safe = guardrails.outputGuard(streamRaw);
-      // Emit the safe portion immediately. Holding back a suffix can make a
-      // completed tool-assisted answer appear blank when the final flush
-      // starts at the wrong offset.
-      const printable = safe.length;
+      // Stream only the STABLE prefix of the guarded text. A secret that
+      // arrives across several chunks cannot be masked until it is complete,
+      // so text from the last potential secret start is held back (plus the
+      // fixed tail) until the guard has seen enough to decide. What was
+      // already printed is therefore immutable: a mid-stream mask can only
+      // change text inside the held-back region, so the live output and the
+      // final flush always line up with no gaps, duplication, or garbling —
+      // and no partial secret ever reaches the terminal.
+      let printable = Math.max(0, safe.length - STREAM_TAIL_CHARS);
+      const consider = (idx) => {
+        if (idx < 0 || idx >= printable) return;
+        // A starter that already sits inside a completed mask belongs to a
+        // secret the guard has handled — it must not stall streaming.
+        if (safe.slice(idx, idx + 48).includes('***REDACTED')) return;
+        printable = idx;
+      };
+      for (const marker of guardrails.guardConfig.secretStarters) {
+        for (let from = safe.indexOf(marker); from >= 0; from = safe.indexOf(marker, from + 1)) {
+          consider(from);
+        }
+      }
+      const valueRe = guardrails.guardConfig.secretValueStart;
+      valueRe.lastIndex = 0;
+      let vm;
+      while ((vm = valueRe.exec(safe)) !== null) {
+        consider(vm.index);
+        if (vm.index === valueRe.lastIndex) valueRe.lastIndex += 1; // zero-length safety
+      }
       if (printable <= streamPrinted) return;
       if (!streamed) {
         streamed = true;
@@ -1132,6 +1161,15 @@ async function startChat() {
             { role: 'assistant', content: reply }
           ]);
         }
+      }
+      // If LangSmith rejected the last run, print a one-time warning so the
+      // user knows tracing is failing (without blocking the conversation or
+      // spamming on every subsequent failure). The next postRun() failure
+      // re-arms the warning.
+      const lsError = observability.consumeError();
+      if (lsError) {
+        console.log(chalk.yellow(`\n⚠ LangSmith tracing failed: ${lsError.message}`));
+        console.log(chalk.gray('  Fix the key with /config, or run with tracing disabled.\n'));
       }
       // Persist after every completed exchange so an abrupt stop (Docker
       // outage, crash) can resume exactly from here. Empty assistant

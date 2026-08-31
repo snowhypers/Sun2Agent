@@ -175,6 +175,25 @@ const secretPatterns = [
 // context window or the terminal.
 const maxOutputChars = 100000;
 
+// --- Streaming display support (used by chat.js) -----------------------------
+//
+// outputGuard can only mask a secret once the full pattern has arrived. While
+// text is streaming token-by-token, the display therefore holds back text from
+// the last potential secret START so that a partially-arrived secret is never
+// printed raw and a mid-stream mask can never shift already-printed output.
+const secretStarters = [
+  'nvapi-', 'sk-ant-', 'sk-', 'AKIA', 'ASIA',
+  'github_pat_', 'ghp_', 'gho_', 'ghu_', 'ghs_', 'ghr_',
+  'xoxb-', 'xoxa-', 'xoxp-', 'xoxr-', 'xoxs-',
+  'glpat-', 'ctx7sk-', 'tvly-', 'fc-', 'AIza', 'ya29.',
+  'Bearer ', 'Basic ', 'eyJ', '-----BEGIN'
+];
+
+// "key": "value" / KEY=value shapes that can grow into the generic secret
+// pattern (last entry of secretPatterns) while still streaming. Found via
+// the LAST case-insensitive occurrence.
+const secretValueStart = /\b(?:api[_-]?key|apikey|secret|password|passwd|token|access[_-]?token|credential)\b["']?\s*[:=]\s*["']?/gi;
+
 // Tool-call timeout (ms). Exported for callers that want a default.
 const timeout = 120000;
 
@@ -190,6 +209,9 @@ module.exports = {
   secretPatterns,
   maxOutputChars,
   timeout,
+  // Streaming display support.
+  secretStarters,
+  secretValueStart,
   // Re-exported for guards that need to resolve paths against the root.
   path
 };

@@ -151,6 +151,57 @@ test('memory context itself enforces the five-memory cap', () => {
   assert.ok(!prompt.includes('memory-5'));
 });
 
+test('memory: addLocalMemory scrubs via outputGuard as a second layer', () => {
+  // The first containsSensitiveData catches NVIDIA-style keys and rejects
+  // the entry. Verify the contract: addLocalMemory never returns an entry
+  // whose content contains a known secret token, and the file on disk
+  // (after we create one) does not contain the raw secret.
+  const home = tmpHome();
+  const secret = 'nvapi-' + 'a'.repeat(30);
+  const added = memoryJson.addLocalMemory(`my token is ${secret}`, { homeDir: home });
+  assert.strictEqual(added, null);
+  // ensureMemoryFile creates the file (empty) if it didn't exist; that
+  // guarantees the readFileSync path is safe even when nothing was saved.
+  const file = memoryJson.ensureMemoryFile(home);
+  const onDisk = fs.readFileSync(file, 'utf-8');
+  assert.ok(!onDisk.includes(secret), 'raw secret must never be on disk');
+});
+
+test('memory: on-disk file with a redactable secret is rejected at load', () => {
+  // A user could have hand-edited memory.md (the file is intentionally
+  // human-editable). loadLocalMemory must reject entries that contain
+  // a secret, regardless of how they got there.
+  const home = tmpHome();
+  const file = memoryJson.ensureMemoryFile(home);
+  const secret = 'nvapi-' + 'a'.repeat(30);
+  fs.writeFileSync(file, JSON.stringify({ memories: [
+    { content: 'use TypeScript for everything' },
+    { content: `key = ${secret}` }
+  ] }));
+  const loaded = memoryJson.loadLocalMemory(home);
+  assert.deepStrictEqual(loaded.map((item) => item.content), ['use TypeScript for everything']);
+});
+
+test('memory: scrubbed entry that still trips detection is dropped entirely', () => {
+  // When sanitizeOutput leaves a ***REDACTED*** marker behind, the entry is
+  // unsafe to keep (it tells the model the original was a secret) and
+  // addLocalMemory returns null instead of storing the partial mask.
+  const home = tmpHome();
+  const out = require('../src/guardrails').outputGuard;
+  // A PEM block is the canonical case: sanitizeOutput replaces its body with
+  // ***REDACTED***, so the entry contains a known marker and is dropped.
+  const pem = '-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQ==\n-----END PRIVATE KEY-----';
+  assert.ok(out(pem).includes('***REDACTED***') || out(pem).includes('REDACTED'));
+  const added = memoryJson.addLocalMemory(`keep this safe: ${pem}`, { homeDir: home });
+  assert.strictEqual(added, null);
+  // ensureMemoryFile creates the file if missing; guarantees readFileSync is
+  // safe whether the entry was saved or not.
+  const file = memoryJson.ensureMemoryFile(home);
+  const onDisk = fs.readFileSync(file, 'utf-8');
+  assert.ok(!onDisk.includes('BEGIN PRIVATE KEY'), 'PEM block must never reach disk');
+  assert.ok(!onDisk.includes('***REDACTED***'), 'redaction marker must never reach disk either');
+});
+
 test('secrets are rejected instead of being written to memory.md', () => {
   const home = tmpHome();
   const token = 'nvapi-' + 'a'.repeat(30);

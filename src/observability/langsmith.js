@@ -12,6 +12,10 @@ const { RunTree } = require('langsmith');
 const guardrails = require('../guardrails');
 
 let enabled = false;
+// Most recent postRun() failure. Captured so chat.js can surface a
+// one-shot warning instead of silently dropping network/auth/quota
+// errors. Cleared by consumeError() after the warning is printed.
+let lastError = null;
 
 // Enable LangSmith tracing. Called once at startup from /config.
 function enable(apiKey, project) {
@@ -107,8 +111,17 @@ async function traceLLM(fn, { model, provider, messages } = {}) {
     });
   }
 
-  // Fire-and-forget post to LangSmith — never block the user.
-  run.postRun().catch(() => {});
+  // Fire-and-forget post to LangSmith — never block the user. Capture
+  // the first failure so the user gets a one-shot terminal warning; the
+  // same error firing on every postRun() does not overwrite a still-
+  // pending one, since chat.js clears the slot after showing it.
+  run.postRun().catch((e) => {
+    if (lastError) return;
+    lastError = {
+      message: (e && e.message) ? e.message : String(e),
+      at: Date.now()
+    };
+  });
 
   if (error) throw error;
   return output;
@@ -148,10 +161,40 @@ async function traceTool(fn, { toolName, server, args } = {}) {
     });
   }
 
-  run.postRun().catch(() => {});
+  run.postRun().catch((e) => {
+    if (lastError) return;
+    lastError = {
+      message: (e && e.message) ? e.message : String(e),
+      at: Date.now()
+    };
+  });
 
   if (error) throw error;
   return output;
 }
 
-module.exports = { enable, disable, isEnabled, traceLLM, traceTool, sanitize };
+// Returns the most recent postRun() failure (or null) and clears the slot.
+// The caller is expected to print a one-time warning and then drop the
+// result on the floor; the next failure re-arms the warning.
+function consumeError() {
+  const err = lastError;
+  lastError = null;
+  return err;
+}
+
+// Non-destructive peek — for tests and for callers that want to inspect
+// without consuming.
+function peekError() {
+  return lastError;
+}
+
+module.exports = {
+  enable,
+  disable,
+  isEnabled,
+  traceLLM,
+  traceTool,
+  sanitize,
+  consumeError,
+  peekError
+};

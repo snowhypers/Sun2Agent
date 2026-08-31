@@ -57,6 +57,10 @@ function extractUsefulLocalMemory(messages) {
   ];
 
   for (const message of userMessages) {
+    // First-layer filter: skip the whole message if it contains a secret,
+    // so we never even try to extract a preference from unsafe text. The
+    // extracted fragment is then re-checked inside addLocalMemory (second
+    // layer) and scrubbed via outputGuard before reaching disk.
     if (containsSensitiveData(message)) continue;
     for (const pattern of patterns) {
       const match = message.match(pattern);

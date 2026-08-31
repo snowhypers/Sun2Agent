@@ -13,5 +13,7 @@ module.exports = {
   disable: langsmith.disable,
   isEnabled: langsmith.isEnabled,
   traceLLM: langsmith.traceLLM,
-  traceTool: langsmith.traceTool
+  traceTool: langsmith.traceTool,
+  consumeError: langsmith.consumeError,
+  peekError: langsmith.peekError
 };

@@ -22,7 +22,13 @@ function serializeJson(entries) {
 
 function normalizeEntry(item) {
   if (!item || typeof item.content !== 'string') return null;
-  const content = item.content.replace(/\s+/g, ' ').trim();
+  let content = item.content.replace(/\s+/g, ' ').trim();
+  if (!content || containsSensitiveData(content)) return null;
+  // Defense in depth: even if detection missed, scrub via outputGuard so the
+  // on-disk file never holds a raw secret. Re-check after scrubbing because
+  // some patterns (PEM blocks, JWTs) leave a ***REDACTED*** marker that is
+  // itself a sign the content was unsafe.
+  content = guardrails.sanitizeOutput(content);
   if (!content || containsSensitiveData(content)) return null;
   return { content };
 }
@@ -66,10 +72,22 @@ function loadLocalMemory(homeDir = os.homedir()) {
 }
 
 function containsSensitiveData(content) {
+  // Two complementary layers of detection:
+  //   1. outputGuard.containsSecret — the comprehensive pattern set that
+  //      catches provider tokens (NVIDIA, OpenAI, Anthropic, AWS, GitHub,
+  //      JWTs, PEM blocks) and `key: value` / `KEY=value` shapes. This is
+  //      the authoritative detector.
+  //   2. Natural-language secret mentions — "my password is hunter2",
+  //      "API key: foo" without surrounding punctuation, "TOKEN = bar".
+  //      outputGuard only triggers on the `:`/`=` form, so a sentence-
+  //      shaped mention slips through. The backup regex below catches
+  //      those cases for memory writes specifically.
   const text = String(content || '');
+  if (!text) return false;
   if (guardrails.containsSecret(text)) return true;
-  return /\b(password|passwd|api[_-]?key|access[_-]?token|refresh[_-]?token|credential|private[_-]?key)\b\s*(?:is|[:=])\s*["']?\S+/i.test(text) ||
-    /(^|\s)[A-Z][A-Z0-9_]{2,}\s*=\s*\S+/.test(text);
+  if (/\b(password|passwd|api[_-]?key|access[_-]?token|refresh[_-]?token|credential|private[_-]?key)\b\s*(?:is|[:=])\s*["']?\S+/i.test(text)) return true;
+  if (/(^|\s)[A-Z][A-Z0-9_]{2,}\s*=\s*\S+/.test(text)) return true;
+  return false;
 }
 
 function saveLocalMemory(memories, homeDir = os.homedir()) {
@@ -82,7 +100,14 @@ function saveLocalMemory(memories, homeDir = os.homedir()) {
 }
 
 function addLocalMemory(content, options = {}) {
-  const text = String(content || '').replace(/\s+/g, ' ').trim();
+  const raw = String(content || '').replace(/\s+/g, ' ').trim();
+  if (!raw || containsSensitiveData(raw)) return null;
+
+  // Defense in depth: scrub via outputGuard so even an undetected secret
+  // is masked before reaching the on-disk file. Re-check after scrubbing
+  // because a ***REDACTED*** marker in the saved content is itself a sign
+  // the original was unsafe — drop the entry entirely in that case.
+  const text = guardrails.sanitizeOutput(raw);
   if (!text || containsSensitiveData(text)) return null;
 
   const homeDir = options.homeDir || os.homedir();
