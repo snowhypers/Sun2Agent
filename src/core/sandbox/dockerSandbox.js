@@ -37,8 +37,8 @@ const SANDBOX_ENV = { SUN2AGENT_SANDBOX: '1' };
 // Where the installed sun2agent package lives on the host, regardless of
 // whether it was installed globally, via npm link, or run from a checkout.
 function defaultPackageRoot() {
-  // <package>/src/sandbox/dockerSandbox.js -> <package>
-  return path.resolve(__dirname, '..', '..');
+  // <package>/src/core/sandbox/dockerSandbox.js -> <package>
+  return path.resolve(__dirname, '..', '..', '..');
 }
 
 // Named Docker volume used as /workspace when the agent is launched from the

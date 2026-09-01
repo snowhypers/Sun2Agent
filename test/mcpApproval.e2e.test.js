@@ -16,13 +16,13 @@ const FIXTURE = path.join(__dirname, 'fixtures', 'e2eMcpServer.js');
 // Patch the server list DEFINITION before `mcp` loads: mcp.js captures
 // `getServers` by destructuring at require time, so this must happen first to
 // point it at the local fixture instead of the real ~/.sun2agent/mcp.json.
-const mcpconfig = require('../src/mcpconfig');
+const mcpconfig = require('../src/core/mcp/config');
 mcpconfig.getServers = () => [
   { name: 'e2e', type: 'stdio', command: process.execPath, args: [FIXTURE] }
 ];
 
-const mcp = require('../src/mcp');
-const hitl = require('../src/HITL/mcpApproval');
+const mcp = require('../src/core/mcp');
+const hitl = require('../src/core/hitl/mcpApproval');
 
 before(async () => {
   const results = await mcp.connectAll();

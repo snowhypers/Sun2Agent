@@ -4,7 +4,7 @@
 
 const readline = require('readline');
 const chalk = require('chalk');
-const { loadConfig } = require('../config');
+const { loadConfig } = require('../../config/appConfig');
 
 const HIDE_CURSOR = '\x1b[?25l';
 const SHOW_CURSOR = '\x1b[?25h';

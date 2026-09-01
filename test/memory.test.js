@@ -5,10 +5,10 @@ const path = require('path');
 const os = require('os');
 
 const PROJECT = path.join(__dirname, '..');
-const memoryJson = require('../src/memory/memoryJson');
-const memory = require('../src/memory');
-const localAdapter = require('../src/memory/localMemory');
-const guardrails = require('../src/guardrails');
+const memoryJson = require('../src/core/memory/memoryJson');
+const memory = require('../src/core/memory');
+const localAdapter = require('../src/core/memory/localMemory');
+const guardrails = require('../src/core/guardrails');
 
 let counter = 0;
 function tmpHome() {
@@ -21,10 +21,10 @@ function tmpHome() {
 function loadConfigAt(home) {
   const original = os.homedir;
   os.homedir = () => home;
-  const modulePath = require.resolve('../src/config');
+  const modulePath = require.resolve('../src/config/appConfig');
   delete require.cache[modulePath];
   try {
-    return require('../src/config').loadConfig();
+    return require('../src/config/appConfig').loadConfig();
   } finally {
     os.homedir = original;
     delete require.cache[modulePath];
@@ -187,7 +187,7 @@ test('memory: scrubbed entry that still trips detection is dropped entirely', ()
   // unsafe to keep (it tells the model the original was a secret) and
   // addLocalMemory returns null instead of storing the partial mask.
   const home = tmpHome();
-  const out = require('../src/guardrails').outputGuard;
+  const out = require('../src/core/guardrails').outputGuard;
   // A PEM block is the canonical case: sanitizeOutput replaces its body with
   // ***REDACTED***, so the entry contains a known marker and is dropped.
   const pem = '-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQ==\n-----END PRIVATE KEY-----';
@@ -243,7 +243,7 @@ test('security: malicious memory cannot change command or filesystem guards', ()
 });
 
 test('local adapter performs no model, embedding, telemetry, or network calls', () => {
-  const source = fs.readFileSync(path.join(PROJECT, 'src/memory/localMemory.js'), 'utf-8');
+  const source = fs.readFileSync(path.join(PROJECT, 'src/core/memory/localMemory.js'), 'utf-8');
   assert.ok(!source.includes("require('mem0ai"));
   assert.ok(!source.includes('MemoryClient'));
   assert.ok(!source.includes('api.mem0.ai'));
@@ -275,11 +275,11 @@ test('package has no mem0ai dependency', () => {
 test('project configuration and source never define a Mem0 API key', () => {
   const files = [
     path.join(PROJECT, 'package.json'),
-    path.join(PROJECT, 'src/config.js'),
-    path.join(PROJECT, 'src/chat.js'),
-    path.join(PROJECT, 'src/memory/index.js'),
-    path.join(PROJECT, 'src/memory/localMemory.js'),
-    path.join(PROJECT, 'src/memory/memoryJson.js'),
+    path.join(PROJECT, 'src/config/appConfig.js'),
+    path.join(PROJECT, 'src/cli/index.js'),
+    path.join(PROJECT, 'src/core/memory/index.js'),
+    path.join(PROJECT, 'src/core/memory/localMemory.js'),
+    path.join(PROJECT, 'src/core/memory/memoryJson.js'),
   ];
   for (const file of files) {
     assert.ok(!fs.readFileSync(file, 'utf-8').includes('MEM0_API_KEY'), `${file} must not define MEM0_API_KEY`);
@@ -287,18 +287,28 @@ test('project configuration and source never define a Mem0 API key', () => {
 });
 
 test('chat wiring includes config prompt, startup, retrieval, save, help, and /memory', () => {
-  const source = fs.readFileSync(path.join(PROJECT, 'src/chat.js'), 'utf-8');
-  assert.ok(source.includes('Enable memory?'));
-  assert.ok(source.includes("text === '/memory'"));
-  assert.ok(source.includes("row('/memory'"));
-  assert.ok(source.includes('await memory.enable()'));
-  assert.ok(source.includes('await memory.search(currentUserMessage.content)'));
-  assert.ok(source.includes('await memory.remember(['));
+  // After the refactor:
+  //   - "Enable memory?" lives in src/cli/commands/config.js (the /config flow)
+  //   - /memory command + handler live in src/cli/commands/{index,memory}.js
+  //   - memory.enable / memory.search / memory.remember are called from
+  //     src/cli/turn.js (where the chat loop runs the LLM) and
+  //     src/cli/index.js (where the REPL saves the session).
+  const chatSource = fs.readFileSync(path.join(PROJECT, 'src/cli/index.js'), 'utf-8');
+  const turnSource = fs.readFileSync(path.join(PROJECT, 'src/cli/turn.js'), 'utf-8');
+  const banner = fs.readFileSync(path.join(PROJECT, 'src/cli/ui/banner.js'), 'utf-8');
+  const configCmd = fs.readFileSync(path.join(PROJECT, 'src/cli/commands/config.js'), 'utf-8');
+  const cmds = fs.readFileSync(path.join(PROJECT, 'src/cli/commands/index.js'), 'utf-8');
+  assert.ok(configCmd.includes('Enable memory?'), '/config prompts "Enable memory?"');
+  assert.ok(cmds.includes("'/memory'"), '/memory is registered in COMMANDS');
+  assert.ok(banner.includes("row('/memory'"), '/memory appears in /help');
+  assert.ok(chatSource.includes('await memory.enable()'), 'startChat calls memory.enable() at startup');
+  assert.ok(turnSource.includes('await memory.search('), 'turn.js calls memory.search() per turn');
+  assert.ok(chatSource.includes('await memory.remember(['), 'startChat calls memory.remember() after each exchange');
 });
 
 test('memory feature does not modify AGENT.md, guardrail, Docker, or LangSmith modules', () => {
   const memoryReferences = [];
-  for (const relative of ['src/context', 'src/guardrails', 'src/sandbox', 'src/observability']) {
+  for (const relative of ['src/core/context', 'src/core/guardrails', 'src/core/sandbox', 'src/core/observability']) {
     const root = path.join(PROJECT, relative);
     for (const name of fs.readdirSync(root)) {
       if (!name.endsWith('.js')) continue;

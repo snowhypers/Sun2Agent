@@ -11,10 +11,10 @@ const path = require('path');
 const os = require('os');
 
 const PROJECT = path.join(__dirname, '..');
-const guardrails = require(path.join(PROJECT, 'src/guardrails'));
+const guardrails = require(path.join(PROJECT, 'src/core/guardrails'));
 const { loadAgentMd, openAgentMd, ensureAgentMd, agentMdPath, AGENT_FILENAME } =
-  require(path.join(PROJECT, 'src/context/agentLoader'));
-const { buildPromptWithAgent } = require(path.join(PROJECT, 'src/context/promptBuilder'));
+  require(path.join(PROJECT, 'src/core/context/agentLoader'));
+const { buildPromptWithAgent } = require(path.join(PROJECT, 'src/core/context/promptBuilder'));
 
 // --- helpers ---------------------------------------------------------------
 // Each test gets its own throwaway directory so they don't interfere.
@@ -81,9 +81,9 @@ test('AGENT.md: framing explicitly forbids overriding src/guardrails/security', 
   assert.ok(/guardrail|safety|security/i.test(result));
 });
 
-test('AGENT.md: src/context/index exposes a single simple interface', () => {
-  delete require.cache[require.resolve(path.join(PROJECT, 'src/context'))];
-  const ctx = require(path.join(PROJECT, 'src/context'));
+test('AGENT.md: src/core/context/index exposes a single simple interface', () => {
+  delete require.cache[require.resolve(path.join(PROJECT, 'src/core/context'))];
+  const ctx = require(path.join(PROJECT, 'src/core/context'));
   assert.strictEqual(typeof ctx.buildSystemPrompt, 'function');
   assert.strictEqual(typeof ctx.loadAgentContext, 'function');
   assert.strictEqual(typeof ctx.reload, 'function');
@@ -99,8 +99,8 @@ test('AGENT.md: context.buildSystemPrompt composes base + AGENT.md', () => {
   const origCwd = process.cwd();
   process.chdir(dir);
   try {
-    delete require.cache[require.resolve(path.join(PROJECT, 'src/context'))];
-    const ctx = require(path.join(PROJECT, 'src/context'));
+    delete require.cache[require.resolve(path.join(PROJECT, 'src/core/context'))];
+    const ctx = require(path.join(PROJECT, 'src/core/context'));
     const out = ctx.buildSystemPrompt('BASE PERSONA');
     assert.ok(out.startsWith('BASE PERSONA'));
     assert.ok(out.includes('Use jest for tests'));
@@ -115,8 +115,8 @@ test('AGENT.md: reload() forces a re-read from disk', () => {
   const origCwd = process.cwd();
   process.chdir(dir);
   try {
-    delete require.cache[require.resolve(path.join(PROJECT, 'src/context'))];
-    const ctx = require(path.join(PROJECT, 'src/context'));
+    delete require.cache[require.resolve(path.join(PROJECT, 'src/core/context'))];
+    const ctx = require(path.join(PROJECT, 'src/core/context'));
 
     fs.writeFileSync(path.join(dir, AGENT_FILENAME), 'version one');
     let out = ctx.buildSystemPrompt('BASE');
@@ -224,13 +224,16 @@ test('/agent: openAgentMd creates AGENT.md on first open (template seeded)', () 
 test('chat.js: /agent dispatch + handler are wired up', () => {
   // Read the source (don't execute the full chat loop, which needs a TTY and
   // an API key) and confirm the wiring exists.
-  const src = fs.readFileSync(path.join(PROJECT, 'src/chat.js'), 'utf-8');
-  assert.ok(/require\(['"]\.\/context['"]\)/.test(src), 'context module must be required');
-  assert.ok(/text === '\/agent'/.test(src), '/agent must be dispatched');
-  assert.ok(/async function handleAgent/.test(src), 'handleAgent handler must exist');
-  assert.ok(/context\.openAgentMd\(\)/.test(src), 'handler must call context.openAgentMd()');
-  assert.ok(/context\.reload\(\)/.test(src), 'handler must reload cache after editing');
-  assert.ok(/row\('\/agent'/.test(src), '/agent must appear in /help');
+  const src = fs.readFileSync(path.join(PROJECT, 'src/cli/index.js'), 'utf-8');
+  const cmds = fs.readFileSync(path.join(PROJECT, 'src/cli/commands/agent.js'), 'utf-8');
+  const registry = fs.readFileSync(path.join(PROJECT, 'src/cli/commands/index.js'), 'utf-8');
+  const banner = fs.readFileSync(path.join(PROJECT, 'src/cli/ui/banner.js'), 'utf-8');
+  // After the refactor, /agent is wired through the COMMANDS registry.
+  assert.ok(registry.includes("'/agent'"), '/agent must be registered in COMMANDS');
+  assert.ok(/async function handleAgent/.test(cmds), 'handleAgent handler must exist in commands/agent.js');
+  assert.ok(/context\.openAgentMd\(\)/.test(cmds), 'handler must call context.openAgentMd()');
+  assert.ok(/context\.reload\(\)/.test(cmds), 'handler must reload cache after editing');
+  assert.ok(/row\('\/agent'/.test(banner), '/agent must appear in /help');
 });
 
 // ===========================================================================
@@ -238,32 +241,46 @@ test('chat.js: /agent dispatch + handler are wired up', () => {
 // ===========================================================================
 
 test('app: chat.js loads without throwing', () => {
-  assert.doesNotThrow(() => require(path.join(PROJECT, 'src/chat')));
+  assert.doesNotThrow(() => require(path.join(PROJECT, 'src/cli')));
 });
 
-test('app: src/context/ is a new directory with the 3 required files', () => {
-  const ctxDir = path.join(PROJECT, 'src/context');
+test('app: src/core/context/ is a new directory with the 3 required files', () => {
+  const ctxDir = path.join(PROJECT, 'src/core/context');
   assert.ok(fs.existsSync(path.join(ctxDir, 'index.js')), 'index.js');
   assert.ok(fs.existsSync(path.join(ctxDir, 'agentLoader.js')), 'agentLoader.js');
   assert.ok(fs.existsSync(path.join(ctxDir, 'promptBuilder.js')), 'promptBuilder.js');
 });
 
 test('app: existing commands still present in chat.js', () => {
-  const src = fs.readFileSync(path.join(PROJECT, 'src/chat.js'), 'utf-8');
-  for (const cmd of ['/help', '/?', '/exit', '/config', '/mcp', '/delete', '/agent']) {
-    assert.ok(src.includes(`'${cmd}'`), `command ${cmd} must still be dispatched`);
+  // After the refactor, command dispatch reads the COMMANDS registry
+  // (src/cli/commands/index.js) rather than the if/else chain in chat.js,
+  // so command name literals live in the registry, not chat.js.
+  const src = fs.readFileSync(path.join(PROJECT, 'src/cli/index.js'), 'utf-8');
+  const cmds = fs.readFileSync(path.join(PROJECT, 'src/cli/commands/index.js'), 'utf-8');
+  for (const cmd of ['/help', '/?', '/config', '/mcp', '/delete', '/agent']) {
+    assert.ok(
+      cmds.includes(`'${cmd}'`),
+      `command ${cmd} must still be registered in the COMMANDS registry`
+    );
   }
+  // /exit stays inline in chat.js because it has session-exit side effects.
+  assert.ok(src.includes("'/exit'"), "/exit dispatch must stay in chat.js");
 });
 
 test('app: MCP tool-calling path still intact', () => {
-  const src = fs.readFileSync(path.join(PROJECT, 'src/chat.js'), 'utf-8');
-  assert.ok(/mcp\.getOpenAiTools\(\)/.test(src), 'getOpenAiTools');
-  assert.ok(/mcp\.callTool/.test(src), 'callTool');
-  assert.ok(/MAX_TOOL_STEPS/.test(src), 'tool-call loop cap');
+  // After the turn.js split, the tool-call loop lives in src/cli/turn.js.
+  // chat.js (cli/index.js) still wires it up via require('./turn') and
+  // passes the streaming + signal callbacks.
+  const chatSrc = fs.readFileSync(path.join(PROJECT, 'src/cli/index.js'), 'utf-8');
+  const turnSrc = fs.readFileSync(path.join(PROJECT, 'src/cli/turn.js'), 'utf-8');
+  assert.ok(/require\(['"]\.\/turn['"]\)/.test(chatSrc), 'chat.js must require ./turn');
+  assert.ok(/mcp\.getOpenAiTools\(\)/.test(turnSrc), 'getOpenAiTools lives in turn.js');
+  assert.ok(/mcp\.callTool/.test(turnSrc), 'callTool lives in turn.js');
+  assert.ok(/MAX_TOOL_STEPS/.test(turnSrc), 'tool-call loop cap lives in turn.js');
 });
 
 test('app: input guard still runs before the LLM call', () => {
-  const src = fs.readFileSync(path.join(PROJECT, 'src/chat.js'), 'utf-8');
+  const src = fs.readFileSync(path.join(PROJECT, 'src/cli/index.js'), 'utf-8');
   assert.ok(/guardrails\.inputGuard\(text\)/.test(src), 'inputGuard must run on user text');
 });
 
@@ -290,8 +307,8 @@ test('app: end-to-end — AGENT.md instructions reach the composed system prompt
   const origCwd = process.cwd();
   process.chdir(dir);
   try {
-    delete require.cache[require.resolve(path.join(PROJECT, 'src/context'))];
-    const ctx = require(path.join(PROJECT, 'src/context'));
+    delete require.cache[require.resolve(path.join(PROJECT, 'src/core/context'))];
+    const ctx = require(path.join(PROJECT, 'src/core/context'));
 
     // Mirror what chat.js builds: base persona (+tools) then AGENT.md appended.
     const base = 'You are sun2Agent, a helpful assistant running in a terminal.';
@@ -316,8 +333,8 @@ test('app: no AGENT.md => identical behavior to before (base prompt returned)', 
   const origCwd = process.cwd();
   process.chdir(dir);
   try {
-    delete require.cache[require.resolve(path.join(PROJECT, 'src/context'))];
-    const ctx = require(path.join(PROJECT, 'src/context'));
+    delete require.cache[require.resolve(path.join(PROJECT, 'src/core/context'))];
+    const ctx = require(path.join(PROJECT, 'src/core/context'));
     const base = 'You are sun2Agent, a helpful assistant running in a terminal.';
     assert.strictEqual(ctx.buildSystemPrompt(base), base);
   } finally {

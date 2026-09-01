@@ -6,10 +6,10 @@ const CONFIG_DIR = path.join(os.homedir(), '.sun2agent');
 const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
 
 const MODELS = [
-  { id: 'meta/llama-3.1-70b-instruct', tag: 'general', name: 'Llama 3.1 70B' },
   { id: 'openai/gpt-oss-120b', tag: 'allrounder-text', name: 'GPT-OSS 120B' },
   { id: 'nvidia/nemotron-3-super-120b-a12b', tag: 'allrounder-text', name: 'Nemotron 3 Super' },
-  { id: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning', tag: 'multimodel-reasoning', name: 'Nemotron Nano Omni' }
+  { id: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning', tag: 'multimodel-reasoning', name: 'Nemotron Nano Omni' },
+  { id: 'nvidia/llama-3.1-nemotron-70b-instruct', tag: 'general', name: 'Llama 3.1 Nemotron 70B' }
 ];
 
 function ensureConfigDir() {

@@ -5,7 +5,7 @@
 
 const { test, beforeEach } = require('node:test');
 const assert = require('node:assert');
-const hitl = require('../src/HITL/mcpApproval');
+const hitl = require('../src/core/hitl/mcpApproval');
 
 beforeEach(() => hitl._resetForTesting());
 

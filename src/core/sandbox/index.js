@@ -11,7 +11,7 @@
 // agent loop. Security enforcement still happens in guardrails/ before any
 // execution — inside the container exactly as on the host.
 
-const { loadConfig, saveConfig } = require('../config');
+const { loadConfig, saveConfig } = require('../../config/appConfig');
 const { isDockerInstalled, isDockerRunning, pullImage, ensureImage } = require('./docker');
 const { wrapCommand, wrapAgentRun, defaultPackageRoot, isUnsafeProjectRoot, DEFAULT_IMAGE } = require('./dockerSandbox');
 

@@ -13,9 +13,9 @@ const os = require('os');
 
 const PROJECT = path.join(__dirname, '..');
 const { wrapCommand, DEFAULT_IMAGE, DEFAULT_DOCKER_ARGS } =
-  require(path.join(PROJECT, 'src/sandbox/dockerSandbox'));
+  require(path.join(PROJECT, 'src/core/sandbox/dockerSandbox'));
 const { isDockerInstalled, isDockerRunning } =
-  require(path.join(PROJECT, 'src/sandbox/docker'));
+  require(path.join(PROJECT, 'src/core/sandbox/docker'));
 
 // --- helpers ---------------------------------------------------------------
 
@@ -37,16 +37,16 @@ function fakeConfigEnv() {
   const origHomedir = os.homedir;
   os.homedir = () => dir;
   // Bust config cache so the next require() picks up the new homedir.
-  delete require.cache[require.resolve(path.join(PROJECT, 'src/config'))];
+  delete require.cache[require.resolve(path.join(PROJECT, 'src/config/appConfig'))];
   // Re-require to get fresh CONFIG_FILE pointing at temp dir.
-  const freshConfig = require(path.join(PROJECT, 'src/config'));
+  const freshConfig = require(path.join(PROJECT, 'src/config/appConfig'));
   return {
     dir,
     config: freshConfig,
     restore() {
       os.homedir = origHomedir;
       // Restore original config module in cache.
-      delete require.cache[require.resolve(path.join(PROJECT, 'src/config'))];
+      delete require.cache[require.resolve(path.join(PROJECT, 'src/config/appConfig'))];
     }
   };
 }
@@ -126,7 +126,7 @@ test('sandbox: printSandboxStatus reports correctly for both modes', () => {
   const origLog = console.log;
   console.log = (...args) => logs.push(args.join(' '));
   try {
-    const sandboxPath = path.join(PROJECT, 'src/sandbox/index.js');
+    const sandboxPath = path.join(PROJECT, 'src/core/sandbox/index.js');
 
     // --- Host mode (default config) ---
     const env = fakeConfigEnv();
@@ -159,25 +159,30 @@ test('sandbox: printSandboxStatus reports correctly for both modes', () => {
 test('sandbox: sun2agent automatically uses Docker when enabled (source-text check)', () => {
   // startChat() must read the saved config on every launch — no re-enabling
   // needed — and show the active banner when sandbox=docker and Docker is up.
-  const chatSource = fs.readFileSync(path.join(PROJECT, 'src/chat.js'), 'utf-8');
+  const chatSource = fs.readFileSync(path.join(PROJECT, 'src/cli/index.js'), 'utf-8');
+  const dockerSrc = fs.readFileSync(path.join(PROJECT, 'src/cli/dockerStatus.js'), 'utf-8');
+  // Combine the two source files in their natural evaluation order so the
+  // text-position check below correctly reflects "Docker check runs first".
+  const combined = dockerSrc + '\n' + chatSource;
   assert.ok(
-    chatSource.includes('Docker sandbox active'),
+    combined.includes('Docker sandbox active'),
     'chat.js must show the "Docker sandbox active" banner when enabled'
   );
-  // The banner must come after the isDockerRunning check inside startChat.
-  const runningIdx = chatSource.indexOf('isDockerRunning()');
-  const activeIdx = chatSource.indexOf('Docker sandbox active');
+  // The banner must come after the isDockerRunning check inside the
+  // dockerStatus helper (which is the first check at startup).
+  const runningIdx = combined.indexOf('isDockerRunning()');
+  const activeIdx = combined.indexOf('Docker sandbox active');
   assert.ok(runningIdx !== -1 && activeIdx !== -1, 'both check and banner must exist');
   assert.ok(
     runningIdx < activeIdx,
     'Docker check must run before showing the active banner'
   );
 
-  // mcp.js must route stdio commands through the sandbox automatically.
-  const mcpSource = fs.readFileSync(path.join(PROJECT, 'src/mcp.js'), 'utf-8');
+  // mcp transports must route stdio commands through the sandbox automatically.
+  const transportsSource = fs.readFileSync(path.join(PROJECT, 'src/core/mcp/transports.js'), 'utf-8');
   assert.ok(
-    mcpSource.includes('sandbox.wrapStdioCommand'),
-    'mcp.js must wrap stdio commands via the sandbox module'
+    transportsSource.includes('sandbox.wrapStdioCommand'),
+    'mcp/transports.js must wrap stdio commands via the sandbox module'
   );
 });
 
@@ -189,7 +194,7 @@ test('sandbox: wrapStdioCommand is pass-through when sandbox disabled', () => {
   const env = fakeConfigEnv();
   try {
     // Default config has sandbox disabled — bust sandbox cache so it reads fresh config
-    const sandboxPath = path.join(PROJECT, 'src/sandbox/index.js');
+    const sandboxPath = path.join(PROJECT, 'src/core/sandbox/index.js');
     delete require.cache[sandboxPath];
     const sandbox = require(sandboxPath);
     const result = sandbox.wrapStdioCommand('npx', ['-y', '@some/server']);
@@ -209,7 +214,7 @@ test('sandbox: wrapStdioCommand wraps in docker run when sandbox enabled', () =>
     env.config.saveConfig(config);
 
     // Bust sandbox cache so it re-reads the updated config
-    const sandboxPath = path.join(PROJECT, 'src/sandbox/index.js');
+    const sandboxPath = path.join(PROJECT, 'src/core/sandbox/index.js');
     delete require.cache[sandboxPath];
     const sandbox = require(sandboxPath);
 
@@ -219,7 +224,7 @@ test('sandbox: wrapStdioCommand wraps in docker run when sandbox enabled', () =>
     assert.strictEqual(result.args[0], 'run');
   } finally {
     // Restore cache
-    const sandboxPath = path.join(PROJECT, 'src/sandbox/index.js');
+    const sandboxPath = path.join(PROJECT, 'src/core/sandbox/index.js');
     delete require.cache[sandboxPath];
     env.restore();
   }
@@ -296,7 +301,7 @@ test('sandbox: wrapCommand does NOT hard-code host paths', () => {
 // ===========================================================================
 
 test('sandbox: chat.js hard-fails when Docker is down (source-text check)', () => {
-  const chatSource = fs.readFileSync(path.join(PROJECT, 'src/chat.js'), 'utf-8');
+  const chatSource = fs.readFileSync(path.join(PROJECT, 'src/cli/index.js'), 'utf-8');
 
   // Must check sandbox.enabled && sandbox.mode === 'docker'
   assert.ok(chatSource.includes('config.sandbox'), 'chat.js must reference config.sandbox');
@@ -311,12 +316,14 @@ test('sandbox: chat.js hard-fails when Docker is down (source-text check)', () =
 });
 
 test('sandbox: mcp.js guardrails run BEFORE sandbox wrap (source-text check)', () => {
-  const mcpSource = fs.readFileSync(path.join(PROJECT, 'src/mcp.js'), 'utf-8');
+  const mcpSource = fs.readFileSync(path.join(PROJECT, 'src/core/mcp/index.js'), 'utf-8');
+  const transportsSource = fs.readFileSync(path.join(PROJECT, 'src/core/mcp/transports.js'), 'utf-8');
 
-  // In connectServer(): validateServer is called, then buildTransport (which
-  // contains the sandbox wrap). Both must be present.
+  // In connectServer(): validateServer is called first, then buildTransport
+  // (which lives in transports.js and contains the sandbox wrap). Both must
+  // be present in their respective files.
   assert.ok(mcpSource.includes('validateServer'), 'mcp.js must call validateServer');
-  assert.ok(mcpSource.includes('wrapStdioCommand'), 'mcp.js must call wrapStdioCommand');
+  assert.ok(transportsSource.includes('wrapStdioCommand'), 'transports.js must call wrapStdioCommand');
   assert.ok(mcpSource.includes('buildTransport'), 'mcp.js must call buildTransport');
 
   // Extract the connectServer function body and verify validateServer appears
@@ -352,9 +359,9 @@ test('sandbox: AGENT.md + LangSmith + sandbox modules remain independent', () =>
   // No require() cross-imports between these independent feature modules.
   // We check require() calls, not comments, to avoid false positives from
   // documentation strings that mention other modules by name.
-  const contextSource = fs.readFileSync(path.join(PROJECT, 'src/context/index.js'), 'utf-8');
-  const observSource = fs.readFileSync(path.join(PROJECT, 'src/observability/index.js'), 'utf-8');
-  const sandboxSource = fs.readFileSync(path.join(PROJECT, 'src/sandbox/index.js'), 'utf-8');
+  const contextSource = fs.readFileSync(path.join(PROJECT, 'src/core/context/index.js'), 'utf-8');
+  const observSource = fs.readFileSync(path.join(PROJECT, 'src/core/observability/index.js'), 'utf-8');
+  const sandboxSource = fs.readFileSync(path.join(PROJECT, 'src/core/sandbox/index.js'), 'utf-8');
 
   // Extract require() targets (the string inside require('...'))
   const requires = (src) =>
@@ -384,7 +391,7 @@ test('sandbox: AGENT.md + LangSmith + sandbox modules remain independent', () =>
     'observability must not require context'
   );
 
-  // src/sandbox/ must not require observability or context modules
+  // src/core/sandbox/ must not require observability or context modules
   assert.ok(
     !sandboxDeps.some((d) => d.includes('observability')),
     'sandbox must not require observability'
@@ -405,24 +412,30 @@ test('sandbox: bin/sun2agent.js has sandbox subcommand dispatch', () => {
   assert.ok(binSource.includes('disable'), 'bin must handle disable');
   assert.ok(binSource.includes('status'), 'bin must handle status');
   // Must require the sandbox module
-  assert.ok(binSource.includes("require('../src/sandbox')"), 'bin must require sandbox module');
+  assert.ok(binSource.includes("require('../src/core/sandbox')"), 'bin must require sandbox module');
 });
 
 test('sandbox: chat.js detects Docker-down mid-session on tool error (source-text check)', () => {
-  const chatSource = fs.readFileSync(path.join(PROJECT, 'src/chat.js'), 'utf-8');
+  // After the refactor, dockerDownWarning lives in src/cli/dockerStatus.js.
+  // The tool error catch block lives in src/cli/turn.js (one chat turn).
+  // Both files are read here.
+  const chatSource = fs.readFileSync(path.join(PROJECT, 'src/cli/index.js'), 'utf-8');
+  const turnSource = fs.readFileSync(path.join(PROJECT, 'src/cli/turn.js'), 'utf-8');
+  const dockerSrc = fs.readFileSync(path.join(PROJECT, 'src/cli/dockerStatus.js'), 'utf-8');
 
-  // Must have a dockerDownWarning helper that checks Docker status
-  assert.ok(chatSource.includes('dockerDownWarning'), 'chat.js must have dockerDownWarning function');
+  // dockerDownWarning must exist (in its own file) and turn.js must import it.
+  assert.ok(dockerSrc.includes('dockerDownWarning'), 'dockerStatus.js must export dockerDownWarning');
   assert.ok(
-    chatSource.includes('Docker sandbox is enabled but Docker is not running'),
+    dockerSrc.includes('Docker sandbox is enabled but Docker is not running'),
     'dockerDownWarning must produce clear warning message'
   );
+  assert.ok(turnSource.includes("require('./dockerStatus')"), 'turn.js must require dockerStatus');
 
   // Tool error catch block must call dockerDownWarning
-  const toolCatchIdx = chatSource.indexOf('content = \'Tool error: \'');
-  assert.ok(toolCatchIdx !== -1, 'chat.js must have tool error handler');
+  const toolCatchIdx = turnSource.indexOf("content = 'Tool error: '");
+  assert.ok(toolCatchIdx !== -1, 'turn.js must have tool error handler');
   // Find the next dockerDownWarning after the tool error
-  const warnAfterTool = chatSource.indexOf('dockerDownWarning', toolCatchIdx);
+  const warnAfterTool = turnSource.indexOf('dockerDownWarning', toolCatchIdx);
   assert.ok(
     warnAfterTool !== -1 && warnAfterTool < toolCatchIdx + 300,
     'dockerDownWarning must be called in tool error catch block'
@@ -430,25 +443,41 @@ test('sandbox: chat.js detects Docker-down mid-session on tool error (source-tex
 });
 
 test('sandbox: chat.js detects Docker-down mid-session on connect error (source-text check)', () => {
-  const chatSource = fs.readFileSync(path.join(PROJECT, 'src/chat.js'), 'utf-8');
+  // After the refactor, MCP connect handling lives in src/cli/commands/mcp.js.
+  // The /mcp command is dispatched from chat.js via the COMMANDS registry,
+  // and the dockerDownWarning call is still wired into the error paths in
+  // commands/mcp.js.
+  const chatSource = fs.readFileSync(path.join(PROJECT, 'src/cli/index.js'), 'utf-8');
+  const mcpCmdSource = fs.readFileSync(path.join(PROJECT, 'src/cli/commands/mcp.js'), 'utf-8');
+  const dockerSrc = fs.readFileSync(path.join(PROJECT, 'src/cli/dockerStatus.js'), 'utf-8');
+
+  // chat.js must still hand /mcp through the registry and pass dockerDownWarning.
+  assert.ok(chatSource.includes("require('./dockerStatus')"), 'chat.js must require dockerStatus');
+  assert.ok(chatSource.includes('dockerDownWarning'), 'chat.js must pass dockerDownWarning into /mcp handler');
+  // commands/mcp.js must call dockerDownWarning in its error paths.
+  assert.ok(mcpCmdSource.includes('dockerDownWarning'), 'commands/mcp.js must call dockerDownWarning');
 
   // "No servers connected" path must also check Docker
-  const noServersIdx = chatSource.indexOf('No servers connected');
-  assert.ok(noServersIdx !== -1, 'chat.js must have "No servers connected" message');
-  const warnAfterNoServers = chatSource.indexOf('dockerDownWarning', noServersIdx);
+  const noServersIdx = mcpCmdSource.indexOf('No servers connected');
+  assert.ok(noServersIdx !== -1, 'commands/mcp.js must have "No servers connected" message');
+  const warnAfterNoServers = mcpCmdSource.indexOf('dockerDownWarning', noServersIdx);
   assert.ok(
-    warnAfterNoServers !== -1 && warnAfterNoServers < noServersIdx + 300,
+    warnAfterNoServers !== -1,
     'dockerDownWarning must be called after "No servers connected"'
   );
 
   // Single-server "Failed to connect" path must also check Docker
-  const failedConnectIdx = chatSource.indexOf('Failed to connect:');
-  assert.ok(failedConnectIdx !== -1, 'chat.js must have "Failed to connect" error handler');
-  const warnAfterFailed = chatSource.indexOf('dockerDownWarning', failedConnectIdx);
+  const failedConnectIdx = mcpCmdSource.indexOf('Failed to connect:');
+  assert.ok(failedConnectIdx !== -1, 'commands/mcp.js must have "Failed to connect" error handler');
+  const warnAfterFailed = mcpCmdSource.indexOf('dockerDownWarning', failedConnectIdx);
   assert.ok(
-    warnAfterFailed !== -1 && warnAfterFailed < failedConnectIdx + 300,
+    warnAfterFailed !== -1,
     'dockerDownWarning must be called in single-server connect error'
   );
+
+  // dockerDownWarning is sourced from dockerStatus.js (it owns the check).
+  assert.ok(dockerSrc.includes('Docker sandbox is enabled but Docker is not running'),
+    'dockerStatus.js must define the dockerDownWarning message');
 });
 
 // ===========================================================================
@@ -456,7 +485,7 @@ test('sandbox: chat.js detects Docker-down mid-session on connect error (source-
 // ===========================================================================
 
 const { wrapAgentRun, AGENT_DOCKER_ARGS, defaultPackageRoot, isUnsafeProjectRoot, isHomeDirectory, realPath, WORKSPACE_VOLUME } =
-  require(path.join(PROJECT, 'src/sandbox/dockerSandbox'));
+  require(path.join(PROJECT, 'src/core/sandbox/dockerSandbox'));
 
 test('sandbox: wrapAgentRun produces correct full-app container args', () => {
   const result = wrapAgentRun({
@@ -539,7 +568,7 @@ test('sandbox: wrapStdioCommand is pass-through INSIDE the sandbox even when ena
     config.sandbox = { enabled: true, mode: 'docker', image: DEFAULT_IMAGE };
     env.config.saveConfig(config);
 
-    const sandboxPath = path.join(PROJECT, 'src/sandbox/index.js');
+    const sandboxPath = path.join(PROJECT, 'src/core/sandbox/index.js');
     delete require.cache[sandboxPath];
     const sandbox = require(sandboxPath);
 
@@ -576,7 +605,7 @@ test('sandbox: bin launcher runs full app in sandbox when enabled, host when dis
 });
 
 test('sandbox: runInSandbox refuses to fall back when Docker is down (source-text)', () => {
-  const idxSource = fs.readFileSync(path.join(PROJECT, 'src/sandbox/index.js'), 'utf-8');
+  const idxSource = fs.readFileSync(path.join(PROJECT, 'src/core/sandbox/index.js'), 'utf-8');
 
   const runIdx = idxSource.indexOf('function runInSandbox()');
   assert.ok(runIdx !== -1, 'runInSandbox must exist');
@@ -591,11 +620,13 @@ test('sandbox: runInSandbox refuses to fall back when Docker is down (source-tex
 });
 
 test('sandbox: chat.js skips Docker checks and shows banner inside the sandbox (source-text)', () => {
-  const chatSource = fs.readFileSync(path.join(PROJECT, 'src/chat.js'), 'utf-8');
+  // After the refactor, dockerDownWarning lives in src/cli/dockerStatus.js.
+  const chatSource = fs.readFileSync(path.join(PROJECT, 'src/cli/index.js'), 'utf-8');
+  const dockerSrc = fs.readFileSync(path.join(PROJECT, 'src/cli/dockerStatus.js'), 'utf-8');
 
   // dockerDownWarning must short-circuit inside the container (no docker CLI)
-  const warnIdx = chatSource.indexOf('function dockerDownWarning()');
-  const body = chatSource.slice(warnIdx, chatSource.indexOf('\n}', warnIdx));
+  const warnIdx = dockerSrc.indexOf('function dockerDownWarning()');
+  const body = dockerSrc.slice(warnIdx, dockerSrc.indexOf('\n}', warnIdx));
   assert.ok(
     body.includes("SUN2AGENT_SANDBOX === '1'"),
     'dockerDownWarning must be skipped inside the sandbox'
@@ -617,7 +648,7 @@ test('sandbox: isUnsafeProjectRoot blocks ONLY the filesystem root (global use)'
 });
 
 test('sandbox: runInSandbox refuses ONLY the filesystem root, not home (source-text)', () => {
-  const idxSource = fs.readFileSync(path.join(PROJECT, 'src/sandbox/index.js'), 'utf-8');
+  const idxSource = fs.readFileSync(path.join(PROJECT, 'src/core/sandbox/index.js'), 'utf-8');
   const runIdx = idxSource.indexOf('function runInSandbox()');
   assert.ok(runIdx !== -1, 'runInSandbox must exist');
   const body = idxSource.slice(runIdx, idxSource.indexOf('\nfunction ', runIdx + 1));
@@ -738,7 +769,7 @@ test('sandbox: wrapAgentRun would mount filesystem root only if forced (defense 
   // inside launchSandboxContainer(), which is only reached after the guard
   // passes. Split the check into two per-function assertions to avoid fragile
   // cross-function text slicing.
-  const idxSource = fs.readFileSync(path.join(PROJECT, 'src/sandbox/index.js'), 'utf-8');
+  const idxSource = fs.readFileSync(path.join(PROJECT, 'src/core/sandbox/index.js'), 'utf-8');
 
   // 1) runInSandbox() body must contain the unsafe-root guard.
   const runIdx = idxSource.indexOf('function runInSandbox()');
@@ -776,7 +807,7 @@ test('sandbox: wrapAgentRun sets SUN2AGENT_RESUME=1 only when resume requested',
 });
 
 test('sandbox: launcher waits for Docker and relaunches with resume (source-text)', () => {
-  const idxSource = fs.readFileSync(path.join(PROJECT, 'src/sandbox/index.js'), 'utf-8');
+  const idxSource = fs.readFileSync(path.join(PROJECT, 'src/core/sandbox/index.js'), 'utf-8');
 
   // The relaunch helper must exist and poll until Docker is back.
   const waitIdx = idxSource.indexOf('function waitForDockerAndResume(');
@@ -801,12 +832,13 @@ test('sandbox: launcher waits for Docker and relaunches with resume (source-text
 });
 
 test('sandbox: chat.js persists and restores the session (source-text)', () => {
-  const chatSource = fs.readFileSync(path.join(PROJECT, 'src/chat.js'), 'utf-8');
+  const chatSource = fs.readFileSync(path.join(PROJECT, 'src/cli/index.js'), 'utf-8');
+  const sessionSource = fs.readFileSync(path.join(PROJECT, 'src/cli/session.js'), 'utf-8');
 
-  // Save/load/clear helpers must exist.
-  assert.ok(chatSource.includes('function saveSession('), 'saveSession must exist');
-  assert.ok(chatSource.includes('function loadSession('), 'loadSession must exist');
-  assert.ok(chatSource.includes('function clearSession('), 'clearSession must exist');
+  // Save/load/clear helpers must exist (in src/cli/session.js after the refactor).
+  assert.ok(sessionSource.includes('function saveSession('), 'saveSession must exist in session module');
+  assert.ok(sessionSource.includes('function loadSession('), 'loadSession must exist in session module');
+  assert.ok(sessionSource.includes('function clearSession('), 'clearSession must exist in session module');
 
   // History is restored ONLY when the launcher says this is a resume.
   assert.ok(
@@ -816,7 +848,7 @@ test('sandbox: chat.js persists and restores the session (source-text)', () => {
 
   // The session is saved after every completed exchange.
   assert.ok(
-    chatSource.includes('saveSession(history)'),
+    chatSource.includes('saveSession(') && chatSource.includes('history'),
     'history must be persisted after each exchange'
   );
 

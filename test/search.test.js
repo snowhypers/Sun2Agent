@@ -19,7 +19,7 @@ function stubPost(fn) {
 
 // ── search/index.js ──────────────────────────────────────────────────────────
 
-const searchModule = require('../src/search');
+const searchModule = require('../src/core/search');
 
 test('search: disabled config → getToolSpec returns null', () => {
   const config = { search: { enabled: false, provider: 'tavily', apiKey: '' } };
@@ -76,7 +76,7 @@ test('search: maskApiKey handles short / empty keys gracefully', () => {
 
 // ── search/tavily.js ─────────────────────────────────────────────────────────
 
-const { tavilySearch, MAX_RESULTS, MAX_CONTENT_CHARS } = require('../src/search/tavily');
+const { tavilySearch, MAX_RESULTS, MAX_CONTENT_CHARS } = require('../src/core/search/tavily');
 
 test('tavily: throws safe error when no API key provided', async () => {
   await assert.rejects(
@@ -234,7 +234,7 @@ test('tavily: throws safe error on malformed response (no results array)', async
 
 // ── search/searchTool.js — executeTool (does not throw) ───────────────────────
 
-const { executeWebSearch } = require('../src/search/searchTool');
+const { executeWebSearch } = require('../src/core/search/searchTool');
 
 test('searchTool: empty query returns safe error string without throwing', async () => {
   const result = await executeWebSearch('', 'tvly-fakekey12345678');
@@ -300,13 +300,13 @@ test('searchTool: outputGuard masks secrets appearing in search results', async 
 // ── integration: existing guardrails still work ───────────────────────────────
 
 test('existing guardrails: tavily_search tool call still passes validateToolCall', () => {
-  const guardrails = require('../src/guardrails');
+  const guardrails = require('../src/core/guardrails');
   const result = guardrails.validateToolCall('web_search', { query: 'latest Node.js version' });
   assert.strictEqual(result.ok, true);
 });
 
 test('existing guardrails: destructive args still blocked regardless of tool name', () => {
-  const guardrails = require('../src/guardrails');
+  const guardrails = require('../src/core/guardrails');
   const result = guardrails.validateToolCall('web_search', { query: 'rm -rf /' });
   assert.strictEqual(result.ok, false);
 });

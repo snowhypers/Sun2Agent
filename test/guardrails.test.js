@@ -7,8 +7,8 @@ const assert = require('node:assert');
 const path = require('path');
 const os = require('os');
 
-const guardrails = require('../src/guardrails');
-const { projectRoot } = require('../src/guardrails/guardConfig');
+const guardrails = require('../src/core/guardrails');
+const { projectRoot } = require('../src/core/guardrails/guardConfig');
 
 // --- helpers ---------------------------------------------------------------
 const blocked = (v, msg) => assert.strictEqual(v.ok, false, msg || 'should be blocked');
@@ -87,7 +87,7 @@ test('filesystemGuard blocks path traversal and escapes', () => {
 });
 
 test('filesystemGuard allows paths inside the project root', () => {
-  allowed(guardrails.filesystemGuard('src/chat.js'));
+  allowed(guardrails.filesystemGuard('src/cli/index.js'));
   allowed(guardrails.filesystemGuard('./README.md'));
   allowed(guardrails.filesystemGuard(path.join(projectRoot, 'package.json')));
   allowed(guardrails.filesystemGuard('src/../src/mcp.js'));
@@ -104,7 +104,7 @@ test('tool guard allows slash-prefixed MCP library identifiers', () => {
 });
 
 test('looksLikePath does not treat URLs or flags as paths', () => {
-  const { looksLikePath } = require('../src/guardrails/filesystemGuard');
+  const { looksLikePath } = require('../src/core/guardrails/filesystemGuard');
   assert.strictEqual(looksLikePath('https://example.com/a/b'), false);
   assert.strictEqual(looksLikePath('--headless'), false);
   assert.strictEqual(looksLikePath('hello world'), false);
@@ -230,7 +230,7 @@ test('validateToolCall allows legitimate tool calls', () => {
     url: 'https://example.com',
     formats: ['markdown']
   }));
-  allowed(guardrails.validateToolCall('read_file', { path: 'src/chat.js' }));
+  allowed(guardrails.validateToolCall('read_file', { path: 'src/cli/index.js' }));
   allowed(guardrails.validateToolCall('noargs', {}));
   allowed(guardrails.validateToolCall('nullargs', null));
 });

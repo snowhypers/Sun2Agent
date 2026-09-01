@@ -4,7 +4,7 @@ const args = process.argv.slice(2);
 
 // Support CLI args too: sun2agent delete
 if (args[0] === 'delete') {
-  const { deleteConfig } = require('../src/config');
+  const { deleteConfig } = require('../src/config/appConfig');
   deleteConfig();
   console.log('Config deleted. Run "npm uninstall -g sun2agent" to fully remove.');
   process.exit(0);
@@ -13,7 +13,7 @@ if (args[0] === 'delete') {
 // sun2agent sandbox enable|disable|status — these manage Docker itself, so
 // they always run on the HOST, never inside the container.
 if (args[0] === 'sandbox') {
-  const sandbox = require('../src/sandbox');
+  const sandbox = require('../src/core/sandbox');
   const action = args[1];
   if (action === 'enable') {
     sandbox.enableSandbox();
@@ -31,7 +31,7 @@ if (args[0] === 'sandbox') {
 // `docker run`)? Start the agent directly — never wrap again (no docker-in-
 // docker, no infinite re-entry loop).
 if (process.env.SUN2AGENT_SANDBOX === '1') {
-  const { startChat } = require('../src/chat');
+  const { startChat } = require('../src/cli');
   startChat();
 } else {
   // Host launcher: read the saved config and decide where the agent runs.
@@ -39,13 +39,13 @@ if (process.env.SUN2AGENT_SANDBOX === '1') {
   //             (runInSandbox hard-fails if Docker is down — no silent
   //             fallback to host execution).
   // Disabled -> run directly on the host, exactly as before.
-  const { loadConfig } = require('../src/config');
+  const { loadConfig } = require('../src/config/appConfig');
   const config = loadConfig();
   if (config.sandbox && config.sandbox.enabled && config.sandbox.mode === 'docker') {
-    const { runInSandbox } = require('../src/sandbox');
+    const { runInSandbox } = require('../src/core/sandbox');
     runInSandbox();
   } else {
-    const { startChat } = require('../src/chat');
+    const { startChat } = require('../src/cli');
     startChat();
   }
 }

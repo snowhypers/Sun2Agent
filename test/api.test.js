@@ -2,7 +2,7 @@ const { test } = require('node:test');
 const assert = require('node:assert');
 const { Readable } = require('stream');
 const axios = require('axios');
-const { chatCompletion } = require('../src/api');
+const { chatCompletion } = require('../src/core/api');
 
 test('api: streams assistant text and returns the complete message', async () => {
   const originalPost = axios.post;

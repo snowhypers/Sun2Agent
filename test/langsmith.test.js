@@ -16,18 +16,18 @@ const path = require('path');
 const os = require('os');
 
 const PROJECT = path.join(__dirname, '..');
-const guardrails = require(path.join(PROJECT, 'src/guardrails'));
-const observability = require(path.join(PROJECT, 'src/observability'));
-const langsmith = require(path.join(PROJECT, 'src/observability/langsmith'));
+const guardrails = require(path.join(PROJECT, 'src/core/guardrails'));
+const observability = require(path.join(PROJECT, 'src/core/observability'));
+const langsmith = require(path.join(PROJECT, 'src/core/observability/langsmith'));
 const { sanitize } = langsmith;
 
 // ---------------------------------------------------------------------------
 // helpers
 // ---------------------------------------------------------------------------
 function freshObservability() {
-  delete require.cache[require.resolve(path.join(PROJECT, 'src/observability/langsmith'))];
-  delete require.cache[require.resolve(path.join(PROJECT, 'src/observability'))];
-  return require(path.join(PROJECT, 'src/observability'));
+  delete require.cache[require.resolve(path.join(PROJECT, 'src/core/observability/langsmith'))];
+  delete require.cache[require.resolve(path.join(PROJECT, 'src/core/observability'))];
+  return require(path.join(PROJECT, 'src/core/observability'));
 }
 
 // ===========================================================================
@@ -44,9 +44,9 @@ test('observability: exposes a single simple interface', () => {
   assert.strictEqual(typeof observability.peekError, 'function');
 });
 
-test('observability: src/observability/ contains index.js + langsmith.js', () => {
-  assert.ok(fs.existsSync(path.join(PROJECT, 'src/observability/index.js')));
-  assert.ok(fs.existsSync(path.join(PROJECT, 'src/observability/langsmith.js')));
+test('observability: src/core/observability/ contains index.js + langsmith.js', () => {
+  assert.ok(fs.existsSync(path.join(PROJECT, 'src/core/observability/index.js')));
+  assert.ok(fs.existsSync(path.join(PROJECT, 'src/core/observability/langsmith.js')));
 });
 
 // ===========================================================================
@@ -197,12 +197,12 @@ test('observability: sanitize() leaves ordinary text untouched', () => {
 // ===========================================================================
 
 test('api.js: requires observability module', () => {
-  const src = fs.readFileSync(path.join(PROJECT, 'src/api.js'), 'utf-8');
+  const src = fs.readFileSync(path.join(PROJECT, 'src/core/api.js'), 'utf-8');
   assert.ok(src.includes("require('./observability')"));
 });
 
 test('api.js: chatCompletion wraps request in traceLLM', () => {
-  const src = fs.readFileSync(path.join(PROJECT, 'src/api.js'), 'utf-8');
+  const src = fs.readFileSync(path.join(PROJECT, 'src/core/api.js'), 'utf-8');
   assert.ok(/observability\.traceLLM/.test(src), 'must call traceLLM');
   // Returns response.data.choices[0].message — format unchanged.
   assert.ok(/choices\[0\]\.message/.test(src));
@@ -213,12 +213,12 @@ test('api.js: chatCompletion wraps request in traceLLM', () => {
 // ===========================================================================
 
 test('mcp.js: requires observability module', () => {
-  const src = fs.readFileSync(path.join(PROJECT, 'src/mcp.js'), 'utf-8');
-  assert.ok(src.includes("require('./observability')"));
+  const src = fs.readFileSync(path.join(PROJECT, 'src/core/mcp/index.js'), 'utf-8');
+  assert.ok(src.includes('./core/observability') || src.includes('./observability'));
 });
 
 test('mcp.js: callTool wraps execution in traceTool', () => {
-  const src = fs.readFileSync(path.join(PROJECT, 'src/mcp.js'), 'utf-8');
+  const src = fs.readFileSync(path.join(PROJECT, 'src/core/mcp/index.js'), 'utf-8');
   assert.ok(/observability\.traceTool/.test(src), 'must call traceTool');
   // Guardrail check still happens BEFORE the trace wrapper.
   const guardIdx = src.indexOf('guardrails.validateToolCall');
@@ -238,8 +238,8 @@ test('config.js: loadConfig returns langsmith section for new configs', () => {
   const origHome = os.homedir;
   os.homedir = () => dir;
   try {
-    delete require.cache[require.resolve(path.join(PROJECT, 'src/config'))];
-    const { loadConfig } = require(path.join(PROJECT, 'src/config'));
+    delete require.cache[require.resolve(path.join(PROJECT, 'src/config/appConfig'))];
+    const { loadConfig } = require(path.join(PROJECT, 'src/config/appConfig'));
     const cfg = loadConfig();
     assert.ok(cfg.langsmith, 'langsmith section must exist');
     assert.strictEqual(cfg.langsmith.enabled, false);
@@ -261,8 +261,8 @@ test('config.js: existing configs without langsmith get a default section', () =
   const origHome = os.homedir;
   os.homedir = () => dir;
   try {
-    delete require.cache[require.resolve(path.join(PROJECT, 'src/config'))];
-    const { loadConfig } = require(path.join(PROJECT, 'src/config'));
+    delete require.cache[require.resolve(path.join(PROJECT, 'src/config/appConfig'))];
+    const { loadConfig } = require(path.join(PROJECT, 'src/config/appConfig'));
     const cfg = loadConfig();
     assert.ok(cfg.langsmith, 'default langsmith section added');
     assert.strictEqual(cfg.langsmith.enabled, false);
@@ -277,29 +277,34 @@ test('config.js: existing configs without langsmith get a default section', () =
 // ===========================================================================
 
 test('chat.js: requires observability module', () => {
-  const src = fs.readFileSync(path.join(PROJECT, 'src/chat.js'), 'utf-8');
-  assert.ok(src.includes("require('./observability')"));
+  const src = fs.readFileSync(path.join(PROJECT, 'src/cli/index.js'), 'utf-8');
+  assert.ok(src.includes('./core/observability') || src.includes('./observability'));
 });
 
 test('chat.js: /config asks about LangSmith after model selection', () => {
-  const src = fs.readFileSync(path.join(PROJECT, 'src/chat.js'), 'utf-8');
-  assert.ok(/Enable LangSmith observability/.test(src), 'must prompt for LangSmith');
+  // After the refactor, the /config command lives in src/cli/commands/config.js.
+  const chatSrc = fs.readFileSync(path.join(PROJECT, 'src/cli/index.js'), 'utf-8');
+  const configSrc = fs.readFileSync(path.join(PROJECT, 'src/cli/commands/config.js'), 'utf-8');
+  // The dispatch (COMMANDS registry) must still be in chat.js.
+  assert.ok(/COMMANDS\[text\]/.test(chatSrc), 'chat.js must dispatch via COMMANDS registry');
+  // The actual prompts now live in the command file.
+  assert.ok(/Enable LangSmith observability/.test(configSrc), 'must prompt for LangSmith');
   // The prompt must come AFTER model selection, not before.
-  const modelIdx = src.indexOf("Select a model");
-  const lsIdx = src.indexOf("Enable LangSmith observability");
+  const modelIdx = configSrc.indexOf("Select a model");
+  const lsIdx = configSrc.indexOf("Enable LangSmith observability");
   assert.ok(modelIdx > -1 && lsIdx > -1 && modelIdx < lsIdx, 'LangSmith prompt must follow model prompt');
 });
 
 test('chat.js: startup enables LangSmith when config has it on', () => {
-  const src = fs.readFileSync(path.join(PROJECT, 'src/chat.js'), 'utf-8');
+  const src = fs.readFileSync(path.join(PROJECT, 'src/cli/index.js'), 'utf-8');
   assert.ok(/config\.langsmith && config\.langsmith\.enabled/.test(src), 'must check langsmith.enabled at startup');
   assert.ok(/observability\.enable/.test(src), 'must call observability.enable at startup');
 });
 
 test('chat.js: LangSmith API key prompt is masked (password type)', () => {
-  const src = fs.readFileSync(path.join(PROJECT, 'src/chat.js'), 'utf-8');
-  // The LangSmith key prompt must be type: 'password' so it's never printed.
-  const block = src.substring(src.indexOf('LangSmith API key'));
+  // The LangSmith key prompt now lives in src/cli/commands/config.js.
+  const configSrc = fs.readFileSync(path.join(PROJECT, 'src/cli/commands/config.js'), 'utf-8');
+  const block = configSrc.substring(configSrc.indexOf('LangSmith API key'));
   assert.ok(/type:\s*'password'/.test(block), 'LangSmith key must be a password prompt');
 });
 
@@ -310,12 +315,12 @@ test('chat.js: LangSmith API key prompt is masked (password type)', () => {
 test('security: AGENT.md, guardrails, observability are independent modules', () => {
   // The three concerns live in separate directories and do not import each
   // other (except observability reusing outputGuard for sanitization).
-  const obsSrc = fs.readFileSync(path.join(PROJECT, 'src/observability/langsmith.js'), 'utf-8');
+  const obsSrc = fs.readFileSync(path.join(PROJECT, 'src/core/observability/langsmith.js'), 'utf-8');
   assert.ok(obsSrc.includes('guardrails'), 'observability reuses outputGuard for sanitize');
   // observability must NOT import the src/context/AGENT.md module.
   assert.ok(!obsSrc.includes('context'), 'observability must not depend on AGENT.md');
 
-  const ctxSrc = fs.readFileSync(path.join(PROJECT, 'src/context/index.js'), 'utf-8');
+  const ctxSrc = fs.readFileSync(path.join(PROJECT, 'src/core/context/index.js'), 'utf-8');
   assert.ok(!ctxSrc.includes('observability'), 'AGENT.md must not depend on observability');
 });
 
@@ -330,7 +335,7 @@ test('security: all 5 guardrails still block', () => {
 test('security: guardrails run BEFORE observability in mcp.js', () => {
   // The validateToolCall() verdict determines whether the tool runs at all;
   // traceTool() only wraps the execution that happens after the guard passes.
-  const src = fs.readFileSync(path.join(PROJECT, 'src/mcp.js'), 'utf-8');
+  const src = fs.readFileSync(path.join(PROJECT, 'src/core/mcp/index.js'), 'utf-8');
   const guardIdx = src.indexOf('validateToolCall');
   const traceIdx = src.indexOf('traceTool');
   assert.ok(guardIdx < traceIdx);
@@ -425,8 +430,8 @@ test('dependency: langsmith is in package.json', () => {
 
 test('dependency: observability is not required for guardrails to work', () => {
   // Unload observability entirely and confirm guardrails still block.
-  delete require.cache[require.resolve(path.join(PROJECT, 'src/observability/langsmith'))];
-  delete require.cache[require.resolve(path.join(PROJECT, 'src/observability'))];
+  delete require.cache[require.resolve(path.join(PROJECT, 'src/core/observability/langsmith'))];
+  delete require.cache[require.resolve(path.join(PROJECT, 'src/core/observability'))];
   assert.strictEqual(guardrails.commandGuard('sudo rm -rf /').ok, false);
   assert.strictEqual(guardrails.validateToolCall('shell', { cmd: 'rm -rf /' }).ok, false);
 });
