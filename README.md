@@ -54,6 +54,7 @@ plain language. The agent figures out which tools to call.
 | 📊 | **LangSmith observability** — opt-in tracing of LLM calls and tool execution, sanitized before it leaves your machine |
 | 🎛️ | **Any NIM model** — Llama, GPT-OSS, Nemotron… swap anytime with `/config` |
 | ⌨️ | **Calm TUI** — rounded input box, live connection tags, `Esc` interrupts anything |
+| 🔎 | **Optional web search (Tavily)** — off by default; flip it on in `/config` (or set `TAVILY_API_KEY`) and the agent can call `web_search` for current events, latest versions, and live data using Tavily's free tier |
 
 ## Install
 
