@@ -14,4 +14,3 @@ or guardrails.
 - <!-- language, framework, style -->
 - <!-- test command (e.g. npm test) -->
 
-When I tell you write code then if I no mentions then write code in java language. 

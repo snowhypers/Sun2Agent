@@ -24,7 +24,8 @@ function defaultConfig() {
     sandbox: { enabled: false, mode: 'host' },
     memory: { enabled: false },
     hitl: { mcpApproval: true },
-    search: { enabled: false, provider: 'tavily', apiKey: '' }
+    search: { enabled: false, provider: 'tavily', apiKey: '' },
+    selectedSkills: []
   };
 }
 
@@ -43,6 +44,8 @@ function loadConfig() {
     if (!raw.hitl) raw.hitl = { mcpApproval: true };
     // Web search is optional and remains off for configs saved before the feature.
     if (!raw.search) raw.search = { enabled: false, provider: 'tavily', apiKey: '' };
+    // Selected skills is an empty list for configs saved before the feature.
+    if (!Array.isArray(raw.selectedSkills)) raw.selectedSkills = [];
     return raw;
   } catch (e) {
     return defaultConfig();

@@ -18,6 +18,7 @@ const guardrails = require('../core/guardrails');
 const context = require('../core/context');
 const memory = require('../core/memory');
 const search = require('../core/search');
+const skills = require('../core/skills');
 const { chatCompletion } = require('../core/api');
 const { dockerDownWarning } = require('./dockerStatus');
 const { isEmptyAssistantMessage, cleanHistory } = require('./history');
@@ -47,8 +48,13 @@ async function chatTurn(config, history, signal, onToken, onToolTurn) {
 
   // Memory is appended to the base prompt as contextual information, then the
   // existing AGENT.md builder adds repository instructions. Neither layer can
-  // alter guardrails, tool validation, or Docker restrictions.
-  const withMemory = memory.buildMemoryContext(context.buildSystemPrompt(allSpecs), relevantMemories);
+  // alter guardrails, tool validation, or Docker restrictions. Selected
+  // skills are inserted between AGENT.md and memory so they are clearly
+  // framed as additional reusable instructions, with the same "safety
+  // rules win" contract as AGENT.md.
+  const base = context.buildSystemPrompt(allSpecs);
+  const withSkills = skills.buildSkillsContext(base, config);
+  const withMemory = memory.buildMemoryContext(withSkills, relevantMemories);
   const system = { role: 'system', content: context.buildSystemPrompt(withMemory) };
   let allowTools = Boolean(tools);
 

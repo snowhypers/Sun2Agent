@@ -1,10 +1,11 @@
 const chalk = require('chalk');
-const { loadConfig } = require('../config/appConfig');
+const { loadConfig, saveConfig } = require('../config/appConfig');
 const mcp = require('../core/mcp');
 const hitl = require('../core/hitl/mcpApproval');
 const guardrails = require('../core/guardrails');
 const observability = require('../core/observability');
 const memory = require('../core/memory');
+const skills = require('../core/skills');
 const { askInput, ESC_BACK } = require('./ui/input');
 const { watchEscape, waitEnterOrEsc } = require('./ui/escapeWatcher');
 const { printBanner, printIntro } = require('./ui/banner');
@@ -93,13 +94,34 @@ async function startChat() {
   }
 
   while (true) {
-    const input = await askInput({ model: config.model, tag: mcp.getTag() });
+    const input = await askInput({
+      model: config.model,
+      tag: mcp.getTag(),
+      // Skills tag is shown in the chatbox footer (MCP-style) when any
+      // skills are selected. The selected skills' content is injected
+      // into the system prompt by turn.js, so the model applies them
+      // automatically — no need to reference them in the typed message.
+      skillTag: skills.getTag(config)
+    });
 
-    // Esc on an empty box -> back to simple chat: disconnect MCP, drop the tag.
+    // Esc on an empty box -> back to simple chat: drop the active tool
+    // context. MCP connections are in-memory (disconnect), skills are
+    // persisted in config.json (save an empty selection) so the tag is
+    // gone after a restart too.
     if (input === ESC_BACK) {
       if (mcp.getActiveName()) {
         await mcp.disconnectAll();
         console.log(chalk.gray('⎋ Disconnected MCP. Back to simple chat.\n'));
+        continue;
+      }
+      if (skills.getSelected(config).length) {
+        try {
+          saveConfig(skills.clearSelected(config));
+        } catch (_) {
+          /* best effort — the tag below still clears for this session */
+        }
+        config = loadConfig();
+        console.log(chalk.gray('⎋ Skills cleared. Back to simple chat.\n'));
       }
       continue;
     }
@@ -122,7 +144,7 @@ async function startChat() {
     if (handler) {
       if (text === '/mcp') {
         const before = mcp.getConnectionSignature();
-        await handler({ promptBack, waitEnterOrEsc, dockerDownWarning });
+        await handler({ promptBack, waitEnterOrEsc, dockerDownWarning, loadConfig, saveConfig });
         const after = mcp.getConnectionSignature();
         // If the connected set changed, reset the conversation so the model
         // doesn't keep referencing a previous server's tools from history.
@@ -133,8 +155,11 @@ async function startChat() {
         }
         if (text === '/config') config = loadConfig();
       } else {
-        await handler({ promptBack, waitEnterOrEsc, dockerDownWarning });
+        await handler({ promptBack, waitEnterOrEsc, dockerDownWarning, loadConfig, saveConfig });
         if (text === '/config') config = loadConfig();
+        // /skills writes selectedSkills via saveConfig; reload so the next
+        // input box shows the updated skill tags immediately.
+        if (text === '/skills') config = loadConfig();
       }
       continue;
     }

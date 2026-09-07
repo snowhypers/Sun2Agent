@@ -14,7 +14,7 @@ automatically, and runs 5 layers of guardrails on every call.
 [![License: MIT](https://img.shields.io/npm/l/sun2agent?color=blue)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-Node%20Test-brightgreen)](#guardrails)
 
-[Install](#install) · [Quick Start](#quick-start) · [MCP Servers](#connecting-mcp-servers) · [Docker Sandbox](#docker-sandbox-optional) · [Guardrails](#guardrails) · [Context (AGENT.md)](#repository-instructions-agentmd) · [Memory](#local-memory-optional)
+[Install](#install) · [Quick Start](#quick-start) · [MCP Servers](#connecting-mcp-servers) · [Docker Sandbox](#docker-sandbox-optional) · [Guardrails](#guardrails) · [Context (AGENT.md)](#repository-instructions-agentmd) · [Memory](#local-memory-optional) · [Skills](#skills-optional)
 
 </div>
 
@@ -50,6 +50,7 @@ plain language. The agent figures out which tools to call.
 | ✋ | **Human-in-the-Loop (HITL)** — interactive per-session tool call approval (`Allow` / `Don't allow`) before any proposed tool executes |
 | 🐳 | **Optional Docker sandbox** — run the entire agent isolated in a container, with automatic session resume when Docker restarts |
 | 🧠 | **Local preference memory (`memory.md`)** — retain explicit user preferences across sessions with local search; zero telemetry or external API calls |
+| 🎯 | **Reusable skills (`skills.md`)** — save instruction blocks once, toggle them on per chat with a `[Skill: …]` tag under the input box |
 | 📄 | **AGENT.md support** — drop an `AGENT.md` in your project and the agent follows your repo's conventions |
 | 📊 | **LangSmith observability** — opt-in tracing of LLM calls and tool execution, sanitized before it leaves your machine |
 | 🎛️ | **Any NIM model** — Llama, GPT-OSS, Nemotron… swap anytime with `/config` |
@@ -118,6 +119,7 @@ An allowed tool is remembered only for the current chat session; a denied call i
 | `/mcp` | Manage MCP servers — add/edit, connect one or all, disconnect |
 | `/agent` | Open the project's AGENT.md in your editor (creates a template on first use) |
 | `/memory` | Open and edit local `~/.sun2agent/memory.md` |
+| `/skills` | Manage reusable instruction skills — add/edit `skills.md`, select which skills are active |
 | `/delete` | Delete saved config and data |
 | `/exit` | Quit |
 
@@ -125,8 +127,7 @@ An allowed tool is remembered only for the current chat session; a denied call i
 |-----|--------|
 | `Enter` | Send message |
 | `Esc` *(while typing)* | Clear the input |
-| `Esc` *(empty box)* | Disconnect MCP, return to simple chat |
-| `Esc` *(agent working)* | Stop the current reply or tool call |
+| `Esc` *(empty box)* | Disconnect MCP / clear selected skills, return to simple chat || `Esc` *(agent working)* | Stop the current reply or tool call |
 | `Esc` *(in menus)* | Go back / cancel |
 | `Ctrl+C` | Quit immediately |
 
@@ -227,6 +228,43 @@ Enable memory from `/config` to let sun2Agent retain explicit preferences betwee
 - Explicit phrases such as “remember that…”, “I prefer…”, and “always…” can be saved automatically.
 - Memory is contextual only and cannot override AGENT.md, guardrails, security policy, or Docker restrictions.
 
+## Skills (optional)
+
+Skills are reusable instruction blocks you write once and toggle onto the agent whenever you need them — a coding style, a review checklist, a writing voice. They live in one hand-edited markdown file, `~/.sun2agent/skills.md`, and work exactly like AGENT.md: advisory context, no API keys, no LLM calls to manage them.
+
+**1. Write skills.** Run `/skills` → **Add/Edit Skills** (opens `skills.md` in your editor; the file is created with a starter template on first use). Each skill is a `## Name` heading followed by its instructions:
+
+```markdown
+## Code Review
+
+When reviewing code:
+- Check error handling first, then edge cases, then style.
+- Always run the test suite before approving.
+```
+
+Anything before the first `## ` heading is a comment — use it for notes. That's the whole format: no YAML, no frontmatter.
+
+**2. Select skills.** Run `/skills` → **Select Skills** and check the ones you want active. Your selection is saved to `~/.sun2agent/config.json`, and the active skills appear as tags under the input box:
+
+```text
+[Skill: Code Review]  [Skill: Concise Answers]
+```
+
+From then on, every message in that chat is answered with those skills applied — no need to mention them in the prompt.
+
+**3. Detach when done.** Press `Esc` on an empty input box to clear the selected skills and return to plain agent chat (the selection is cleared persistently). You can also re-run `/skills` → **Select Skills** and uncheck them.
+
+How skills reach the model — the same advisory contract as AGENT.md:
+
+- Selected skills are injected into the system prompt as a clearly-labelled section, after AGENT.md and before memory.
+- They are **advisory only**: they cannot override your core instructions, security guidelines, or any guardrail. If a skill conflicts with a safety rule, the safety rule wins.
+- Skills are per-user (shared across projects); AGENT.md is per-project.
+- Only the selected skills are injected — the full file is never sent.
+- If you delete a skill from `skills.md` while it's selected, it is silently skipped (no crash).
+
+> [!NOTE]
+> `Esc` on an empty input box does double duty: it disconnects the active MCP server first if one is connected, otherwise it clears the selected skills.
+
 ## LangSmith observability
 
 Optionally trace LLM calls and MCP tool execution with LangSmith:
@@ -288,6 +326,7 @@ npm test
 - **`mcp.json` can launch programs.** A `stdio` server runs whatever `command` you give it — treat the file like a shell script and only add servers you trust.
 - **Guards reduce risk; they don't eliminate it.** They match known-dangerous patterns, so a novel phrasing can get through. Stay careful when a session mixes servers that read untrusted web content with servers that can take destructive actions.
 - **AGENT.md is advisory only** and cannot modify, disable, or bypass any guardrail.
+- **Selected skills are advisory too.** `skills.md` content reaches the model as context only — it cannot enable a blocked tool call, weaken a guard, or change Docker restrictions.
 
 ## Troubleshooting
 

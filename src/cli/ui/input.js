@@ -70,7 +70,11 @@ function askInput(options = {}) {
 
   const model = options.model ? String(options.model).split('/').pop() : '';
   const tag = options.tag || ''; // active MCP server name, if any
-  const hint = options.hint || '⎋ esc back  ·  /help  ·  /mcp  ·  /exit';
+  // Skills tag is a pre-formatted, space-separated list of "@<id>" tokens
+  // (e.g. "@coding @debugging"). It already includes the @ prefixes and
+  // is rendered verbatim next to the MCP tag.
+  const skillTag = options.skillTag || '';
+  const hint = options.hint || '⎋ esc back  ·  /help  ·  /mcp  ·  /skills  ·  /exit';
 
   return new Promise((resolve) => {
     let text = '';
@@ -114,29 +118,49 @@ function askInput(options = {}) {
       const top = YELLOW('╭' + '─'.repeat(inner) + '╮');
       const bot = YELLOW('╰' + '─'.repeat(inner) + '╯');
 
-      // Footer line under the box: active MCP tag + hint on the left, model on
-      // the right. CRITICAL: the visible length must never exceed `w`, or the
-      // footer wraps and the redraw math (which counts it as one line) leaves
-      // stale boxes on every keystroke. Priority when short on space:
-      // tag > model > hint (hint gets truncated first).
+      // Footer line under the box: active MCP tag + skills tag + hint on the
+      // left, model on the right. CRITICAL: the visible length must never
+      // exceed `w`, or the footer wraps and the redraw math (which counts it
+      // as one line) leaves stale boxes on every keystroke. Priority when
+      // short on space: mcp tag > skills tag > model > hint (hint gets
+      // truncated first, then the skills tag, then the model).
+      //
+      // tagSep is the gap BETWEEN the MCP tag and what follows it (skills
+      // tag, or hint if no skills). skillSep is the gap BETWEEN the
+      // skills tag and the hint. Both must be set whenever their
+      // respective tag is present — even when only one of the two is
+      // shown — otherwise the tag glues to the hint with no space and
+      // looks broken. The earlier `(tag && skillTag)` guard was wrong:
+      // skills are independent of MCP, so the skills tag can be shown
+      // without an MCP tag and must still get its own separator.
       const tagRaw = tag ? `@${tag}` : '';
       const tagSep = tag ? '  ' : '';
-      const leftFixed = tagRaw.length + tagSep.length;
+      const skillSep = skillTag ? '  ' : '';
+      const leftFixed = tagRaw.length + tagSep.length + skillTag.length + skillSep.length;
       let rightRaw = model ? `→ ${model}` : '';
       let hintShown = hint;
+      let skillTagShown = skillTag;
 
       const hintBudget = w - leftFixed - rightRaw.length - 1; // 1 = min gap
       if (hintBudget < 0) {
+        // Not enough room even for the model. First trim hint, then model,
+        // then the skills tag. The MCP tag always stays (it's the most
+        // important — the user must know which server is active).
+        const room = w - tagRaw.length - tagSep.length - 1;
+        if (room < skillTag.length) {
+          skillTagShown = '';
+        }
         hintShown = '';
-        rightRaw = rightRaw.slice(0, Math.max(0, w - leftFixed - 1));
+        rightRaw = rightRaw.slice(0, Math.max(0, w - tagRaw.length - tagSep.length - skillTagShown.length - 1));
       } else if (hint.length > hintBudget) {
         hintShown = hintBudget > 1 ? hint.slice(0, hintBudget - 1) + '…' : '';
       }
 
-      const usedLeft = leftFixed + hintShown.length;
+      const usedLeft = tagRaw.length + tagSep.length + skillTagShown.length + skillSep.length + hintShown.length;
       const gap = Math.max(1, w - usedLeft - rightRaw.length);
       const footer =
         (tag ? chalk.green(tagRaw) + tagSep : '') +
+        (skillTagShown ? chalk.green(skillTagShown) + skillSep : '') +
         chalk.gray(hintShown) +
         ' '.repeat(gap) +
         chalk.cyan(rightRaw);
