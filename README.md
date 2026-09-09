@@ -1,65 +1,141 @@
 <div align="center">
 
-# ☀️ sun2Agent
+# ☀️ Sun2Agent
 
-**Your terminal. Your MCP servers. One safe AI agent.**
+### Open-Source AI Agent CLI · Native MCP Client · Secure Tool Execution for Your Terminal
 
-A fast, security-hardened AI agent that lives in your terminal — connects to any
-[Model Context Protocol](https://modelcontextprotocol.io) server, calls tools
-automatically, and runs 5 layers of guardrails on every call.
+**The safest way to run an AI agent with real tool access — in your terminal, on your machine, under your control.**
 
-[![npm version](https://img.shields.io/npm/v/sun2agent?color=cb3837&label=npm&logo=npm)](https://www.npmjs.com/package/sun2agent)
-[![npm downloads](https://img.shields.io/npm/dm/sun2agent?color=cb3837&logo=npm)](https://www.npmjs.com/package/sun2agent)
-[![Node.js](https://img.shields.io/node/v/sun2agent?color=339933&logo=node.js&logoColor=white)](https://nodejs.org)
-[![License: MIT](https://img.shields.io/npm/l/sun2agent?color=blue)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-Node%20Test-brightgreen)](#guardrails)
+Sun2Agent is a free, open-source **AI agent CLI** and native **[Model Context Protocol](https://modelcontextprotocol.io) (MCP) client**. Connect any MCP server, let the agent discover and call tools automatically, apply reusable Skills and Agent instructions, and approve every sensitive action before it runs — all with zero telemetry.
 
-[Install](#install) · [Quick Start](#quick-start) · [MCP Servers](#connecting-mcp-servers) · [Docker Sandbox](#docker-sandbox-optional) · [Guardrails](#guardrails) · [Context (AGENT.md)](#repository-instructions-agentmd) · [Memory](#local-memory-optional) · [Skills](#skills-optional)
+[![npm version](https://img.shields.io/npm/v/sun2agent?color=cb3837&logo=npm&label=npm)](https://www.npmjs.com/package/sun2agent)
+[![npm monthly downloads](https://img.shields.io/npm/dm/sun2agent?color=cb3837&logo=npm&label=monthly%20downloads)](https://www.npmjs.com/package/sun2agent)
+[![npm total downloads](https://img.shields.io/npm/dt/sun2agent?color=cb3837&logo=npm&label=total%20downloads)](https://www.npmjs.com/package/sun2agent)
+[![Node.js version](https://img.shields.io/node/v/sun2agent?color=339933&logo=node.js&logoColor=white)](https://nodejs.org)
+[![License: MIT](https://img.shields.io/npm/l/sun2agent?color=blue)](https://github.com/snowhypers/Sun2Agent/blob/main/LICENSE)
+[![GitHub stars](https://img.shields.io/github/stars/snowhypers/Sun2Agent?style=social)](https://github.com/snowhypers/Sun2Agent/stargazers)
+[![GitHub last commit](https://img.shields.io/github/last-commit/snowhypers/Sun2Agent)](https://github.com/snowhypers/Sun2Agent/commits/main)
+[![GitHub issues](https://img.shields.io/github/issues/snowhypers/Sun2Agent)](https://github.com/snowhypers/Sun2Agent/issues)
+[![Issues Welcome](https://img.shields.io/badge/issues-welcome-brightgreen.svg)](https://github.com/snowhypers/Sun2Agent/issues)
+[![Maintained](https://img.shields.io/badge/maintained-yes-success.svg)](https://github.com/snowhypers/Sun2Agent/commits/main)
+
+**[Try Now](#try-it-now) · [Install](#install) · [Features](#features) · [MCP](#mcp-client--model-context-protocol) · [Skills](#ai-agent-skills) · [Context](#context) · [Sandbox](#docker-sandbox) · [Security](#security--guardrails) · [FAQ](#faq)**
+
+⭐ **[Star Sun2Agent on GitHub](https://github.com/snowhypers/Sun2Agent/stargazers)** — the fastest way to help other developers discover it.
 
 </div>
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/Ppp111ppp111/Sun2Agent/main/assets/sun2agent-demo.png" alt="sun2Agent Terminal Demo" width="100%" />
+  <img src="https://raw.githubusercontent.com/snowhypers/Sun2Agent/main/assets/sun2agent-demo.png" alt="Sun2Agent terminal AI agent CLI demo showing MCP tool calls and Human-in-the-Loop approval prompt" width="100%" />
 </p>
 
+---
+
+<a id="what-is"></a>
+## What Is Sun2Agent?
+
+**Sun2Agent is an open-source AI agent CLI and native MCP client that runs directly in your terminal — no IDE, no desktop app, no subscription.**
+
+It's for developers who want an AI agent that does more than chat: one that can call real tools through the **[Model Context Protocol](https://modelcontextprotocol.io)**, follow your project's own conventions via `AGENT.md`, reuse specialized instructions with Skills, remember your preferences locally, and ask before touching anything sensitive.
+
+**Common searches this answers:**
+`terminal AI agent` · `npm MCP client` · `AI agent CLI open source` · `secure autonomous coding agent` · `Model Context Protocol client npm` · `Claude Code alternative` · `Codex CLI alternative` · `self-hosted AI agent` · `human-in-the-loop AI agent`
+
+### What is MCP (Model Context Protocol)?
+
+MCP is an open standard that lets AI applications connect to external tools and data sources — filesystems, browsers, databases, APIs — through one consistent protocol instead of a custom integration per tool. Sun2Agent implements a **native MCP client**, so any MCP server built by anyone becomes usable by the agent immediately.
+
+<p align="center">
+  <p>Sun2Agent architecture diagram showing context layer, tools layer, security layer, and the AI agent runtime loop
+</p>
+
+```text
+                         ☀️ Sun2Agent
+                               │
+        ┌──────────────────────┼──────────────────────┐
+        │                      │                      │
+      Context                 Tools                Security
+        │                      │                      │
+     AGENT.md                 MCP                 Guardrails
+      Skills               Web Search                HITL
+      Memory                                        Sandbox
+        │                      │                      │
+        └──────────────────────┼──────────────────────┘
+                               │
+                          AI Agent Runtime
+                           LLM/ReAct Loop
+                     (Reason → Act → Observe → Repeat)
+                               │
+             ┌──────────────────────────────────┐
+             │          OBSERVABILITY           │
+             │          LangSmith               │
+             │       ├── LLM Tracing            │
+             │       ├── MCP Tracing            │
+             │       └── Error Visibility       │
+             └──────────────────────────────────┘
 ```
-› Go to example.com, inspect the page, take a screenshot,
-and click the More information link
-  ⚙ playwright__browser_navigate({"url":"https://example.com"})
-  ⚙ playwright__browser_take_screenshot()
-  ⚙ playwright__browser_click({"selector":"a"})...
-sun2Agent: The page is a minimal placeholder titled "Example Domain"…
 
-› read my AGENT.md and run the test suite the way it says
-  ⚙ filesystem__read_file({"path":"AGENT.md"})
-  ⚙ filesystem__run_command({"cmd":"npm test"})
-sun2Agent: Test suite complete — following your AGENT.md instructions.
+---
+
+<a id="try-it-now"></a>
+##  Try It Now
+
+```bash
+npx sun2agent
 ```
-## Why sun2Agent
 
-Most MCP clients bury the agent inside a heavy editor or desktop app. sun2Agent is
-**just a terminal** — start it, point it at your MCP servers, and ask for things in
-plain language. The agent figures out which tools to call.
+Or install it globally so it's available in every terminal session:
 
-|  | Feature |
-|---|---|
-| 🔌 | **Native MCP client** — `stdio`, `http` (Streamable HTTP), and `sse` transports, local or remote |
-| 🧰 | **One server or all at once** — connect everything and let the model pick the right tool |
-| ⚙️ | **Automatic tool-calling** — no tool syntax to memorize, just describe the task |
-| 🛡️ | **5-layer guardrails** — destructive commands, exfiltration, credential files, and secret leaks are blocked before anything runs |
-| ✋ | **Human-in-the-Loop (HITL)** — interactive per-session tool call approval (`Allow` / `Don't allow`) before any proposed tool executes |
-| 🐳 | **Optional Docker sandbox** — run the entire agent isolated in a container, with automatic session resume when Docker restarts |
-| 🧠 | **Local preference memory (`memory.md`)** — retain explicit user preferences across sessions with local search; zero telemetry or external API calls |
-| 🎯 | **Reusable skills (`skills.md`)** — save instruction blocks once, toggle them on per chat with a `[Skill: …]` tag under the input box |
-| 📄 | **AGENT.md support** — drop an `AGENT.md` in your project and the agent follows your repo's conventions |
-| 📊 | **LangSmith observability** — opt-in tracing of LLM calls and tool execution, sanitized before it leaves your machine |
-| 🎛️ | **Any NIM model** — Llama, GPT-OSS, Nemotron… swap anytime with `/config` |
-| ⌨️ | **Calm TUI** — rounded input box, live connection tags, `Esc` interrupts anything |
-| 🔎 | **Optional web search (Tavily)** — off by default; flip it on in `/config` (or set `TAVILY_API_KEY`) and the agent can call `web_search` for current events, latest versions, and live data using Tavily's free tier |
+```bash
+npm install -g sun2agent
+sun2agent
+```
 
+> Connect your tools. Select your Skills. Ask naturally.
+
+---
+
+<a id="why"></a>
+## Why Choose Sun2Agent?
+
+| | Typical MCP client | **Sun2Agent** |
+|---|---|---|
+| **Where it runs** | Bundled inside a heavy IDE or desktop app | Just a terminal — `npm i -g sun2agent` |
+| **Tool approval** | All-or-nothing, or none at all | Per-call Human-in-the-Loop (`Allow` / `Don't allow`) |
+| **Security model** | Trust the model | 5-layer guardrails block destructive commands, exfiltration, and credential access *before* execution |
+| **Isolation** | Usually none | Optional one-command Docker sandbox with automatic session resume |
+| **Memory & Skills** | Cloud-synced or none | Local-only `memory.md` / `skills.md`, zero telemetry |
+| **Cost** | Often subscription-gated | Open source, [MIT-licensed](https://github.com/snowhypers/Sun2Agent/blob/main/LICENSE) — pay only for your own model usage |
+| **Setup time** | Minutes to hours | Under 60 seconds with `npx sun2agent` |
+
+---
+
+
+<a id="features"></a>
+## Features
+
+| | Feature | Why it matters |
+|---|---|---|
+| 🤖 | **AI Agent CLI** | Full agent loop directly from your terminal — no browser tab, no desktop app |
+| 🔌 | **Native MCP client** | `stdio`, `http` (Streamable HTTP), and `sse` transports, local or remote |
+| ⚙️ | **Automatic tool-calling** | No tool syntax to memorize — describe the task in plain English |
+| 🛡️ | **5-layer guardrails** | Input, command, network, filesystem, and output guards catch risk before it runs |
+| ✋ | **Human-in-the-Loop** | Interactive per-session `Allow` / `Don't allow` approval before any tool executes |
+| 🐳 | **Optional Docker sandbox** | The entire agent runs isolated, with automatic session resume when Docker restarts |
+| 🧠 | **Local preference memory** | `~/.sun2agent/memory.md`, keyword search, zero external calls |
+| 🎯 | **Reusable Skills** | Save instruction blocks once, toggle them on per chat |
+| 📄 | **`AGENT.md` support** | Drop it in your project and the agent follows your conventions |
+| 📊 | **Optional LangSmith tracing** | Traces sanitized by the output guard before they leave your machine |
+| 🎛️ | **Any NVIDIA NIM model** | Llama, GPT-OSS, Nemotron… swap anytime with `/config` |
+| 🔎 | **Optional web search (Tavily)** | Off by default; enable in `/config` for current events and live data |
+| ⌨️ | **Calm terminal UI** | Live connection tags, `Esc` interrupts anything |
+
+---
+
+<a id="install"></a>
 ## Install
 
-> **Recommended — install sun2Agent globally so it is available in every terminal.**
+> **Recommended: install globally** so `sun2agent` is available in every terminal session.
 
 ```bash
 npm install -g sun2agent
@@ -74,32 +150,31 @@ sun2agent
 <details>
 <summary>Prefer not to install globally?</summary>
 
-Run the latest release on demand instead:
-
 ```bash
 npx sun2agent
 ```
 </details>
 
-**Requirements:** Node.js 18 or newer and an NVIDIA NIM API key.
+**Requirements:** Node.js 18+ and an NVIDIA NIM API key.
 
 > [!NOTE]
-> Do not run `npm install sun2agent` inside another project. Use `-g` above or `npx sun2agent`; installing it locally can trigger unrelated dependency resolution errors in that project.
+> Don't run `npm install sun2agent` (without `-g`) inside another project — it can trigger unrelated dependency-resolution errors in that project. Use `-g`, or `npx sun2agent`, instead.
 
+---
+
+<a id="quick-start"></a>
 ## Quick Start
-
-Your first useful tool call takes four short steps:
 
 ```text
 1. sun2agent       Start the agent
 2. /config         Add an NVIDIA NIM API key and choose a model
 3. /mcp            Add and connect an MCP server
-4. Ask naturally    “Read AGENT.md and run the tests”
+4. Ask naturally   "Read AGENT.md and run the tests"
 ```
 
-Get an API key from [NVIDIA Build](https://build.nvidia.com): choose a model, then select **Get API Key**. Keys begin with `nvapi-`.
+Get a free API key from **[NVIDIA Build](https://build.nvidia.com)**: pick a model, then select **Get API Key**. Keys begin with `nvapi-`.
 
-When a connected MCP tool is needed, sun2Agent shows the proposed call and asks:
+When a connected MCP tool is needed, Sun2Agent shows the exact proposed call and asks:
 
 ```text
 Allow this MCP tool call?
@@ -107,9 +182,34 @@ Allow — Don't allow
 [Enter] Allow    [Esc] Don't allow
 ```
 
-An allowed tool is remembered only for the current chat session; a denied call is skipped.
+An allowed tool is remembered only for the current chat session; a denied call is skipped and reported back to the model, which can try a safer alternative.
 
 ---
+
+<a id="use-cases"></a>
+## Use Cases
+
+**Understand an unfamiliar codebase**
+> "Read this repository, explain the architecture, and flag anything risky."
+With a filesystem MCP server connected, Sun2Agent inspects your project and reports back.
+
+**Run project-aware workflows**
+> "Read AGENT.md, follow the project rules, and run the tests."
+The agent combines your stated conventions with the tools available to it.
+
+**Automate browser tasks**
+> "Open this site, take a screenshot, and click the pricing link."
+Connect [Playwright MCP](https://github.com/microsoft/playwright-mcp) and describe the flow in plain English.
+
+**Apply a consistent review process**
+Activate a `Code Review` or `Security Audit` Skill so every review follows the same checklist, every time.
+
+**Execute sensitive actions with a human in the loop**
+Deletions, force-pushes, and network calls all route through guardrails and an explicit approval prompt first.
+
+---
+
+<a id="commands"></a>
 ## Commands
 
 | Command | Action |
@@ -117,9 +217,9 @@ An allowed tool is remembered only for the current chat session; a denied call i
 | `/help`, `/?` | Show all commands and shortcuts |
 | `/config` | Set your NVIDIA NIM API key and choose a model |
 | `/mcp` | Manage MCP servers — add/edit, connect one or all, disconnect |
-| `/agent` | Open the project's AGENT.md in your editor (creates a template on first use) |
+| `/agent` | Open the project's `AGENT.md` (creates a template on first use) |
 | `/memory` | Open and edit local `~/.sun2agent/memory.md` |
-| `/skills` | Manage reusable instruction skills — add/edit `skills.md`, select which skills are active |
+| `/skills` | Add/edit `skills.md` and choose which Skills are active |
 | `/delete` | Delete saved config and data |
 | `/exit` | Quit |
 
@@ -127,11 +227,30 @@ An allowed tool is remembered only for the current chat session; a denied call i
 |-----|--------|
 | `Enter` | Send message |
 | `Esc` *(while typing)* | Clear the input |
-| `Esc` *(empty box)* | Disconnect MCP / clear selected skills, return to simple chat || `Esc` *(agent working)* | Stop the current reply or tool call |
+| `Esc` *(empty box)* | Disconnect MCP / clear selected Skills |
+| `Esc` *(agent working)* | Stop the current reply or tool call |
 | `Esc` *(in menus)* | Go back / cancel |
 | `Ctrl+C` | Quit immediately |
 
-## Connecting MCP servers
+---
+
+<a id="mcp-client--model-context-protocol"></a>
+## MCP Client & Model Context Protocol
+
+```text
+                    Sun2Agent
+                        │
+                 MCP Client Layer
+                        │
+        ┌───────────────┼────────────────┐
+        │               │                │
+      stdio            HTTP              SSE
+        │               │                │
+        ▼               ▼                ▼
+   Local Tools     Remote Tools     Remote Tools
+```
+
+Examples of what you can connect: filesystem tools, browser automation ([Playwright MCP](https://github.com/microsoft/playwright-mcp)), databases, internal APIs, or any custom MCP server.
 
 **1. Open the config.** Run `/mcp` → **Add / Edit MCP**. This opens `~/.sun2agent/mcp.json` in your editor.
 
@@ -171,37 +290,27 @@ An allowed tool is remembered only for the current chat session; a denied call i
 
 Set `"enabled": false` on any server to skip it without deleting it.
 
-**3. Connect.** Run `/mcp` → **Connect MCP**, then pick a server — or **Connect all MCPs** to load every server at once.
+**3. Connect.** Run `/mcp` → **Connect MCP**, then pick a server — or **Connect all MCPs** to load every server at once. The active server shows as a green `@tag` under the input box (`@allMcps` when several are connected).
 
-The active server appears as a green `@tag` under the input box (`@allMcps` when several are connected), and its tools are available to the agent immediately.
+---
 
-## Docker sandbox (optional)
+<a id="context"></a>
+## Context: AGENT.md, Memory & Skills
 
-Run the **entire agent** — chat loop, guardrails, LLM calls, MCP client — inside an
-isolated container. Only your project directory and the agent's own config are
-visible; nothing else on your machine is reachable.
+Sun2Agent builds up what the agent knows about you and your project from three local, plain-text layers — no cloud sync, no telemetry. Together they're what "context" means for Sun2Agent: **project rules, remembered preferences, and reusable behaviors.**
 
-```bash
-sun2agent sandbox enable     # turn it on (checks Docker first)
-sun2agent sandbox status     # see current mode
-sun2agent sandbox disable    # back to running on the host
+```text
+ AGENT.md   → per-project conventions, read from your repo
+ memory.md  → per-user preferences, remembered across sessions
+ skills.md  → per-user reusable instruction blocks, toggled on per chat
 ```
 
-- **No silent fallback.** If Docker is installed but not running, sun2Agent tells
-  you and exits — it never quietly runs unsandboxed on your host.
-- **Survives outages.** Your conversation is saved after every exchange. If Docker
-  stops mid-session, the agent waits for it to come back and resumes exactly where
-  you left off.
-- **Root is refused.** Launching from `/` (which would expose your whole machine)
-  is blocked with a clear message.
+All three are injected into the system prompt as clearly-labelled, **advisory-only** context — in that order (`AGENT.md` → Skills → memory). None of them can override your core instructions or any guardrail.
 
-## Repository Instructions (AGENT.md)
+<a id="agent-md"></a>
+### Agent Instructions (`AGENT.md`)
 
-sun2Agent reads project-specific instructions from an `AGENT.md` file in the
-directory you launch from — your conventions, stated once, followed every prompt.
-
-Type `/agent` in the chat to open (or create) it. On first use a template is
-generated for you:
+Sun2Agent reads project-specific instructions from an `AGENT.md` file in the directory you launch from. Type `/agent` to open (or create) it — a template is generated on first use:
 
 ```markdown
 # Project Instructions
@@ -212,27 +321,26 @@ generated for you:
 - Follow the existing project structure.
 ```
 
-The file is appended to the system prompt as clearly-labelled advisory context. If
-`AGENT.md` does not exist, sun2Agent behaves exactly as before.
-
 > [!IMPORTANT]
-> **AGENT.md is advisory only.** It cannot override, disable, or bypass sun2Agent's guardrails. The guardrails run on entirely separate code paths (user prompts, tool arguments, tool output) and are not affected by system-prompt text.
+> **`AGENT.md` is advisory only.** It cannot override, disable, or bypass any guardrail. Guardrails run on separate code paths that system-prompt text can't touch.
 
-## Local memory (optional)
+<a id="memory"></a>
+### Local Memory (`memory.md`)
 
-Enable memory from `/config` to let sun2Agent retain explicit preferences between sessions. Memory lives locally and makes no model, embedding, telemetry, or memory-service requests.
+Enable memory from `/config` to let Sun2Agent retain explicit preferences between sessions. Memory lives locally and makes no model, embedding, telemetry, or memory-service requests.
 
 - Editable memories live in `~/.sun2agent/memory.md`.
 - `/memory` opens `memory.md` even when automatic memory is disabled.
 - Local keyword relevance selects up to five memories; the full file is never injected.
-- Explicit phrases such as “remember that…”, “I prefer…”, and “always…” can be saved automatically.
-- Memory is contextual only and cannot override AGENT.md, guardrails, security policy, or Docker restrictions.
+- Explicit phrases such as "remember that…", "I prefer…", and "always…" can be saved automatically.
+- Memory is contextual only and cannot override `AGENT.md`, guardrails, security policy, or Docker restrictions.
 
-## Skills (optional)
+<a id="ai-agent-skills"></a>
+### AI Agent Skills (`skills.md`)
 
-Skills are reusable instruction blocks you write once and toggle onto the agent whenever you need them — a coding style, a review checklist, a writing voice. They live in one hand-edited markdown file, `~/.sun2agent/skills.md`, and work exactly like AGENT.md: advisory context, no API keys, no LLM calls to manage them.
+Skills are reusable instruction blocks you write once and toggle onto the agent whenever you need them — a coding style, a review checklist, a writing voice. They live in `~/.sun2agent/skills.md`.
 
-**1. Write skills.** Run `/skills` → **Add/Edit Skills** (opens `skills.md` in your editor; the file is created with a starter template on first use). Each skill is a `## Name` heading followed by its instructions:
+**1. Write skills.** Run `/skills` → **Add/Edit Skills**. Each skill is a `## Name` heading followed by instructions:
 
 ```markdown
 ## Code Review
@@ -242,30 +350,114 @@ When reviewing code:
 - Always run the test suite before approving.
 ```
 
-Anything before the first `## ` heading is a comment — use it for notes. That's the whole format: no YAML, no frontmatter.
-
-**2. Select skills.** Run `/skills` → **Select Skills** and check the ones you want active. Your selection is saved to `~/.sun2agent/config.json`, and the active skills appear as tags under the input box:
+**2. Select skills.** Run `/skills` → **Select Skills**. Active Skills appear as tags under the input box:
 
 ```text
-[Skill: Code Review]  [Skill: Concise Answers]
+[Skill: Code Review]  [Skill: Security Audit]
 ```
 
-From then on, every message in that chat is answered with those skills applied — no need to mention them in the prompt.
+**3. Detach when done.** Press `Esc` on an empty input box to clear selected Skills and return to plain chat.
 
-**3. Detach when done.** Press `Esc` on an empty input box to clear the selected skills and return to plain agent chat (the selection is cleared persistently). You can also re-run `/skills` → **Select Skills** and uncheck them.
-
-How skills reach the model — the same advisory contract as AGENT.md:
-
-- Selected skills are injected into the system prompt as a clearly-labelled section, after AGENT.md and before memory.
-- They are **advisory only**: they cannot override your core instructions, security guidelines, or any guardrail. If a skill conflicts with a safety rule, the safety rule wins.
-- Skills are per-user (shared across projects); AGENT.md is per-project.
-- Only the selected skills are injected — the full file is never sent.
-- If you delete a skill from `skills.md` while it's selected, it is silently skipped (no crash).
+- Selected Skills are injected into the system prompt after `AGENT.md` and before memory.
+- Skills are per-user (shared across projects); `AGENT.md` is per-project.
 
 > [!NOTE]
-> `Esc` on an empty input box does double duty: it disconnects the active MCP server first if one is connected, otherwise it clears the selected skills.
+> `Esc` on an empty input box does double duty: it disconnects the active MCP server first if one is connected, otherwise it clears selected Skills.
 
-## LangSmith observability
+---
+
+<a id="hitl"></a>
+## Human-in-the-Loop
+
+```text
+AI Agent
+    │
+    ▼
+Proposed Tool Call
+    │
+    ▼
+Human Approval
+    │
+ ┌──┴──────────┐
+ ▼             ▼
+Allow      Don't allow
+ │             │
+ ▼             ▼
+Execute      Skipped
+```
+
+Approval is per-session: allow a tool once, and it's remembered for the rest of that chat.
+
+---
+
+<a id="security--guardrails"></a>
+## Security & Guardrails
+
+Every MCP tool call passes through **five layers of guards** first — plain pattern matching, no extra model calls, no measurable latency.
+
+```text
+User prompt ──▶ inputGuard ──▶ LLM ──▶ tool call
+                                          │
+                    commandGuard ──▶ networkGuard ──▶ filesystemGuard
+                                          │
+                                    Execute tool
+                                          │
+                                     outputGuard ──▶ Terminal
+```
+
+| Guard | Blocks |
+|-------|--------|
+| **inputGuard** | Prompt injection, jailbreaks, system-prompt extraction |
+| **commandGuard** | `rm -rf`, `sudo`, `mkfs`, `dd if=`, fork bombs, `curl \| sh`, reverse shells, `git push --force` |
+| **networkGuard** | Data exfiltration (`cat .env \| curl`), uploads (`curl -d`, `scp`, `nc`) |
+| **filesystemGuard** | `.env`, `.ssh`, `.aws`, `id_rsa`, `*.pem`, path traversal, anything outside the project root |
+| **outputGuard** | Masks API keys, AWS/GitHub/Slack tokens, JWTs, and private keys in tool output |
+
+All policy lives in one file — [`src/core/guardrails/guardConfig.js`](https://github.com/snowhypers/Sun2Agent/blob/main/src/core/guardrails/guardConfig.js). Notable knobs:
+
+- `projectRoot` — the filesystem sandbox, defaulting to the launch directory.
+- `strictDomains` — off by default; restricts outbound URLs to `allowedDomains` when enabled.
+
+```bash
+npm test
+```
+
+### Security & trust
+
+- **Your keys stay local** in `~/.sun2agent/` with owner-only permissions, never bundled with the package.
+- **MCP child processes get a clean environment** — only a safe allowlist (`PATH`, `HOME`, …) is passed to `stdio` servers.
+- **`mcp.json` can launch programs** — treat it like a shell script; only add servers you trust.
+- **Guards reduce risk; they don't eliminate it.** A novel phrasing can get through pattern matching.
+- **`AGENT.md` and Skills are advisory only** — neither can bypass a guardrail or Docker restriction.
+
+---
+
+<a id="docker-sandbox"></a>
+## Optional Docker Sandbox
+
+Run the **entire agent** — chat loop, guardrails, LLM calls, MCP client — inside an isolated container. Only your project directory and the agent's own config are visible; nothing else on your machine is reachable.
+
+```bash
+sun2agent sandbox enable     # turn it on (checks Docker first)
+sun2agent sandbox status     # see current mode
+sun2agent sandbox disable    # back to running on the host
+```
+
+- **No silent fallback** — if Docker isn't running, Sun2Agent tells you and exits.
+- **Survives outages** — your conversation is saved after every exchange and resumes when Docker comes back.
+- **Root is refused** — launching from `/` is blocked.
+
+---
+
+<a id="web-search"></a>
+## Web Search
+
+Off by default. Enable it in `/config` (or set `TAVILY_API_KEY`) for `web_search` via [Tavily](https://tavily.com)'s free tier — useful for current events and recent software versions.
+
+---
+
+<a id="observability"></a>
+## Observability
 
 Optionally trace LLM calls and MCP tool execution with LangSmith:
 
@@ -280,62 +472,49 @@ Key points:
 - LangSmith credentials are stored in `~/.sun2agent/config.json` with owner-only permissions.
 - Disable any time by re-running `/config`.
 
-## Guardrails
+---
 
-Because MCP tools run automatically on the model's say-so, every call passes
-through five layers of guards first. Plain pattern matching — no extra model
-calls, no network activity, no measurable latency.
+<a id="requirements"></a>
+## Requirements
 
-```
-User prompt ──▶ inputGuard ──▶ LLM ──▶ tool call
-                                          │
-                    commandGuard ──▶ networkGuard ──▶ filesystemGuard
-                                          │
-                                    Execute tool
-                                          │
-                                     outputGuard ──▶ Terminal
-
-System prompt = base persona + MCP tool list + AGENT.md (advisory only)
-```
-
-| Guard | Blocks |
-|-------|--------|
-| **inputGuard** | Prompt injection, jailbreaks, system-prompt extraction |
-| **commandGuard** | `rm -rf`, `sudo`, `mkfs`, `dd if=`, fork bombs, `curl … \| sh`, reverse shells, `git push --force` |
-| **networkGuard** | Data exfiltration (`cat .env \| curl`), uploads (`curl -d`, `scp`, `nc`) |
-| **filesystemGuard** | `.env`, `.ssh`, `.aws`, `id_rsa`, `*.pem`, path traversal, anything outside the project root |
-| **outputGuard** | Masks API keys, AWS/GitHub/Slack tokens, JWTs, private keys in tool output |
-
-A blocked call fails with a clear reason and is reported back to the model, which can then try a safe alternative.
-
-All policy lives in [`src/guardrails/guardConfig.js`](src/guardrails/guardConfig.js) — edit that one file to tighten or relax the rules. Notable knobs:
-
-- `projectRoot` — the filesystem sandbox. Defaults to the directory you launched from, so **start sun2Agent inside the project you want the agent working on.** File arguments pointing outside it are refused.
-- `strictDomains` — off by default. Turn it on to restrict outbound URLs to `allowedDomains`.
-
-Run the full test suite (Node's built-in test runner; no test dependencies):
+- Node.js 18+
+- An [NVIDIA NIM](https://build.nvidia.com) API key (`nvapi-...`)
+- Optional: MCP servers you want to connect
+- Optional: [Docker](https://www.docker.com) for sandboxing
 
 ```bash
+node --version
+```
+
+---
+
+<a id="development"></a>
+## Development
+
+```bash
+git clone https://github.com/snowhypers/Sun2Agent.git
+cd Sun2Agent
+npm install
+npm start
 npm test
 ```
 
-## Security & trust
+---
 
-- **Your keys stay local.** The API key and `mcp.json` live in `~/.sun2agent/` with owner-only permissions, and are never bundled with the package.
-- **MCP child processes get a clean environment.** Only a safe allowlist of variables (`PATH`, `HOME`, …) is passed to stdio servers — your API keys never leak into child processes.
-- **`mcp.json` can launch programs.** A `stdio` server runs whatever `command` you give it — treat the file like a shell script and only add servers you trust.
-- **Guards reduce risk; they don't eliminate it.** They match known-dangerous patterns, so a novel phrasing can get through. Stay careful when a session mixes servers that read untrusted web content with servers that can take destructive actions.
-- **AGENT.md is advisory only** and cannot modify, disable, or bypass any guardrail.
-- **Selected skills are advisory too.** `skills.md` content reaches the model as context only — it cannot enable a blocked tool call, weaken a guard, or change Docker restrictions.
-
+<a id="troubleshooting"></a>
 ## Troubleshooting
 
 **Tools are listed but the model never calls them**
-Some models tool-call more reliably than others. Try a different model with `/config`, or name the tool explicitly in your prompt.
+Some models tool-call more reliably than others. Try a different model with `/config`, or name the tool explicitly.
 
 **`/agent` doesn't open the file**
-Make sure you're running the latest version. If you edited the source locally, run `npm link` from the project directory so the global `sun2agent` command points at your working copy.
+Run `npm link` from the project directory so the global `sun2agent` command points at your working copy.
 
+**More help:** open an issue at [github.com/snowhypers/Sun2Agent/issues](https://github.com/snowhypers/Sun2Agent/issues).
+
+---
+
+<a id="uninstall"></a>
 ## Uninstall
 
 ```bash
@@ -343,6 +522,73 @@ sun2agent delete            # optional: remove saved config + mcp.json
 npm uninstall -g sun2agent
 ```
 
-## License
+---
 
-MIT
+<a id="contributing"></a>
+## Contributing & Project Status
+
+**Status:** Public, open source, actively maintained
+**Maintainer:** Pradip — [Sun2Agent](https://github.com/snowhypers/Sun2Agent)
+**Pull requests:** Not being accepted yet. Sun2Agent is currently a solo-built project, and the focus right now is on stability, core features, growing the user base, and fixing real bugs before opening up the codebase to outside changes.
+
+You don't need to touch a line of code to help — right now the most useful contributions are:
+
+| | How to help |
+|---|---|
+| 🐛 | **Report a bug** → [open an issue](https://github.com/snowhypers/Sun2Agent/issues) |
+| 💡 | **Suggest a feature** → [open an issue](https://github.com/snowhypers/Sun2Agent/issues) |
+| 💬 | **Ask a question or share feedback** → [start a discussion](https://github.com/snowhypers/Sun2Agent/discussions) |
+| ⭐ | **Star the repo** → [github.com/snowhypers/Sun2Agent](https://github.com/snowhypers/Sun2Agent/stargazers) — the single biggest thing that helps other developers find it |
+| 📣 | **Share it** → a tweet, a Reddit post, a Show HN, or just telling another developer |
+
+Community pull requests will open in a later phase once the core is stable. For now, **issues and discussions are the best way to contribute.**
+
+---
+
+<a id="faq"></a>
+## ❓ FAQ
+
+**Is Sun2Agent free?**
+Yes — [MIT-licensed](https://github.com/snowhypers/Sun2Agent/blob/main/LICENSE) and free. You only pay for your own NVIDIA NIM model usage (many models have a free tier).
+
+**Does Sun2Agent send my data anywhere?**
+Only to NVIDIA NIM to run your prompt, and optionally to LangSmith or Tavily if you enable them yourself. Config, memory, and Skills stay local with zero telemetry.
+
+**What's the difference between Sun2Agent and a desktop MCP client?**
+A lightweight terminal CLI — no IDE required — with built-in destructive-command guardrails, per-call human approval, and an optional Docker sandbox.
+
+**Can I use my own MCP servers?**
+Yes. Any `stdio`, `http`, or `sse` MCP server can be added to `~/.sun2agent/mcp.json`.
+
+**Does it work with models other than NVIDIA NIM?**
+Sun2Agent currently targets NVIDIA NIM-hosted models (Llama, GPT-OSS, Nemotron) through an OpenAI-compatible endpoint, configurable with `/config`.
+
+**Does Sun2Agent require Docker?**
+No — Docker sandboxing is entirely optional.
+
+**What's the difference between AGENT.md, memory, and Skills?**
+`AGENT.md` is per-project and repo-scoped; memory and Skills are per-user and follow you across projects. Memory is preferences the agent remembers automatically; Skills are instruction blocks you write and toggle on deliberately.
+
+**Is Sun2Agent a good Claude Code or Codex CLI alternative?**
+It solves a related but different problem: Sun2Agent is MCP-first and model-agnostic within NVIDIA NIM's catalog, with an emphasis on guardrails and human approval for any tool call, not just coding tasks. See the [comparison table](#vs-alternatives) above.
+
+---
+
+<a id="license"></a>
+## 📜 License
+
+[MIT](https://github.com/snowhypers/Sun2Agent/blob/main/LICENSE) — free for personal and commercial use.
+
+---
+
+<div align="center">
+
+### ☀️ Sun2Agent
+
+**Your terminal. Your MCP servers. One safe AI agent.**
+
+[npm](https://www.npmjs.com/package/sun2agent) · [GitHub](https://github.com/snowhypers/Sun2Agent) · [Issues](https://github.com/snowhypers/Sun2Agent/issues) · [Discussions](https://github.com/snowhypers/Sun2Agent/discussions) · [Star it](https://github.com/snowhypers/Sun2Agent/stargazers)
+
+**Keywords:** AI agent CLI · terminal AI agent · MCP client · Model Context Protocol npm · open source AI agent · secure AI agent · autonomous coding agent · NVIDIA NIM · LLM tool calling · Docker sandboxed agent · developer AI tools · CLI chatbot · agentic terminal · human-in-the-loop AI · self-hosted AI agent · Claude Code alternative · Codex CLI alternative
+
+</div>

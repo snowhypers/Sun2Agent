@@ -1,7 +1,7 @@
 {
   "name": "sun2agent",
   "version": "1.5.0",
-  "description": "Terminal AI agent with a native MCP client — automatic tool-calling, 5-layer security guardrails, optional Docker sandbox, and LangSmith observability. Powered by NVIDIA NIM.",
+  "description": "Open-source AI agent CLI and native MCP (Model Context Protocol) client for your terminal. Automatic tool-calling, Human-in-the-Loop approval, 5-layer security guardrails, optional Docker sandbox, and LangSmith observability — powered by NVIDIA NIM.",
   "main": "bin/sun2agent.js",
   "bin": {
     "sun2agent": "./bin/sun2agent.js"
@@ -16,23 +16,38 @@
     "test": "node --test \"test/*.test.js\""
   },
   "keywords": [
+   "ai-agent",
+    "ai-agent-cli",
+    "terminal-ai-agent",
     "cli",
     "terminal",
     "tui",
     "ai",
-    "ai-agent",
-    "chat",
-    "chatbot",
-    "agent",
     "llm",
+    "llm-agent",
+    "agent",
+    "chatbot",
+    "autonomous-agent",
     "mcp",
-    "model-context-protocol",
     "mcp-client",
+    "model-context-protocol",
+    "tool-calling",
+    "function-calling",
+    "human-in-the-loop",
+    "hitl",
+    "security",
+    "guardrails",
+    "prompt-injection",
+    "sandbox",
+    "docker",
     "nvidia",
     "nim",
-    "docker",
-    "sandbox",
+    "nvidia-nim",
     "developer-tools",
+    "devtools",
+    "cli-tool",
+    "npx",
+    "open-source",
     "langsmith",
     "observability"
   ],
@@ -40,12 +55,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Ppp111ppp111/Sun2Agent.git"
+    "url": "git+https://github.com/snowhypers/Sun2Agent.git"
   },
   "bugs": {
-    "url": "https://github.com/Ppp111ppp111/Sun2Agent/issues"
+    "url": "https://github.com/snowhypers/Sun2Agent/issues"
   },
-  "homepage": "https://github.com/Ppp111ppp111/Sun2Agent#readme",
+  "homepage": "https://github.com/snowhypers/Sun2Agent#readme",
   "engines": {
     "node": ">=18"
   },
