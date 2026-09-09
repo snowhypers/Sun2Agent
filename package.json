@@ -1,6 +1,6 @@
 {
   "name": "sun2agent",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "Open-source AI agent CLI and native MCP (Model Context Protocol) client for your terminal. Automatic tool-calling, Human-in-the-Loop approval, 5-layer security guardrails, optional Docker sandbox, and LangSmith observability — powered by NVIDIA NIM.",
   "main": "bin/sun2agent.js",
   "bin": {
@@ -16,7 +16,7 @@
     "test": "node --test \"test/*.test.js\""
   },
   "keywords": [
-   "ai-agent",
+    "ai-agent",
     "ai-agent-cli",
     "terminal-ai-agent",
     "cli",
