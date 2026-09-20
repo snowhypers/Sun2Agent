@@ -13,6 +13,14 @@ const path = require('path');
 
 const FIXTURE = path.join(__dirname, 'fixtures', 'e2eMcpServer.js');
 
+// This suite tests the real MCP/HITL execution boundary, not Docker. Keep the
+// fixture launch independent of the developer's saved sandbox preference in
+// ~/.sun2agent/config.json; otherwise an enabled-but-stopped Docker daemon
+// makes the local stdio fixture fail before the behavior under test is reached.
+const sandbox = require('../src/core/sandbox');
+const realWrapStdioCommand = sandbox.wrapStdioCommand;
+sandbox.wrapStdioCommand = (command, args) => ({ command, args });
+
 // Patch the server list DEFINITION before `mcp` loads: mcp.js captures
 // `getServers` by destructuring at require time, so this must happen first to
 // point it at the local fixture instead of the real ~/.sun2agent/mcp.json.
@@ -36,6 +44,7 @@ after(async () => {
   // Restore anything the tests patched.
   await mcp.disconnectAll();
   hitl.startPrompt();
+  sandbox.wrapStdioCommand = realWrapStdioCommand;
 });
 
 async function stats() {

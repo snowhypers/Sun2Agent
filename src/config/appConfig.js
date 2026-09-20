@@ -6,10 +6,11 @@ const CONFIG_DIR = path.join(os.homedir(), '.sun2agent');
 const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
 
 const MODELS = [
-  { id: 'openai/gpt-oss-120b', tag: 'allrounder-text', name: 'GPT-OSS 120B' },
+  { id: 'nvidia/nemotron-3.5-lightning-30b-a3b', tag: 'fast-reasoning', name: 'Nemotron 3.5 Lightning 30B' },
+  { id: 'meta/muse-glimmer-30b', tag: 'creative', name: 'Muse Glimmer 30B' },
+  { id: 'nvidia/nemotron-3-ultra-550b-a55b', tag: 'advanced-reasoning', name: 'Nemotron 3 Ultra 550B' },
   { id: 'nvidia/nemotron-3-super-120b-a12b', tag: 'allrounder-text', name: 'Nemotron 3 Super' },
-  { id: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning', tag: 'multimodel-reasoning', name: 'Nemotron Nano Omni' },
-  { id: 'nvidia/llama-3.1-nemotron-70b-instruct', tag: 'general', name: 'Llama 3.1 Nemotron 70B' }
+  { id: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning', tag: 'multimodel-reasoning', name: 'Nemotron Nano Omni' }
 ];
 
 function ensureConfigDir() {

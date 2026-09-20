@@ -59,8 +59,8 @@ function serial(fn) {
 
 // Spawn the real CLI with a script of typed inputs. Resolves when the process
 // exits, the timeout fires, or the process writes a fatal-looking line to
-// stderr (we don't want to wait 8s just to find out it already crashed).
-function spawnCli({ home, inputs, timeoutMs = 20000 } = {}) {
+// stderr (we don't want to wait for the timeout after it already crashed).
+function spawnCli({ home, inputs, timeoutMs = 60000 } = {}) {
   return new Promise((resolve) => {
     const child = spawn(process.execPath, [BIN], {
       env: { ...process.env, HOME: home, PATH: process.env.PATH },
@@ -79,7 +79,39 @@ function spawnCli({ home, inputs, timeoutMs = 20000 } = {}) {
       resolve(result);
     };
 
-    child.stdout.on('data', (d) => { stdout += d.toString(); });
+    const promptMarkers = inputs.length === 1
+      ? [/› /]
+      : [
+          /Paste your NVIDIA NIM API key/,
+          /Select a model/,
+          /Enable web search \(Tavily\)/,
+          /Enable LangSmith observability/,
+          /Enable memory/,
+          /› /
+        ];
+    let nextInput = 0;
+    let inputScheduled = false;
+    const writeWhenReady = () => {
+      if (inputScheduled || nextInput >= inputs.length) return;
+      const marker = promptMarkers[nextInput];
+      if (!marker || !marker.test(stripAnsi(stdout))) return;
+      inputScheduled = true;
+      setTimeout(() => {
+        if (!settled) child.stdin.write(inputs[nextInput]);
+        nextInput += 1;
+        inputScheduled = false;
+        if (nextInput >= inputs.length) {
+          // Give /exit time to reach the readline handler before closing stdin.
+          setTimeout(() => { if (!settled) child.stdin.end(); }, 300);
+        }
+      }, 50);
+    };
+    child.stdout.on('data', (d) => {
+      stdout += d.toString();
+      // Module loading and prompt transitions vary across machines and Node
+      // versions. Send each answer only after its prompt is actually ready.
+      writeWhenReady();
+    });
     child.stderr.on('data', (d) => {
       const chunk = d.toString();
       stderr += chunk;
@@ -103,26 +135,8 @@ function spawnCli({ home, inputs, timeoutMs = 20000 } = {}) {
       timeoutMs
     );
 
-    // Feed the script of inputs one line at a time, with a short gap so each
-    // inquirer prompt has time to register the previous answer. The gap (300ms
-    // by default) is the tradeoff between speed and reliability: too tight and
-    // a slow boot can swallow two inputs as one; too loose and the suite
-    // takes forever. 300ms is fast enough for the ~1.5s per-test budget and
-    // has enough headroom for the boot + each of the five prompts.
-    const gapMs = inputs.gapMs || 300;
-    let i = 0;
-    const writeNext = () => {
-      if (i >= inputs.length) {
-        // End stdin so the REPL sees EOF on the next readline; harmless if
-        // /exit was already processed.
-        child.stdin.end();
-        return;
-      }
-      child.stdin.write(inputs[i]);
-      i += 1;
-      setTimeout(writeNext, gapMs);
-    };
-    setTimeout(writeNext, 200);
+    // Prompt observations drive the script. The main timeout remains the
+    // fail-safe if the CLI crashes or never becomes ready.
   });
 }
 

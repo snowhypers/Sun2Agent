@@ -126,7 +126,7 @@ sun2agent
 | 🎯 | **Reusable Skills** | Save instruction blocks once, toggle them on per chat |
 | 📄 | **`AGENT.md` support** | Drop it in your project and the agent follows your conventions |
 | 📊 | **Optional LangSmith tracing** | Traces sanitized by the output guard before they leave your machine |
-| 🎛️ | **Any NVIDIA NIM model** | Llama, GPT-OSS, Nemotron… swap anytime with `/config` |
+| 🎛️ | **NVIDIA NIM models** | Nemotron, Muse Glimmer… swap anytime with `/config` |
 | 🔎 | **Optional web search (Tavily)** | Off by default; enable in `/config` for current events and live data |
 | ⌨️ | **Calm terminal UI** | Live connection tags, `Esc` interrupts anything |
 
@@ -561,7 +561,7 @@ A lightweight terminal CLI — no IDE required — with built-in destructive-com
 Yes. Any `stdio`, `http`, or `sse` MCP server can be added to `~/.sun2agent/mcp.json`.
 
 **Does it work with models other than NVIDIA NIM?**
-Sun2Agent currently targets NVIDIA NIM-hosted models (Llama, GPT-OSS, Nemotron) through an OpenAI-compatible endpoint, configurable with `/config`.
+Sun2Agent currently targets NVIDIA NIM-hosted models (Nemotron and Muse Glimmer) through an OpenAI-compatible endpoint, configurable with `/config`.
 
 **Does Sun2Agent require Docker?**
 No — Docker sandboxing is entirely optional.
