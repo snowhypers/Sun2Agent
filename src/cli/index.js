@@ -6,6 +6,7 @@ const guardrails = require('../core/guardrails');
 const observability = require('../core/observability');
 const memory = require('../core/memory');
 const skills = require('../core/skills');
+const telegram = require('../core/telegram');
 const { askInput, ESC_BACK } = require('./ui/input');
 const { watchEscape, waitEnterOrEsc } = require('./ui/escapeWatcher');
 const { printBanner, printIntro } = require('./ui/banner');
@@ -19,6 +20,18 @@ const { promptBack, printUserLine, sanitizeTerminalText } = require('./prompt');
 // Check whether the Docker sandbox is enabled and Docker has gone down.
 // (extracted to src/cli/dockerStatus.js so the MCP command can reuse it)
 const { dockerDownWarning } = require('./dockerStatus');
+
+async function syncTelegram(config) {
+  try {
+    const status = await telegram.sync(config);
+    if (status.enabled) {
+      const username = status.username ? ` (@${status.username})` : '';
+      console.log(chalk.green(`✓ Telegram connected${username}\n`));
+    }
+  } catch (error) {
+    console.log(chalk.yellow(`⚠ Telegram could not start: ${error.message || 'connection failed'}\n`));
+  }
+}
 
 // --- Session persistence (Docker outage resume) -----------------------------
 //
@@ -79,6 +92,10 @@ async function startChat() {
     }
   }
 
+  // Telegram is optional. Its long-poll listener runs beside the terminal
+  // chat and is restricted to the one private chat ID saved by /config.
+  await syncTelegram(config);
+
   const history = [];
 
   // Relaunch after a Docker outage (the host launcher sets SUN2AGENT_RESUME=1):
@@ -135,6 +152,7 @@ async function startChat() {
 
     // Command handling
     if (text === '/exit') {
+      await telegram.stop();
       await mcp.disconnectAll();
       clearSession(); // clean exit — nothing to resume next time
       console.log(chalk.yellow('Goodbye! 👋'));
@@ -156,7 +174,10 @@ async function startChat() {
         if (text === '/config') config = loadConfig();
       } else {
         await handler({ promptBack, waitEnterOrEsc, dockerDownWarning, loadConfig, saveConfig });
-        if (text === '/config') config = loadConfig();
+        if (text === '/config') {
+          config = loadConfig();
+          await syncTelegram(config);
+        }
         // /skills writes selectedSkills via saveConfig; reload so the next
         // input box shows the updated skill tags immediately.
         if (text === '/skills') config = loadConfig();

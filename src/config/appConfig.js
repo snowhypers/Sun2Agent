@@ -26,6 +26,7 @@ function defaultConfig() {
     memory: { enabled: false },
     hitl: { mcpApproval: true },
     search: { enabled: false, provider: 'tavily', apiKey: '' },
+    telegram: { enabled: false, botToken: '', chatId: '' },
     selectedSkills: []
   };
 }
@@ -45,6 +46,12 @@ function loadConfig() {
     if (!raw.hitl) raw.hitl = { mcpApproval: true };
     // Web search is optional and remains off for configs saved before the feature.
     if (!raw.search) raw.search = { enabled: false, provider: 'tavily', apiKey: '' };
+    // Telegram is optional and remains off for configs saved before the feature.
+    raw.telegram = {
+      enabled: Boolean(raw.telegram && raw.telegram.enabled),
+      botToken: typeof raw.telegram?.botToken === 'string' ? raw.telegram.botToken : '',
+      chatId: typeof raw.telegram?.chatId === 'string' ? raw.telegram.chatId : ''
+    };
     // Selected skills is an empty list for configs saved before the feature.
     if (!Array.isArray(raw.selectedSkills)) raw.selectedSkills = [];
     return raw;

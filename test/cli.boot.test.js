@@ -87,6 +87,7 @@ function spawnCli({ home, inputs, timeoutMs = 60000 } = {}) {
           /Enable web search \(Tavily\)/,
           /Enable LangSmith observability/,
           /Enable memory/,
+          /Connect Telegram/,
           /› /
         ];
     let nextInput = 0;
@@ -167,7 +168,7 @@ test('first-run: clean exit after /config → /exit', () => serial(async () => {
   const home = tmp();
   const result = await spawnCli({
     home,
-    // The first-run flow: API key → model (default) → search (Enter = no) → langsmith (Enter = no) → memory (Enter = no) → /exit.
+    // The first-run flow: API key → model (default) → search → LangSmith → memory → Telegram (all optional prompts default to no) → /exit.
     // We can't deliver a real Esc key through piped stdin (inquirer's keypress
     // handler only fires in TTY mode) — but the confirm prompts all default
     // to "No", so a bare Enter on each one is identical to "no thanks".
@@ -177,6 +178,7 @@ test('first-run: clean exit after /config → /exit', () => serial(async () => {
       '\n',                  // search: keep current setting (off)
       '\n',                  // langsmith: keep current setting (off)
       '\n',                  // memory: keep current setting (off)
+      '\n',                  // Telegram: no (skip token and chat ID)
       '/exit\n'              // REPL: graceful shutdown
     ]
   });
@@ -196,7 +198,7 @@ test('first-run: writes ~/.sun2agent/config.json with the typed API key', () => 
     home,
     inputs: [
       'nvapi-smoke-test\n',
-      '\n', '\n', '\n', '\n',
+      '\n', '\n', '\n', '\n', '\n',
       '/exit\n'
     ]
   });
@@ -213,6 +215,7 @@ test('first-run: writes ~/.sun2agent/config.json with the typed API key', () => 
   assert.ok(cfg.memory, 'memory section must exist');
   assert.ok(cfg.hitl, 'hitl section must exist');
   assert.ok(cfg.search, 'search section must exist');
+  assert.deepStrictEqual(cfg.telegram, { enabled: false, botToken: '', chatId: '' });
 }));
 
 test('first-run: config.json is created with 0600 permissions', () => serial(async () => {
@@ -221,7 +224,7 @@ test('first-run: config.json is created with 0600 permissions', () => serial(asy
     home,
     inputs: [
       'nvapi-smoke-test\n',
-      '\n', '\n', '\n', '\n',
+      '\n', '\n', '\n', '\n', '\n',
       '/exit\n'
     ]
   });
@@ -239,7 +242,7 @@ test('first-run: welcome banner is rendered', () => serial(async () => {
     home,
     inputs: [
       'nvapi-smoke-test\n',
-      '\n', '\n', '\n', '\n',
+      '\n', '\n', '\n', '\n', '\n',
       '/exit\n'
     ]
   });
@@ -260,7 +263,7 @@ test('second-run: skips /config when a valid config already exists', () => seria
     home,
     inputs: [
       'nvapi-second-run\n',
-      '\n', '\n', '\n', '\n',
+      '\n', '\n', '\n', '\n', '\n',
       '/exit\n'
     ]
   });

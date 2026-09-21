@@ -1,14 +1,17 @@
 // /config slash command — re-runs the first-run setup prompts to change
-// the NVIDIA NIM API key, model, search, LangSmith, and memory settings.
+// the NVIDIA NIM API key, model, search, LangSmith, memory, and Telegram settings.
 
 const chalk = require('chalk');
 const { loadConfig, saveConfig, MODELS } = require('../../config/appConfig');
 const observability = require('../../core/observability');
 const memory = require('../../core/memory');
 const search = require('../../core/search');
+const telegram = require('../../core/telegram');
 
 async function handleConfig(ctx) {
-  const config = loadConfig();
+  const readConfig = ctx.loadConfig || loadConfig;
+  const writeConfig = ctx.saveConfig || saveConfig;
+  const config = readConfig();
 
   const a1 = await ctx.promptBack([
     {
@@ -40,7 +43,8 @@ async function handleConfig(ctx) {
     model: a2.model,
     langsmith: config.langsmith || { enabled: false, project: 'sun2agent' },
     memory: config.memory || { enabled: false },
-    search: config.search || { enabled: false, provider: 'tavily', apiKey: '' }
+    search: config.search || { enabled: false, provider: 'tavily', apiKey: '' },
+    telegram: config.telegram || { enabled: false, botToken: '', chatId: '' }
   };
 
   // --- Web search -----------------------------------------------------------
@@ -114,7 +118,68 @@ async function handleConfig(ctx) {
   ]);
   if (a5) newConfig.memory = { enabled: a5.enableMemory };
 
-  saveConfig(newConfig);
+  // --- Telegram ------------------------------------------------------------
+  // A "no" answer skips every Telegram credential prompt. Esc keeps the
+  // current Telegram setting, matching the other optional config sections.
+  let telegramStatus = null;
+  const aTelegram = await ctx.promptBack([
+    {
+      type: 'confirm',
+      name: 'connectTelegram',
+      message: 'Connect Telegram?  ' + chalk.gray('(esc to keep current setting)'),
+      default: Boolean(config.telegram && config.telegram.enabled)
+    }
+  ]);
+
+  if (aTelegram && !aTelegram.connectTelegram) {
+    newConfig.telegram = { enabled: false, botToken: '', chatId: '' };
+    telegramStatus = { connected: false };
+  } else if (aTelegram && aTelegram.connectTelegram) {
+    const aToken = await ctx.promptBack([
+      {
+        type: 'password',
+        name: 'telegramBotToken',
+        message: 'Paste your Telegram bot token:  ' + chalk.gray('(esc to keep current setting)'),
+        mask: '*',
+        default: (config.telegram && config.telegram.botToken) || undefined
+      }
+    ]);
+    if (aToken) {
+      const aChat = await ctx.promptBack([
+        {
+          type: 'input',
+          name: 'telegramChatId',
+          message: 'Enter your Telegram chat ID:  ' + chalk.gray('(esc to keep current setting)'),
+          default: (config.telegram && config.telegram.chatId) || undefined,
+          validate: (value) => /^\d+$/.test(String(value || '').trim()) || 'Enter a positive numeric Telegram chat ID.'
+        }
+      ]);
+      if (aChat) {
+        const candidate = {
+          enabled: true,
+          botToken: String(aToken.telegramBotToken || '').trim(),
+          chatId: String(aChat.telegramChatId || '').trim()
+        };
+        try {
+          const verify = ctx.verifyTelegramConnection || telegram.verifyConnection;
+          const result = await verify(candidate.botToken, candidate.chatId);
+          newConfig.telegram = candidate;
+          telegramStatus = { connected: true, username: result && result.username };
+        } catch (error) {
+          // Do not retain credentials for a connection that could not be
+          // verified, and never include the token in terminal output.
+          newConfig.telegram = { enabled: false, botToken: '', chatId: '' };
+          const rawError = String(error.message || 'Connection failed.');
+          telegramStatus = {
+            connected: false,
+            error: candidate.botToken ? rawError.replaceAll(candidate.botToken, '[REDACTED]') : rawError
+          };
+        }
+      }
+    }
+  }
+
+  writeConfig(newConfig);
   console.log(chalk.green('\n✔ NVIDIA API key configured'));
   console.log(chalk.green('✔ Model configured'));
   console.log(chalk.green(`✔ LangSmith observability: ${newConfig.langsmith.enabled ? 'Enabled' : 'Disabled'}`));
@@ -140,6 +205,19 @@ async function handleConfig(ctx) {
   } else {
     memory.disable();
     console.log(chalk.green('✔ Memory: Disabled'));
+  }
+  if (telegramStatus && telegramStatus.connected) {
+    const username = telegramStatus.username ? ` (@${telegramStatus.username})` : '';
+    console.log(chalk.green(`✔ Telegram: Connected${username}`));
+  } else if (telegramStatus && telegramStatus.error) {
+    console.log(chalk.yellow(`✗ Telegram connection failed: ${telegramStatus.error}`));
+    console.log(chalk.green('✔ Telegram: Disabled'));
+  } else if (telegramStatus) {
+    console.log(chalk.green('✔ Telegram: Disabled'));
+  } else if (newConfig.telegram && newConfig.telegram.enabled) {
+    console.log(chalk.green('✔ Telegram: Connected'));
+  } else {
+    console.log(chalk.green('✔ Telegram: Disabled'));
   }
   console.log(chalk.gray('\nConfiguration complete.\n'));
 }

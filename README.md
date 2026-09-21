@@ -128,6 +128,7 @@ sun2agent
 | 📊 | **Optional LangSmith tracing** | Traces sanitized by the output guard before they leave your machine |
 | 🎛️ | **NVIDIA NIM models** | Nemotron, Muse Glimmer… swap anytime with `/config` |
 | 🔎 | **Optional web search (Tavily)** | Off by default; enable in `/config` for current events and live data |
+| ✈️ | **Optional Telegram chat** | Chat with your running agent from one allowlisted private Telegram account |
 | ⌨️ | **Calm terminal UI** | Live connection tags, `Esc` interrupts anything |
 
 ---
@@ -184,6 +185,18 @@ Allow — Don't allow
 
 An allowed tool is remembered only for the current chat session; a denied call is skipped and reported back to the model, which can try a safer alternative.
 
+### Telegram (optional)
+
+Run `/config` and answer **Yes** to **Connect Telegram?**. Paste the bot token created with Telegram's `@BotFather`, then enter your numeric Telegram user/chat ID. Sun2Agent verifies both values and sends a connection message.
+
+The CLI must remain running to receive Telegram messages. Beneath each user message, the bot immediately replies with `Agent is typing ...`, then progressively edits that same reply as text streams in. If Tavily web search is enabled in `/config`, Telegram can use the same read-only `web_search` capability and shows `Agent is searching ...` while it runs. Only the configured private chat is accepted; Telegram does not expose MCP or terminal tools.
+
+| Telegram command | Action |
+|---|---|
+| `/start` | Show pairing status and help |
+| `/new` | Clear this Telegram chat's context |
+| `/stop` | Abort the active model response |
+
 ---
 
 <a id="use-cases"></a>
@@ -215,7 +228,7 @@ Deletions, force-pushes, and network calls all route through guardrails and an e
 | Command | Action |
 |---------|--------|
 | `/help`, `/?` | Show all commands and shortcuts |
-| `/config` | Set your NVIDIA NIM API key and choose a model |
+| `/config` | Configure NVIDIA NIM, optional services, and Telegram |
 | `/mcp` | Manage MCP servers — add/edit, connect one or all, disconnect |
 | `/agent` | Open the project's `AGENT.md` (creates a template on first use) |
 | `/memory` | Open and edit local `~/.sun2agent/memory.md` |
@@ -552,7 +565,7 @@ Community pull requests will open in a later phase once the core is stable. For 
 Yes — [MIT-licensed](https://github.com/snowhypers/Sun2Agent/blob/main/LICENSE) and free. You only pay for your own NVIDIA NIM model usage (many models have a free tier).
 
 **Does Sun2Agent send my data anywhere?**
-Only to NVIDIA NIM to run your prompt, and optionally to LangSmith or Tavily if you enable them yourself. Config, memory, and Skills stay local with zero telemetry.
+Only to NVIDIA NIM to run your prompt, and optionally to LangSmith, Tavily, or Telegram if you enable them yourself. Config, memory, and Skills stay local with zero telemetry. Telegram credentials are stored in the owner-only `~/.sun2agent/config.json` file.
 
 **What's the difference between Sun2Agent and a desktop MCP client?**
 A lightweight terminal CLI — no IDE required — with built-in destructive-command guardrails, per-call human approval, and an optional Docker sandbox.
