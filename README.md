@@ -101,7 +101,7 @@ sun2agent
 | | Typical MCP client | **Sun2Agent** |
 |---|---|---|
 | **Where it runs** | Bundled inside a heavy IDE or desktop app | Just a terminal — `npm i -g sun2agent` |
-| **Tool approval** | All-or-nothing, or none at all | Per-call Human-in-the-Loop (`Allow` / `Don't allow`) |
+| **Tool approval** | All-or-nothing, or none at all | Risk-based Human-in-the-Loop for mutating and unknown tools |
 | **Security model** | Trust the model | 5-layer guardrails block destructive commands, exfiltration, and credential access *before* execution |
 | **Isolation** | Usually none | Optional one-command Docker sandbox with automatic session resume |
 | **Memory & Skills** | Cloud-synced or none | Local-only `memory.md` / `skills.md`, zero telemetry |
@@ -119,8 +119,9 @@ sun2agent
 | 🤖 | **AI Agent CLI** | Full agent loop directly from your terminal — no browser tab, no desktop app |
 | 🔌 | **Native MCP client** | `stdio`, `http` (Streamable HTTP), and `sse` transports, local or remote |
 | ⚙️ | **Automatic tool-calling** | No tool syntax to memorize — describe the task in plain English |
+| 📁 | **Opt-in workspace tools** | Run `/workspace` to create, read, and edit files under the launch directory |
 | 🛡️ | **5-layer guardrails** | Input, command, network, filesystem, and output guards catch risk before it runs |
-| ✋ | **Human-in-the-Loop** | Interactive per-session `Allow` / `Don't allow` approval before any tool executes |
+| ✋ | **Human-in-the-Loop** | Read-only tools run directly; mutating and unknown tools require per-session approval |
 | 🐳 | **Optional Docker sandbox** | The entire agent runs isolated, with automatic session resume when Docker restarts |
 | 🧠 | **Local preference memory** | `~/.sun2agent/memory.md`, keyword search, zero external calls |
 | 🎯 | **Reusable Skills** | Save instruction blocks once, toggle them on per chat |
@@ -156,7 +157,7 @@ npx sun2agent
 ```
 </details>
 
-**Requirements:** Node.js 18+ and an NVIDIA NIM API key.
+**Requirements:** Node.js 20 or 22+ and an NVIDIA NIM API key.
 
 > [!NOTE]
 > Don't run `npm install sun2agent` (without `-g`) inside another project — it can trigger unrelated dependency-resolution errors in that project. Use `-g`, or `npx sun2agent`, instead.
@@ -189,6 +190,8 @@ An allowed tool is remembered only for the current chat session; a denied call i
 
 Run `/config` and answer **Yes** to **Connect Telegram?**. Paste the bot token created with Telegram's `@BotFather`, then enter your numeric Telegram user/chat ID. Sun2Agent verifies both values and sends a connection message.
 
+Answering **No** disables the Telegram connection without deleting the saved bot token or chat ID. A later `/config` can reuse those credentials. They remain in the owner-only `~/.sun2agent/config.json` file and are never printed in the terminal.
+
 The CLI must remain running to receive Telegram messages. Beneath each user message, the bot immediately replies with `Agent is typing ...`, then progressively edits that same reply as text streams in. If Tavily web search is enabled in `/config`, Telegram can use the same read-only `web_search` capability and shows `Agent is searching ...` while it runs. Only the configured private chat is accepted; Telegram does not expose MCP or terminal tools.
 
 | Telegram command | Action |
@@ -218,7 +221,7 @@ Connect [Playwright MCP](https://github.com/microsoft/playwright-mcp) and descri
 Activate a `Code Review` or `Security Audit` Skill so every review follows the same checklist, every time.
 
 **Execute sensitive actions with a human in the loop**
-Deletions, force-pushes, and network calls all route through guardrails and an explicit approval prompt first.
+Mutating and unknown MCP calls route through guardrails and an explicit approval prompt; read-only calls still pass guardrails but do not interrupt the user.
 
 ---
 
@@ -229,6 +232,7 @@ Deletions, force-pushes, and network calls all route through guardrails and an e
 |---------|--------|
 | `/help`, `/?` | Show all commands and shortcuts |
 | `/config` | Configure NVIDIA NIM, optional services, and Telegram |
+| `/workspace` | Connect filesystem tools for the current launch directory |
 | `/mcp` | Manage MCP servers — add/edit, connect one or all, disconnect |
 | `/agent` | Open the project's `AGENT.md` (creates a template on first use) |
 | `/memory` | Open and edit local `~/.sun2agent/memory.md` |
@@ -240,7 +244,7 @@ Deletions, force-pushes, and network calls all route through guardrails and an e
 |-----|--------|
 | `Enter` | Send message |
 | `Esc` *(while typing)* | Clear the input |
-| `Esc` *(empty box)* | Disconnect MCP / clear selected Skills |
+| `Esc` *(empty box)* | Disconnect MCP/workspace or clear selected Skills |
 | `Esc` *(agent working)* | Stop the current reply or tool call |
 | `Esc` *(in menus)* | Go back / cancel |
 | `Ctrl+C` | Quit immediately |
@@ -304,6 +308,8 @@ Examples of what you can connect: filesystem tools, browser automation ([Playwri
 Set `"enabled": false` on any server to skip it without deleting it.
 
 **3. Connect.** Run `/mcp` → **Connect MCP**, then pick a server — or **Connect all MCPs** to load every server at once. The active server shows as a green `@tag` under the input box (`@allMcps` when several are connected).
+
+Sun2Agent gives NVIDIA requests 60 seconds by default and each MCP connection 20 seconds. Override them with `SUN2AGENT_NVIDIA_TIMEOUT_MS` and `SUN2AGENT_MCP_CONNECT_TIMEOUT_MS`. An individual MCP entry can override the global connection timeout with `"connectTimeoutMs": 30000`.
 
 ---
 
@@ -490,7 +496,7 @@ Key points:
 <a id="requirements"></a>
 ## Requirements
 
-- Node.js 18+
+- Node.js 20 or 22+
 - An [NVIDIA NIM](https://build.nvidia.com) API key (`nvapi-...`)
 - Optional: MCP servers you want to connect
 - Optional: [Docker](https://www.docker.com) for sandboxing
@@ -568,7 +574,7 @@ Yes — [MIT-licensed](https://github.com/snowhypers/Sun2Agent/blob/main/LICENSE
 Only to NVIDIA NIM to run your prompt, and optionally to LangSmith, Tavily, or Telegram if you enable them yourself. Config, memory, and Skills stay local with zero telemetry. Telegram credentials are stored in the owner-only `~/.sun2agent/config.json` file.
 
 **What's the difference between Sun2Agent and a desktop MCP client?**
-A lightweight terminal CLI — no IDE required — with built-in destructive-command guardrails, per-call human approval, and an optional Docker sandbox.
+A lightweight terminal CLI — no IDE required — with built-in destructive-command guardrails, risk-based human approval, and an optional Docker sandbox.
 
 **Can I use my own MCP servers?**
 Yes. Any `stdio`, `http`, or `sse` MCP server can be added to `~/.sun2agent/mcp.json`.
@@ -583,7 +589,7 @@ No — Docker sandboxing is entirely optional.
 `AGENT.md` is per-project and repo-scoped; memory and Skills are per-user and follow you across projects. Memory is preferences the agent remembers automatically; Skills are instruction blocks you write and toggle on deliberately.
 
 **Is Sun2Agent a good Claude Code or Codex CLI alternative?**
-It solves a related but different problem: Sun2Agent is MCP-first and model-agnostic within NVIDIA NIM's catalog, with an emphasis on guardrails and human approval for any tool call, not just coding tasks. See the [comparison table](#vs-alternatives) above.
+It solves a related but different problem: Sun2Agent is MCP-first and model-agnostic within NVIDIA NIM's catalog, with guardrails on every call and human approval for mutating or unknown tools. See the [comparison table](#vs-alternatives) above.
 
 ---
 

@@ -24,6 +24,25 @@ const { dockerDownWarning } = require('./dockerStatus');
 const { isEmptyAssistantMessage, cleanHistory } = require('./history');
 const { sanitizeTerminalText } = require('./prompt');
 
+const BASE_SYSTEM_PROMPT =
+  'You are Sun2Agent, a helpful AI assistant running in the user\'s terminal. ' +
+  'Work within the current project directory and use the available tools when needed.';
+
+const WORKSPACE_SYSTEM_PROMPT =
+  '\n\nWorkspace tool rules:\n' +
+  '- Use the fewest direct filesystem calls needed to complete the request.\n' +
+  '- Write the complete requested content; do not replace it with placeholder code.\n' +
+  '- For deletion, use delete_file or delete_directory. Never simulate deletion by moving an item.\n' +
+  '- Only delete the exact requested path. If it does not exist but a similar name does, ask the user to confirm before changing that item.';
+
+function buildTurnSystemPrompt(config, relevantMemories, options = {}) {
+  const withAgent = context.buildSystemPrompt(BASE_SYSTEM_PROMPT);
+  const withSkills = skills.buildSkillsContext(withAgent, config);
+  const withMemory = memory.buildMemoryContext(withSkills, relevantMemories);
+  const workspaceConnected = options.workspaceConnected ?? mcp.isWorkspaceConnected();
+  return workspaceConnected ? withMemory + WORKSPACE_SYSTEM_PROMPT : withMemory;
+}
+
 // Terminal helpers used for tool-call batch + result rendering.
 function termWidth() {
   return process.stdout.columns || 80;
@@ -52,10 +71,10 @@ async function chatTurn(config, history, signal, onToken, onToolTurn) {
   // skills are inserted between AGENT.md and memory so they are clearly
   // framed as additional reusable instructions, with the same "safety
   // rules win" contract as AGENT.md.
-  const base = context.buildSystemPrompt(allSpecs);
-  const withSkills = skills.buildSkillsContext(base, config);
-  const withMemory = memory.buildMemoryContext(withSkills, relevantMemories);
-  const system = { role: 'system', content: context.buildSystemPrompt(withMemory) };
+  const system = {
+    role: 'system',
+    content: buildTurnSystemPrompt(config, relevantMemories)
+  };
   let allowTools = Boolean(tools);
 
   // Continuous spinner for the entire turn.
@@ -279,4 +298,4 @@ async function chatTurn(config, history, signal, onToken, onToolTurn) {
   }
 }
 
-module.exports = { chatTurn };
+module.exports = { chatTurn, buildTurnSystemPrompt, BASE_SYSTEM_PROMPT, WORKSPACE_SYSTEM_PROMPT };

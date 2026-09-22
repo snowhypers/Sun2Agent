@@ -87,7 +87,8 @@ function getServers() {
       args: def.args || [],
       env: def.env || {},
       url: def.url,
-      headers: def.headers || {}
+      headers: def.headers || {},
+      connectTimeoutMs: def.connectTimeoutMs
     }));
 }
 

@@ -121,14 +121,20 @@ async function startChat() {
       skillTag: skills.getTag(config)
     });
 
-    // Esc on an empty box -> back to simple chat: drop the active tool
-    // context. MCP connections are in-memory (disconnect), skills are
-    // persisted in config.json (save an empty selection) so the tag is
-    // gone after a restart too.
+    // Esc on an empty box disconnects user-configured MCPs first, then the
+    // opt-in workspace, then clears Skills. Each layer remains independent.
     if (input === ESC_BACK) {
-      if (mcp.getActiveName()) {
-        await mcp.disconnectAll();
-        console.log(chalk.gray('⎋ Disconnected MCP. Back to simple chat.\n'));
+      if (mcp.hasUserConnections()) {
+        await mcp.disconnectUserServers();
+        const workspaceNote = mcp.isWorkspaceConnected()
+          ? ' Workspace tools remain available.'
+          : '';
+        console.log(chalk.gray(`⎋ Disconnected user MCP.${workspaceNote}\n`));
+        continue;
+      }
+      if (mcp.isWorkspaceConnected()) {
+        await mcp.disconnectWorkspace();
+        console.log(chalk.gray('⎋ Disconnected /workspace. Filesystem tools are unavailable.\n'));
         continue;
       }
       if (skills.getSelected(config).length) {
@@ -160,7 +166,7 @@ async function startChat() {
     }
     const handler = COMMANDS[text];
     if (handler) {
-      if (text === '/mcp') {
+      if (text === '/mcp' || text === '/workspace') {
         const before = mcp.getConnectionSignature();
         await handler({ promptBack, waitEnterOrEsc, dockerDownWarning, loadConfig, saveConfig });
         const after = mcp.getConnectionSignature();
@@ -168,10 +174,11 @@ async function startChat() {
         // doesn't keep referencing a previous server's tools from history.
         if (before !== after) {
           history.length = 0;
-          const tag = mcp.getTag();
-          console.log(chalk.gray('(context reset — now using ' + (tag ? '@' + tag : 'no MCP server') + ')\n'));
+          if (text === '/mcp') {
+            const tag = mcp.getTag();
+            console.log(chalk.gray('(context reset — now using ' + (tag ? '@' + tag : 'no MCP server') + ')\n'));
+          }
         }
-        if (text === '/config') config = loadConfig();
       } else {
         await handler({ promptBack, waitEnterOrEsc, dockerDownWarning, loadConfig, saveConfig });
         if (text === '/config') {

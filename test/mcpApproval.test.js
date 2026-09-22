@@ -32,16 +32,63 @@ test('HITL: denies on non-interactive stdin because no user can choose', async (
   assert.strictEqual(ok, false);
 });
 
+test('HITL: common read-only tools run without prompting', async () => {
+  for (const tool of [
+    'read_file',
+    'list_directory',
+    'search_files',
+    'get_file_info',
+    'directory_tree',
+    'tavily_search',
+    'tavily_extract',
+    'tavily_crawl',
+    'tavily_map',
+    'tavily_research'
+  ]) {
+    const ok = await hitl.checkApproval({
+      server: 'readonly',
+      tool,
+      args: {},
+      _prompt: async () => { throw new Error(`${tool} should not prompt`); }
+    });
+    assert.strictEqual(ok, true, tool);
+  }
+});
+
+test('HITL: MCP readOnlyHint bypasses prompts but destructive names win', async () => {
+  assert.strictEqual(
+    hitl.requiresApproval('inventory_snapshot', { readOnlyHint: true }),
+    false
+  );
+  assert.strictEqual(
+    hitl.requiresApproval('get_and_delete_file', { readOnlyHint: true }),
+    true
+  );
+  assert.strictEqual(
+    hitl.requiresApproval('read_file', { destructiveHint: true }),
+    true
+  );
+});
+
+test('HITL: mutating and unknown tools still require approval', () => {
+  for (const tool of [
+    'write_file', 'edit_file', 'create_directory', 'move_file', 'delete_file',
+    'send_email', 'execute_query', 'mystery_action'
+  ]) {
+    assert.strictEqual(hitl.requiresApproval(tool), true, tool);
+  }
+});
+
 test('HITL: an approved tool is remembered for the session and not re-asked', async () => {
   let calls = 0;
   const fakePrompt = async () => {
     calls++;
     return true;
   };
-  const first = await hitl.checkApproval({ server: 'fs', tool: 'read_file', args: {}, _prompt: fakePrompt });
+  const first = await hitl.checkApproval({ server: 'fs', tool: 'write_file', args: {}, _prompt: fakePrompt });
   assert.strictEqual(first, true);
   // Follow-up / retry of the same call: memoized, no re-ask.
-  const second = await hitl.checkApproval({ server: 'fs', tool: 'read_file', args: {}, _prompt: fakePrompt });
+  const second = await hitl.checkApproval({ server: 'fs', tool: 'write_file', args: {}, _prompt: fakePrompt });
   assert.strictEqual(second, true);
   assert.strictEqual(calls, 1);
 });
@@ -52,21 +99,21 @@ test('HITL: a new chat session clears previously approved tools', async () => {
     calls++;
     return true;
   };
-  await hitl.checkApproval({ server: 'fs', tool: 'read_file', args: {}, _prompt: fakePrompt });
+  await hitl.checkApproval({ server: 'fs', tool: 'write_file', args: {}, _prompt: fakePrompt });
   hitl.startPrompt();
-  await hitl.checkApproval({ server: 'fs', tool: 'read_file', args: {}, _prompt: fakePrompt });
+  await hitl.checkApproval({ server: 'fs', tool: 'write_file', args: {}, _prompt: fakePrompt });
   assert.strictEqual(calls, 2);
 });
 
 test('HITL: a session-approved tool updates the live indicator before running', async () => {
   const spinner = { isSpinning: true, text: '' };
   hitl.setSpinner(spinner);
-  await hitl.checkApproval({ server: 'fs', tool: 'read_file', args: {}, _prompt: async () => true });
-  await hitl.checkApproval({ server: 'fs', tool: 'read_file', args: {}, _prompt: async () => {
+  await hitl.checkApproval({ server: 'fs', tool: 'write_file', args: {}, _prompt: async () => true });
+  await hitl.checkApproval({ server: 'fs', tool: 'write_file', args: {}, _prompt: async () => {
     throw new Error('should not re-prompt');
   } });
   assert.match(spinner.text, /already approved this session/);
-  assert.match(spinner.text, /running tool: read_file/);
+  assert.match(spinner.text, /running tool: write_file/);
 });
 
 test('HITL: a new prompt does NOT reset approvals (per-session)', async () => {
@@ -75,10 +122,10 @@ test('HITL: a new prompt does NOT reset approvals (per-session)', async () => {
     calls++;
     return true;
   };
-  await hitl.checkApproval({ server: 'fs', tool: 'read_file', args: {}, _prompt: fakePrompt });
+  await hitl.checkApproval({ server: 'fs', tool: 'write_file', args: {}, _prompt: fakePrompt });
   assert.strictEqual(calls, 1);
   // Next user prompt: approvals persist for the session.
-  await hitl.checkApproval({ server: 'fs', tool: 'read_file', args: {}, _prompt: fakePrompt });
+  await hitl.checkApproval({ server: 'fs', tool: 'write_file', args: {}, _prompt: fakePrompt });
   assert.strictEqual(calls, 1);
 });
 
@@ -89,7 +136,7 @@ test('HITL: distinct calls in one batch are approved concurrently', async () => 
     return true;
   };
   const [a, b] = await Promise.all([
-    hitl.checkApproval({ server: 'fs', tool: 'read_file', args: {}, _prompt: fakePrompt }),
+    hitl.checkApproval({ server: 'fs', tool: 'create_directory', args: {}, _prompt: fakePrompt }),
     hitl.checkApproval({ server: 'fs', tool: 'write_file', args: {}, _prompt: fakePrompt })
   ]);
   assert.strictEqual(a, true);

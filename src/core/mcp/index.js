@@ -5,19 +5,20 @@
 // exposes their tools to the model in OpenAI "function" format, and routes
 // tool calls back to the right server.
 //
-// This file is the orchestrator. It is split across three files so each
+// This file is the orchestrator. Supporting concerns are split by purpose:
 // concern is one short read:
 //
 //   ./registry.js     state: live connections + read-only views
 //                     (getOpenAiTools, getTag, getConnectionSignature, …)
 //   ./transports.js   how a connection is built (stdio / http / sse),
 //                     including the safe child-env allowlist for stdio
+//   ./workspace.js    built-in filesystem MCP lifecycle and workspace policy
 //   ./index.js        (this file) connect/disconnect orchestration and the
 //                     guarded tool-call dispatch (guardrails + HITL +
 //                     observability tracing, in that order)
 //
 // The @modelcontextprotocol/sdk is ESM-only, so it is pulled in with dynamic
-// import() from ./transports.js (safe on Node 18+).
+// import() from ./transports.js.
 
 const { getServers } = require('./config');
 const { version: VERSION } = require('../../../package.json');
@@ -26,9 +27,27 @@ const observability = require('../observability');
 const hitl = require('../hitl/mcpApproval');
 const registry = require('./registry');
 const { loadSdk, buildTransport } = require('./transports');
+const workspace = require('./workspace');
+
+const DEFAULT_MCP_CONNECTION_TIMEOUT_MS = 20000;
+
+function connectionTimeoutMs(server) {
+  const perServer = Number(server && server.connectTimeoutMs);
+  if (Number.isFinite(perServer) && perServer > 0) return Math.floor(perServer);
+  const globalTimeout = Number(process.env.SUN2AGENT_MCP_CONNECT_TIMEOUT_MS);
+  if (Number.isFinite(globalTimeout) && globalTimeout > 0) return Math.floor(globalTimeout);
+  return DEFAULT_MCP_CONNECTION_TIMEOUT_MS;
+}
+
+function connectionTimeoutError(server, timeout) {
+  return new Error(`MCP connection to "${server.name}" timed out after ${timeout}ms.`);
+}
 
 // Connect a single server definition and record its tools. Throws on failure.
 async function connectServer(s) {
+  if (workspace.isReservedUserServer(s)) {
+    throw new Error(workspace.reservedNameError());
+  }
   // A stdio server runs a real command — vet it before spawning anything.
   const verdict = guardrails.validateServer(s);
   if (!verdict.ok) throw new Error(verdict.reason);
@@ -36,34 +55,93 @@ async function connectServer(s) {
   const S = await loadSdk();
   const transport = buildTransport(s, S);
   const client = new S.Client({ name: 'sun2agent', version: VERSION }, { capabilities: {} });
-  await client.connect(transport);
-  const { tools } = await client.listTools();
-  registry.set(s.name, { client, transport, tools: tools || [], type: s.type });
-  return tools || [];
+  const timeout = connectionTimeoutMs(s);
+  let timer;
+  try {
+    const { tools } = await Promise.race([
+      (async () => {
+        const requestOptions = { timeout, maxTotalTimeout: timeout };
+        await client.connect(transport, requestOptions);
+        return client.listTools(undefined, requestOptions);
+      })(),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(connectionTimeoutError(s, timeout)), timeout);
+      })
+    ]);
+    const listedTools = tools || [];
+    const localTools = s.builtin
+      ? workspace.getLocalTools().filter(
+          (localTool) => !listedTools.some((tool) => tool.name === localTool.name)
+        )
+      : [];
+    const availableTools = [...listedTools, ...localTools];
+    registry.set(s.name, {
+      client,
+      transport,
+      tools: availableTools,
+      type: s.type,
+      builtin: Boolean(s.builtin)
+    });
+    return availableTools;
+  } catch (error) {
+    try { await client.close(); } catch (_) { /* best-effort timeout cleanup */ }
+    if (/timed?\s*out|timeout/i.test(String(error && error.message))) {
+      throw connectionTimeoutError(s, timeout);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function connectWorkspace(root = process.cwd()) {
+  return workspace.connect(root, connectServer);
+}
+
+async function disconnectUserServers() {
+  return workspace.disconnectUserServers();
+}
+
+function hasUserConnections() {
+  return workspace.hasUserConnections();
+}
+
+function isWorkspaceConnected() {
+  return workspace.isConnected();
+}
+
+async function disconnectWorkspace() {
+  return workspace.disconnect();
 }
 
 // Connect every server in mcp.json. Returns per-server results so the caller
 // can show which connected and which failed without aborting on one bad entry.
 async function connectFromConfig() {
   const servers = getServers();
-  const results = [];
-  for (const s of servers) {
+  return Promise.all(servers.map(async (s) => {
+    if (workspace.isReservedUserServer(s)) {
+      return {
+        name: s.name,
+        type: s.type,
+        ok: false,
+        error: workspace.reservedNameError()
+      };
+    }
     // Reconnect cleanly if it was already connected.
     if (registry.has(s.name)) await registry.closeAndDelete(s.name);
     try {
       const tools = await connectServer(s);
-      results.push({ name: s.name, type: s.type, ok: true, toolCount: tools.length, tools });
+      return { name: s.name, type: s.type, ok: true, toolCount: tools.length, tools };
     } catch (e) {
-      results.push({ name: s.name, type: s.type, ok: false, error: e.message });
+      return { name: s.name, type: s.type, ok: false, error: e.message };
     }
-  }
-  return results;
+  }));
 }
 
 // Connect ONLY the named server, disconnecting any others first, so that a
 // single MCP server is active in the chat at a time. Returns a result object.
 async function connectSelected(name) {
-  await registry.disconnectAll();
+  await disconnectUserServers();
   const server = getServers().find((s) => s.name === name);
   if (!server) throw new Error(`server "${name}" is not defined in mcp.json`);
   try {
@@ -74,21 +152,19 @@ async function connectSelected(name) {
   }
 }
 
-// Connect ALL servers in mcp.json at once (multi-server mode), disconnecting
-// anything currently connected first. Returns per-server results.
+// Connect ALL user-configured servers in mcp.json at once while preserving the
+// built-in workspace connection. Returns per-server results.
 async function connectAll() {
-  await registry.disconnectAll();
+  await disconnectUserServers();
   const servers = getServers();
-  const results = [];
-  for (const s of servers) {
+  return Promise.all(servers.map(async (s) => {
     try {
       const tools = await connectServer(s);
-      results.push({ name: s.name, type: s.type, ok: true, toolCount: tools.length, tools });
+      return { name: s.name, type: s.type, ok: true, toolCount: tools.length, tools };
     } catch (e) {
-      results.push({ name: s.name, type: s.type, ok: false, error: e.message });
+      return { name: s.name, type: s.type, ok: false, error: e.message };
     }
-  }
-  return results;
+  }));
 }
 
 // Execute a tool call routed by getOpenAiTools() and return a text result.
@@ -110,7 +186,8 @@ async function callTool(routes, fullName, args, signal) {
   const approved = await hitl.checkApproval({
     server: route.server,
     tool: route.tool,
-    args: args || {}
+    args: args || {},
+    annotations: route.annotations
   });
   if (!approved) {
     return (
@@ -123,6 +200,9 @@ async function callTool(routes, fullName, args, signal) {
   // The actual MCP tool execution, wrapped by LangSmith tracing when enabled.
   // Tool args, routing, and the guardrail verdict above are unchanged.
   return observability.traceTool(async () => {
+    if (route.server === workspace.NAME && workspace.isLocalTool(route.tool)) {
+      return workspace.callLocalTool(route.tool, args);
+    }
     // Use client.request() directly instead of client.callTool(): callTool()
     // rejects responses from servers that declare an outputSchema but return
     // only text content (spec-strict). Real-world servers often do exactly
@@ -146,6 +226,13 @@ async function callTool(routes, fullName, args, signal) {
 }
 
 module.exports = {
+  WORKSPACE_NAME: workspace.NAME,
+  workspaceServer: workspace.createServer,
+  connectWorkspace,
+  isWorkspaceConnected,
+  disconnectWorkspace,
+  disconnectUserServers,
+  hasUserConnections,
   connectFromConfig,
   connectSelected,
   connectAll,

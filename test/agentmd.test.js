@@ -341,3 +341,22 @@ test('app: no AGENT.md => identical behavior to before (base prompt returned)', 
     process.chdir(origCwd);
   }
 });
+
+test('terminal turn: no AGENT.md still produces a text system prompt', () => {
+  const dir = tmpDir(); // deliberately has no AGENT.md
+  const origCwd = process.cwd();
+  process.chdir(dir);
+  try {
+    const ctx = require(path.join(PROJECT, 'src/core/context'));
+    ctx.reload();
+    const { buildTurnSystemPrompt } = require(path.join(PROJECT, 'src/cli/turn'));
+    const prompt = buildTurnSystemPrompt({ selectedSkills: [] }, []);
+
+    assert.strictEqual(typeof prompt, 'string');
+    assert.match(prompt, /Sun2Agent/);
+    assert.doesNotMatch(prompt, /\[object Object\]/);
+  } finally {
+    process.chdir(origCwd);
+    require(path.join(PROJECT, 'src/core/context')).reload();
+  }
+});

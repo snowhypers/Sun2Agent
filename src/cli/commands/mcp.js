@@ -26,10 +26,13 @@ async function mcpAddEdit(ctx) {
       chalk.bold('Esc') + chalk.gray(' to go back to simple chat... ')
   );
   if (key === 'escape') {
-    // Esc -> back to simple chat, disconnecting any active MCP server.
-    if (mcp.getActiveName()) {
-      await mcp.disconnectAll();
-      console.log(chalk.gray('\nDisconnected MCP. Back to simple chat.\n'));
+    // Esc disconnects user-configured MCPs; the built-in workspace remains.
+    if (mcp.hasUserConnections()) {
+      await mcp.disconnectUserServers();
+      const workspaceNote = mcp.isWorkspaceConnected()
+        ? ' Workspace tools remain available.'
+        : '';
+      console.log(chalk.gray(`\nDisconnected user MCP.${workspaceNote}\n`));
     } else {
       console.log(chalk.gray('\nBack to simple chat.\n'));
     }
@@ -62,7 +65,9 @@ async function mcpConnect(ctx) {
   }
 
   // Which servers are connected right now, and are they ALL connected?
-  const connectedNames = new Set(mcp.getConnections().map((c) => c.name));
+  const connectedNames = new Set(
+    mcp.getConnections().filter((c) => !c.builtin).map((c) => c.name)
+  );
   const allConnected = servers.length > 1 && connectedNames.size === servers.length;
   const connectedTag = chalk.green('  ● connected');
 
@@ -82,7 +87,7 @@ async function mcpConnect(ctx) {
             (allConnected ? connectedTag : ''),
           value: '__all__'
         },
-        { name: 'Disconnect (chat without any MCP)', value: '__disconnect__' },
+        { name: 'Disconnect user MCPs  (leave workspace unchanged)', value: '__disconnect__' },
         new inquirer.Separator(),
         ...servers.map((s) => ({
           name:
@@ -97,8 +102,11 @@ async function mcpConnect(ctx) {
   const choice = ans.choice;
 
   if (choice === '__disconnect__') {
-    await mcp.disconnectAll();
-    console.log(chalk.gray('\nDisconnected. No MCP server is active.\n'));
+    await mcp.disconnectUserServers();
+    const workspaceNote = mcp.isWorkspaceConnected()
+      ? ' Workspace tools remain available.'
+      : '';
+    console.log(chalk.gray(`\nDisconnected user MCP servers.${workspaceNote}\n`));
     return;
   }
 

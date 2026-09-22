@@ -23,7 +23,10 @@ async function telegramRequest(http, token, method, data = {}, signal) {
     return response.data.result;
   } catch (error) {
     if (signal && signal.aborted) throw error;
-    throw new Error(safeTelegramError(error, token));
+    const wrapped = new Error(safeTelegramError(error, token));
+    wrapped.status = error && error.response && error.response.status;
+    wrapped.telegramErrorCode = error && error.response && error.response.data && error.response.data.error_code;
+    throw wrapped;
   }
 }
 

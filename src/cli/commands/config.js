@@ -119,8 +119,9 @@ async function handleConfig(ctx) {
   if (a5) newConfig.memory = { enabled: a5.enableMemory };
 
   // --- Telegram ------------------------------------------------------------
-  // A "no" answer skips every Telegram credential prompt. Esc keeps the
-  // current Telegram setting, matching the other optional config sections.
+  // A "no" answer disables Telegram and skips every credential prompt, but
+  // preserves the saved token/chat ID so it can be enabled again later. Esc
+  // keeps the current Telegram setting, matching the other optional sections.
   let telegramStatus = null;
   const aTelegram = await ctx.promptBack([
     {
@@ -132,7 +133,11 @@ async function handleConfig(ctx) {
   ]);
 
   if (aTelegram && !aTelegram.connectTelegram) {
-    newConfig.telegram = { enabled: false, botToken: '', chatId: '' };
+    newConfig.telegram = {
+      enabled: false,
+      botToken: newConfig.telegram.botToken || '',
+      chatId: newConfig.telegram.chatId || ''
+    };
     telegramStatus = { connected: false };
   } else if (aTelegram && aTelegram.connectTelegram) {
     const aToken = await ctx.promptBack([
@@ -166,9 +171,14 @@ async function handleConfig(ctx) {
           newConfig.telegram = candidate;
           telegramStatus = { connected: true, username: result && result.username };
         } catch (error) {
-          // Do not retain credentials for a connection that could not be
-          // verified, and never include the token in terminal output.
-          newConfig.telegram = { enabled: false, botToken: '', chatId: '' };
+          // Keep previously saved credentials when a new connection attempt
+          // fails, but leave Telegram disabled. Never save an unverified new
+          // credential or include the attempted token in terminal output.
+          newConfig.telegram = {
+            enabled: false,
+            botToken: config.telegram?.botToken || '',
+            chatId: config.telegram?.chatId || ''
+          };
           const rawError = String(error.message || 'Connection failed.');
           telegramStatus = {
             connected: false,

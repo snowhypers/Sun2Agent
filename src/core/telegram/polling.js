@@ -2,6 +2,14 @@
 
 const { telegramRequest } = require('./client');
 
+function isPollingConflict(error) {
+  return error && (
+    error.status === 409 ||
+    error.telegramErrorCode === 409 ||
+    /conflict:.*getupdates request/i.test(String(error.message || ''))
+  );
+}
+
 async function pollLoop(runtime, signal) {
   while (runtime.running && !signal.aborted) {
     let updates;
@@ -13,6 +21,14 @@ async function pollLoop(runtime, signal) {
       }, signal);
     } catch (error) {
       if (signal.aborted || !runtime.running) return;
+      if (isPollingConflict(error)) {
+        runtime.running = false;
+        runtime.onError(new Error(
+          'Polling stopped because this bot is already running in another process. ' +
+          'Stop the other instance, then restart Sun2Agent.'
+        ));
+        return;
+      }
       runtime.onError(error);
       await new Promise((resolve) => setTimeout(resolve, 1000));
       continue;
@@ -27,4 +43,4 @@ async function pollLoop(runtime, signal) {
   }
 }
 
-module.exports = { pollLoop };
+module.exports = { pollLoop, isPollingConflict };

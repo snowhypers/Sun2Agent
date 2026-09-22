@@ -59,7 +59,7 @@ test('Telegram config validation requires a token and positive chat ID', () => {
   assert.strictEqual(validateTelegramConfig(runtimeConfig().telegram).ok, true);
 });
 
-test('/config skips Telegram credentials on no and verifies token then chat ID on yes', async () => {
+test('/config disables Telegram without erasing credentials and verifies token then chat ID on yes', async () => {
   const base = runtimeConfig();
   base.langsmith = { enabled: false, project: 'sun2agent' };
   base.search = { enabled: false, provider: 'tavily', apiKey: '' };
@@ -87,7 +87,12 @@ test('/config skips Telegram credentials on no and verifies token then chat ID o
     assert.deepStrictEqual(noPrompts, [
       'apiKey', 'model', 'enableSearch', 'enableLangSmith', 'enableMemory', 'connectTelegram'
     ]);
-    assert.deepStrictEqual(savedNo.telegram, { enabled: false, botToken: '', chatId: '' });
+    assert.deepStrictEqual(savedNo.telegram, {
+      enabled: false,
+      botToken: TOKEN,
+      chatId: CHAT_ID
+    });
+    assert.strictEqual(validateTelegramConfig(savedNo.telegram).ok, false);
 
     const yesPrompts = [];
     let savedYes;
@@ -107,6 +112,8 @@ test('/config skips Telegram credentials on no and verifies token then chat ID o
       },
       promptBack: async ([question]) => {
         yesPrompts.push(question.name);
+        if (question.name === 'telegramBotToken') assert.strictEqual(question.default, undefined);
+        if (question.name === 'telegramChatId') assert.strictEqual(question.default, undefined);
         return yesAnswers[question.name];
       }
     });
@@ -116,6 +123,49 @@ test('/config skips Telegram credentials on no and verifies token then chat ID o
   } finally {
     console.log = originalLog;
   }
+});
+
+test('/config reuses saved Telegram credentials after they were disabled', async () => {
+  const base = {
+    ...runtimeConfig(),
+    langsmith: { enabled: false, project: 'sun2agent' },
+    search: { enabled: false, provider: 'tavily', apiKey: '' },
+    telegram: { enabled: false, botToken: TOKEN, chatId: CHAT_ID }
+  };
+  const answers = {
+    apiKey: { apiKey: base.apiKey },
+    model: { model: base.model },
+    enableSearch: { enableSearch: false },
+    enableLangSmith: { enableLangSmith: false },
+    enableMemory: { enableMemory: false },
+    connectTelegram: { connectTelegram: true },
+    telegramBotToken: { telegramBotToken: TOKEN },
+    telegramChatId: { telegramChatId: CHAT_ID }
+  };
+  let saved;
+  let verified;
+  const originalLog = console.log;
+  console.log = () => {};
+  try {
+    await handleConfig({
+      loadConfig: () => base,
+      saveConfig: (value) => { saved = value; },
+      verifyTelegramConnection: async (token, chatId) => {
+        verified = [token, chatId];
+        return { username: 'sun_test_bot' };
+      },
+      promptBack: async ([question]) => {
+        if (question.name === 'telegramBotToken') assert.strictEqual(question.default, TOKEN);
+        if (question.name === 'telegramChatId') assert.strictEqual(question.default, CHAT_ID);
+        return answers[question.name];
+      }
+    });
+  } finally {
+    console.log = originalLog;
+  }
+
+  assert.deepStrictEqual(verified, [TOKEN, CHAT_ID]);
+  assert.deepStrictEqual(saved.telegram, { enabled: true, botToken: TOKEN, chatId: CHAT_ID });
 });
 
 test('Telegram connection verification checks the bot and sends confirmation', async () => {
@@ -291,4 +341,46 @@ test('Telegram /stop aborts an active model response', async () => {
     .map((call) => call.data.text);
   assert.ok(sentOrEdited.some((text) => /stopped/i.test(text)));
   assert.ok(!sentOrEdited.some((text) => /Unable to complete/.test(text)));
+});
+
+test('Telegram stops polling after one getUpdates conflict instead of retrying', async () => {
+  let updateCalls = 0;
+  const errors = [];
+  const http = {
+    async post(url) {
+      const method = url.slice(url.lastIndexOf('/') + 1);
+      if (method === 'getMe') {
+        return { data: { ok: true, result: { username: 'sun_test_bot' } } };
+      }
+      if (method === 'getUpdates') {
+        updateCalls += 1;
+        const error = new Error('Request failed with status code 409');
+        error.response = {
+          status: 409,
+          data: {
+            ok: false,
+            error_code: 409,
+            description: 'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running'
+          }
+        };
+        throw error;
+      }
+      throw new Error(`Unexpected Telegram method: ${method}`);
+    }
+  };
+  const runtime = new TelegramRuntime({
+    http,
+    onError: (error) => errors.push(error.message)
+  });
+
+  const status = await runtime.start(runtimeConfig());
+  await runtime.pollPromise;
+
+  assert.strictEqual(status.enabled, true);
+  assert.strictEqual(updateCalls, 1);
+  assert.strictEqual(runtime.running, false);
+  assert.deepStrictEqual(errors, [
+    'Polling stopped because this bot is already running in another process. Stop the other instance, then restart Sun2Agent.'
+  ]);
+  await runtime.stop();
 });

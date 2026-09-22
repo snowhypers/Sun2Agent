@@ -2,6 +2,19 @@ const axios = require('axios');
 const observability = require('./observability');
 
 const NIM_URL = 'https://integrate.api.nvidia.com/v1/chat/completions';
+const DEFAULT_NVIDIA_TIMEOUT_MS = 60000;
+
+function nvidiaTimeoutMs() {
+  const configured = Number(process.env.SUN2AGENT_NVIDIA_TIMEOUT_MS);
+  return Number.isFinite(configured) && configured > 0
+    ? Math.floor(configured)
+    : DEFAULT_NVIDIA_TIMEOUT_MS;
+}
+
+function timeoutSeconds(timeoutMs) {
+  const seconds = timeoutMs / 1000;
+  return Number.isInteger(seconds) ? String(seconds) : seconds.toFixed(1);
+}
 
 // Low-level call. Returns the full assistant message object so callers can see
 // tool_calls when MCP tools are attached. `tools` is optional (OpenAI format).
@@ -26,14 +39,34 @@ async function chatCompletion(apiKey, model, messages, tools, signal, onToken) {
   // Wrap the actual LLM call with LangSmith tracing when enabled.
   // The response format returned to callers is unchanged.
   return observability.traceLLM(async () => {
-    const response = await axios.post(NIM_URL, body, {
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
-      },
-      signal,
-      responseType: body.stream ? 'stream' : 'json'
-    });
+    const timeout = nvidiaTimeoutMs();
+    let response;
+    try {
+      response = await axios.post(NIM_URL, body, {
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        signal,
+        timeout,
+        responseType: body.stream ? 'stream' : 'json'
+      });
+    } catch (error) {
+      const timedOut = !signal?.aborted && (
+        error?.code === 'ECONNABORTED' ||
+        error?.code === 'ETIMEDOUT' ||
+        /timeout/i.test(String(error?.message || ''))
+      );
+      if (timedOut) {
+        const timeoutError = new Error(
+          `Model did not respond within ${timeoutSeconds(timeout)} seconds. ` +
+          'Try again or select another model.'
+        );
+        timeoutError.code = 'MODEL_TIMEOUT';
+        throw timeoutError;
+      }
+      throw error;
+    }
     if (!body.stream) return response.data.choices[0].message;
 
     const message = { role: 'assistant', content: '', tool_calls: [] };
@@ -82,4 +115,4 @@ async function askAI(apiKey, model, messages) {
   return msg.content;
 }
 
-module.exports = { askAI, chatCompletion };
+module.exports = { askAI, chatCompletion, DEFAULT_NVIDIA_TIMEOUT_MS };

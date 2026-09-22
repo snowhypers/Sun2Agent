@@ -50,20 +50,32 @@ async function disconnectAll() {
 
 // ----- read-only views ---------------------------------------------------
 
-// Name of the currently active server (or null). With single-server
-// connections this is just the one connected server.
+// Name of the currently active user server (or the built-in server when it is
+// the only connection). Built-ins do not change which user MCP is selected.
 function getActiveName() {
+  const userNames = [...connections]
+    .filter(([, connection]) => !connection.builtin)
+    .map(([name]) => name);
+  if (userNames.length > 0) return userNames[0];
   const it = connections.keys().next();
   return it.done ? null : it.value;
 }
 
-// Tag shown under the input box: null when nothing is connected, the single
-// server name when one is connected, or "allMcps" when several are.
+// Tag shown under the input box. The built-in workspace remains available but
+// is not counted when deciding whether one or all user MCPs are selected.
 function getTag() {
-  const n = connections.size;
-  if (n === 0) return null;
-  if (n === 1) return connections.keys().next().value;
-  return 'allMcps';
+  const userNames = [...connections]
+    .filter(([, connection]) => !connection.builtin)
+    .map(([name]) => name);
+  if (userNames.length === 1) return userNames[0];
+  if (userNames.length > 1) return 'allMcps';
+
+  const builtinNames = [...connections]
+    .filter(([, connection]) => connection.builtin)
+    .map(([name]) => name);
+  if (builtinNames.length === 1) return builtinNames[0];
+  if (builtinNames.length > 1) return 'allMcps';
+  return null;
 }
 
 // Stable signature of what is connected, for detecting changes (e.g. to reset
@@ -77,6 +89,7 @@ function getConnections() {
   return [...connections.entries()].map(([name, c]) => ({
     name,
     type: c.type,
+    builtin: Boolean(c.builtin),
     tools: c.tools.map((t) => t.name)
   }));
 }
@@ -101,7 +114,11 @@ function getOpenAiTools() {
   for (const [server, c] of connections) {
     for (const t of c.tools) {
       const fullName = sanitize(`${server}__${t.name}`);
-      routes.set(fullName, { server, tool: t.name });
+      routes.set(fullName, {
+        server,
+        tool: t.name,
+        annotations: t.annotations || {}
+      });
       specs.push({
         type: 'function',
         function: {

@@ -36,6 +36,16 @@ function isLibraryIdentifier(key, value) {
     /^\/[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._-]+)+$/.test(value.trim());
 }
 
+// Only fields whose names describe filesystem locations should be interpreted
+// as paths. File bodies commonly contain slashes (for example JavaScript
+// comments beginning with "//"); treating those payloads as paths prevents
+// legitimate write_file/edit_file calls without adding any protection.
+function isPathField(key) {
+  if (key === null) return true;
+  return /(?:^|_)(path|file|filename|directory|dir|source|destination|root|cwd)$/i.test(key) ||
+    /(?:Path|File|Filename|Directory|Dir|Source|Destination|Root|Cwd)$/.test(key);
+}
+
 function* keyedStrings(value, key = null, depth = 0) {
   if (depth > 8) return;
   if (typeof value === 'string') yield { key, value };
@@ -55,7 +65,7 @@ function validateToolCall(toolName, args) {
     const net = validateNetwork(value);
     if (!net.ok) return { ...net, tool: toolName, value };
 
-    if (looksLikePath(value) && !isLibraryIdentifier(key, value)) {
+    if (isPathField(key) && looksLikePath(value) && !isLibraryIdentifier(key, value)) {
       const fs = validatePath(value);
       if (!fs.ok) return { ...fs, tool: toolName, value };
     }

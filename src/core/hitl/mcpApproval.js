@@ -1,5 +1,6 @@
-// Human-in-the-Loop (HITL): MCP tool-call approval — per session.
-// Once a tool is approved, it's remembered for the entire chat session.
+// Human-in-the-Loop (HITL): risk-based MCP tool-call approval — per session.
+// Read-only tools run without prompting. Once a mutating/unknown tool is
+// approved, it is remembered for the entire chat session.
 // Designed for continuous indicator: spinner runs through thinking → waiting → running.
 
 const readline = require('readline');
@@ -36,6 +37,39 @@ function updateSpinner(text) {
 
 function startSession() {
   allowedTools.clear();
+}
+
+const MUTATING_WORDS = new Set([
+  'add', 'apply', 'command', 'copy', 'create', 'delete', 'deploy', 'edit',
+  'execute', 'install', 'insert', 'move', 'mutate', 'patch', 'post', 'publish',
+  'put', 'remove', 'rename', 'restart', 'run', 'send', 'set', 'shell', 'start',
+  'stop', 'trigger', 'uninstall', 'update', 'upload', 'upsert', 'write'
+]);
+
+const READ_ONLY_WORDS = new Set([
+  'allowed', 'check', 'count', 'crawl', 'describe', 'directory', 'extract',
+  'fetch', 'find', 'get', 'info', 'inspect', 'list', 'lookup', 'map', 'query',
+  'read', 'research', 'resolve', 'search', 'select', 'show', 'stat', 'stats',
+  'tree', 'view'
+]);
+
+function toolWords(tool) {
+  return String(tool || '')
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+}
+
+// MCP annotations are hints, not authority. A mutating/destructive name wins
+// over a conflicting readOnlyHint. Unknown tools fail closed and still ask.
+function requiresApproval(tool, annotations = {}) {
+  const words = toolWords(tool);
+  if (annotations.destructiveHint === true) return true;
+  if (words.some((word) => MUTATING_WORDS.has(word))) return true;
+  if (annotations.readOnlyHint === true) return false;
+  if (words.some((word) => READ_ONLY_WORDS.has(word))) return false;
+  return true;
 }
 
 // Inline approval prompt — minimal, runs alongside spinner.
@@ -80,9 +114,14 @@ async function promptApproval({ server, tool, args }) {
   });
 }
 
-async function checkApproval({ server, tool, args, enabled, _prompt } = {}) {
+async function checkApproval({ server, tool, args, annotations, enabled, _prompt } = {}) {
   const on = enabled !== undefined ? enabled : isEnabled();
   if (!on) return true;
+
+  if (!requiresApproval(tool, annotations)) {
+    updateSpinner(`read-only tool — running: ${tool}...`);
+    return true;
+  }
 
   // Already allowed in this chat session: do not ask again, but keep the
   // same spinner alive and make the reason visible before execution begins.
@@ -144,5 +183,6 @@ module.exports = {
   resetApprovals,
   log,
   setSpinner,
+  requiresApproval,
   _resetForTesting
 };

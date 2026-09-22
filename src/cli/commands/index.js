@@ -12,6 +12,7 @@ const { handleMemory } = require('./memory');
 const { handleDelete } = require('./delete');
 const { handleHelp, handleHelpShort } = require('./help');
 const { handleSkills } = require('./skills');
+const { handleWorkspace } = require('./workspace');
 
 // name -> (ctx) => Promise<void>
 const COMMANDS = {
@@ -19,10 +20,11 @@ const COMMANDS = {
   '/?': handleHelpShort,
   '/config': handleConfig,
   '/mcp': handleMcp,
+  '/workspace': handleWorkspace,
   '/agent': handleAgent,
   '/memory': handleMemory,
   '/delete': handleDelete,
   '/skills': handleSkills
 };
 
-module.exports = { COMMANDS, handleConfig, handleSkills };
+module.exports = { COMMANDS, handleConfig, handleSkills, handleWorkspace };

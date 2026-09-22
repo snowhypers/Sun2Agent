@@ -12,7 +12,7 @@
 //   - The stdio command is wrapped through the sandbox when the user has
 //     Docker sandboxing enabled.
 
-// The MCP SDK is ESM-only; load it once via dynamic import (Node 18+).
+// The MCP SDK is ESM-only; load it once via dynamic import.
 let sdk = null;
 async function loadSdk() {
   if (sdk) return sdk;
@@ -59,7 +59,10 @@ function buildStdio(s, S) {
     command: wrapped.command,
     args: wrapped.args,
     // Inherit the parent env so PATH etc. resolve, then layer overrides.
-    env: { ...safeChildEnv(), ...s.env }
+    env: { ...safeChildEnv(), ...s.env },
+    // The bundled workspace server prints a startup notice on stderr. Keep the
+    // terminal UI clean; user-configured servers retain the existing behavior.
+    stderr: s.builtin ? 'ignore' : undefined
   });
 }
 

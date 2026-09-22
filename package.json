@@ -62,10 +62,11 @@
   },
   "homepage": "https://github.com/snowhypers/Sun2Agent#readme",
   "engines": {
-    "node": ">=18"
+    "node": "^20.0.0 || >=22.0.0"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "@modelcontextprotocol/server-filesystem": "2026.8.31",
     "axios": "^1.18.1",
     "boxen": "^5.1.2",
     "chalk": "^4.1.2",

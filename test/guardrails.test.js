@@ -231,6 +231,10 @@ test('validateToolCall allows legitimate tool calls', () => {
     formats: ['markdown']
   }));
   allowed(guardrails.validateToolCall('read_file', { path: 'src/cli/index.js' }));
+  allowed(guardrails.validateToolCall('write_file', {
+    path: 'src/example.js',
+    content: "// JavaScript comment\napp.get('/api/items', handler);"
+  }));
   allowed(guardrails.validateToolCall('noargs', {}));
   allowed(guardrails.validateToolCall('nullargs', null));
 });
