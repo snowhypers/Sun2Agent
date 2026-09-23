@@ -18,6 +18,7 @@
   "keywords": [
     "ai-agent",
     "ai-agent-cli",
+    "agent-harness",
     "terminal-ai-agent",
     "cli",
     "terminal",
@@ -40,8 +41,6 @@
     "prompt-injection",
     "sandbox",
     "docker",
-    "nvidia",
-    "nim",
     "nvidia-nim",
     "developer-tools",
     "devtools",
@@ -49,7 +48,10 @@
     "npx",
     "open-source",
     "langsmith",
-    "observability"
+    "observability",
+    "workspace",
+    "telegram-bot",
+    "open-source"
   ],
   "author": "",
   "license": "MIT",
@@ -72,6 +74,7 @@
     "chalk": "^4.1.2",
     "inquirer": "^8.2.7",
     "langsmith": "^0.8.9",
-    "ora": "^5.4.1"
+    "ora": "^5.4.1",
+    "string-width": "^4.2.3"
   }
 }

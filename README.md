@@ -38,6 +38,8 @@ Sun2Agent is a free, open-source **AI agent CLI** and native **[Model Context Pr
 
 It's for developers who want an AI agent that does more than chat: one that can call real tools through the **[Model Context Protocol](https://modelcontextprotocol.io)**, follow your project's own conventions via `AGENT.md`, reuse specialized instructions with Skills, remember your preferences locally, and ask before touching anything sensitive.
 
+As an **agent harness**, Sun2Agent brings the model, project context, MCP tools, approvals, and execution loop together in one terminal CLI.
+
 **Common searches this answers:**
 `terminal AI agent` · `npm MCP client` · `AI agent CLI open source` · `secure autonomous coding agent` · `Model Context Protocol client npm` · `Claude Code alternative` · `Codex CLI alternative` · `self-hosted AI agent` · `human-in-the-loop AI agent`
 

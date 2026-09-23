@@ -7,6 +7,7 @@
 
 const readline = require('readline');
 const chalk = require('chalk');
+const stringWidth = require('string-width');
 
 const HIDE_CURSOR = '\x1b[?25l';
 const SHOW_CURSOR = '\x1b[?25h';
@@ -17,12 +18,36 @@ const ESC_BACK = Symbol('escBack');
 
 // Soft, muted ("low") yellow for the input box — dimmer than bright yellow.
 const YELLOW = chalk.hex('#b5a642');
+let activeInput = null;
+
+// Background Telegram failures must be printed above the live input box.
+// Writing directly to stderr while the box is drawn invalidates its cursor
+// position, so the next keystroke can erase or duplicate part of the frame.
+function printAboveInput(message) {
+  if (!activeInput) return false;
+  activeInput.erase();
+  process.stdout.write(`${message}\n`);
+  activeInput.draw(true);
+  return true;
+}
 
 function width() {
   const cols = process.stdout.columns || 80;
   // Stay one column short of the terminal so a full-width line never wraps
   // (a wrapped line would break the up-N-lines redraw math).
   return Math.max(20, Math.min(cols - 1, 120));
+}
+
+function sliceToWidth(value, maxWidth) {
+  let end = 0;
+  let used = 0;
+  for (const char of value) {
+    const charWidth = stringWidth(char);
+    if (used + charWidth > maxWidth) break;
+    used += charWidth;
+    end += char.length;
+  }
+  return value.slice(0, end);
 }
 
 // Wrap text to a column width. Breaks on spaces, and hard-breaks words that
@@ -33,16 +58,17 @@ function wrapText(text, wcol) {
   let cur = '';
   for (let word of text.split(' ')) {
     // Hard-break any word longer than a full line.
-    while (word.length > wcol) {
+    while (stringWidth(word) > wcol) {
       if (cur) {
         lines.push(cur);
         cur = '';
       }
-      lines.push(word.slice(0, wcol));
-      word = word.slice(wcol);
+      const part = sliceToWidth(word, wcol);
+      lines.push(part);
+      word = word.slice(part.length);
     }
     if (cur === '') cur = word;
-    else if ((cur + ' ' + word).length <= wcol) cur += ' ' + word;
+    else if (stringWidth(cur + ' ' + word) <= wcol) cur += ' ' + word;
     else {
       lines.push(cur);
       cur = word;
@@ -82,7 +108,7 @@ function askInput(options = {}) {
     // *visual* rows the previous frame occupies at the CURRENT width (it may
     // have reflowed/wrapped since — e.g. after a terminal resize).
     let prevLens = [];
-    const visLen = (s) => s.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '').length;
+    const visLen = stringWidth;
     const occupiedRows = () => {
       const w = process.stdout.columns || 80;
       return prevLens.reduce((sum, len) => sum + Math.max(1, Math.ceil(len / w)), 0);
@@ -103,7 +129,7 @@ function askInput(options = {}) {
       const midLines = segments.map((seg, i) => {
         const isLast = i === segments.length - 1;
         const prefix = i === 0 ? promptStr : indent;
-        const rawLen = prefix.length + seg.length + 1; // +1 for caret/trailing space slot
+        const rawLen = stringWidth(prefix + seg) + 1; // +1 for caret/trailing space slot
         const pad = ' '.repeat(Math.max(0, inner - rawLen));
         return (
           YELLOW('│') +
@@ -136,28 +162,28 @@ function askInput(options = {}) {
       const tagRaw = tag ? `@${tag}` : '';
       const tagSep = tag ? '  ' : '';
       const skillSep = skillTag ? '  ' : '';
-      const leftFixed = tagRaw.length + tagSep.length + skillTag.length + skillSep.length;
+      const leftFixed = stringWidth(tagRaw + tagSep + skillTag + skillSep);
       let rightRaw = model ? `→ ${model}` : '';
       let hintShown = hint;
       let skillTagShown = skillTag;
 
-      const hintBudget = w - leftFixed - rightRaw.length - 1; // 1 = min gap
+      const hintBudget = w - leftFixed - stringWidth(rightRaw) - 1; // 1 = min gap
       if (hintBudget < 0) {
         // Not enough room even for the model. First trim hint, then model,
         // then the skills tag. The MCP tag always stays (it's the most
         // important — the user must know which server is active).
-        const room = w - tagRaw.length - tagSep.length - 1;
-        if (room < skillTag.length) {
+        const room = w - stringWidth(tagRaw + tagSep) - 1;
+        if (room < stringWidth(skillTag)) {
           skillTagShown = '';
         }
         hintShown = '';
-        rightRaw = rightRaw.slice(0, Math.max(0, w - tagRaw.length - tagSep.length - skillTagShown.length - 1));
-      } else if (hint.length > hintBudget) {
-        hintShown = hintBudget > 1 ? hint.slice(0, hintBudget - 1) + '…' : '';
+        rightRaw = sliceToWidth(rightRaw, Math.max(0, w - stringWidth(tagRaw + tagSep + skillTagShown) - 1));
+      } else if (stringWidth(hint) > hintBudget) {
+        hintShown = hintBudget > 1 ? sliceToWidth(hint, hintBudget - 1) + '…' : '';
       }
 
-      const usedLeft = tagRaw.length + tagSep.length + skillTagShown.length + skillSep.length + hintShown.length;
-      const gap = Math.max(1, w - usedLeft - rightRaw.length);
+      const usedLeft = stringWidth(tagRaw + tagSep + skillTagShown + skillSep + hintShown);
+      const gap = Math.max(1, w - usedLeft - stringWidth(rightRaw));
       const footer =
         (tag ? chalk.green(tagRaw) + tagSep : '') +
         (skillTagShown ? chalk.green(skillTagShown) + skillSep : '') +
@@ -190,6 +216,7 @@ function askInput(options = {}) {
     }
 
     function cleanup() {
+      if (activeInput && activeInput.erase === erase) activeInput = null;
       stdin.removeListener('keypress', onKey);
       if (stdin.isTTY) stdin.setRawMode(false);
       stdout.write(SHOW_CURSOR);
@@ -248,8 +275,9 @@ function askInput(options = {}) {
     stdin.resume();
     stdout.write(HIDE_CURSOR);
     stdin.on('keypress', onKey);
+    activeInput = { erase, draw };
     draw(true);
   });
 }
 
-module.exports = { askInput, ESC_BACK };
+module.exports = { askInput, ESC_BACK, printAboveInput };
