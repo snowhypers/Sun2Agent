@@ -3,6 +3,7 @@
 const context = require('../context');
 const memory = require('../memory');
 const skills = require('../skills');
+const providers = require('../providers');
 const { cleanHistory } = require('../../cli/history');
 const { TelegramResponseStream } = require('./stream');
 
@@ -10,6 +11,7 @@ async function runTurn(runtime, chatId, text, replyToMessageId) {
   const controller = new AbortController();
   runtime.active.set(chatId, controller);
   const history = runtime.histories.get(chatId) || [];
+  const priorHistoryLength = history.length;
   history.push({ role: 'user', content: text });
   runtime.histories.set(chatId, history);
   const stream = new TelegramResponseStream({
@@ -43,6 +45,9 @@ async function runTurn(runtime, chatId, text, replyToMessageId) {
     }
   } finally {
     if (controller.signal.aborted) {
+      // A stopped search can leave an assistant tool call without its tool
+      // result. Drop this incomplete turn before the next Telegram message.
+      history.length = priorHistoryLength;
       await stream.finish('⏹ Response stopped.');
     } else {
       await stream.cancel();
@@ -63,20 +68,22 @@ async function buildSystemPrompt(runtime, text) {
 }
 
 async function completeWithSearch(runtime, systemPrompt, history, signal, stream) {
+  const provider = providers.getActiveProvider(runtime.config);
   const searchSpec = runtime.search.getToolSpec(runtime.config);
-  let tools = searchSpec ? [searchSpec] : undefined;
+  let tools = provider.supportsTools && searchSpec ? [searchSpec] : undefined;
   const system = { role: 'system', content: systemPrompt };
 
   for (let step = 0; step < 6; step++) {
     let message;
     try {
       message = await runtime.complete(
-        runtime.config.apiKey,
-        runtime.config.model,
+        provider.apiKey,
+        provider.model,
         [system, ...cleanHistory(history)],
         tools,
         signal,
-        (token) => stream.push(token)
+        (token) => stream.push(token),
+        { url: provider.url, provider: provider.id }
       );
     } catch (error) {
       if (signal.aborted) return null;
@@ -107,8 +114,9 @@ async function completeWithSearch(runtime, systemPrompt, history, signal, stream
           /* malformed arguments become an empty query and a safe tool error */
         }
         const content = name === 'web_search'
-          ? await runtime.search.executeTool(args.query, runtime.config)
+          ? await runtime.search.executeTool(args.query, runtime.config, signal)
           : `Tool "${name || 'unknown'}" is not available in Telegram.`;
+        if (signal.aborted) return null;
         history.push({
           role: 'tool',
           tool_call_id: call.id,
@@ -123,8 +131,8 @@ async function completeWithSearch(runtime, systemPrompt, history, signal, stream
 
   // Force a final answer after the search-call cap instead of looping.
   return runtime.complete(
-    runtime.config.apiKey,
-    runtime.config.model,
+    provider.apiKey,
+    provider.model,
     [
       system,
       ...cleanHistory(history),
@@ -132,7 +140,8 @@ async function completeWithSearch(runtime, systemPrompt, history, signal, stream
     ],
     undefined,
     signal,
-    (token) => stream.push(token)
+    (token) => stream.push(token),
+    { url: provider.url, provider: provider.id }
   );
 }
 

@@ -262,6 +262,27 @@ test('searchTool: Tavily error returns safe string without throwing', async () =
   }
 });
 
+test('search: abort signal cancels a pending Tavily request', async () => {
+  const controller = new AbortController();
+  let requestStarted;
+  const started = new Promise((resolve) => { requestStarted = resolve; });
+  const restore = stubPost(async (_url, _body, options) => new Promise((_resolve, reject) => {
+    assert.strictEqual(options.signal, controller.signal);
+    options.signal.addEventListener('abort', () => reject(new Error('canceled')), { once: true });
+    requestStarted();
+  }));
+  try {
+    const pending = searchModule.executeTool(
+      'latest news', { search: { enabled: true, apiKey: 'tvly-test' } }, controller.signal
+    );
+    await started;
+    controller.abort();
+    await assert.rejects(pending, /canceled/);
+  } finally {
+    restore();
+  }
+});
+
 test('searchTool: API key is never present in formatted results', async () => {
   const fakeKey = 'tvly-secretkey1234567890';
   const restore = stubPost(async () => ({

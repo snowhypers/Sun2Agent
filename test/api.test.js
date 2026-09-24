@@ -111,3 +111,52 @@ test('api: NVIDIA timeout is configurable and returns a clear error', async () =
     else process.env.SUN2AGENT_NVIDIA_TIMEOUT_MS = originalTimeout;
   }
 });
+
+test('api: generic model timeout overrides the legacy NVIDIA setting', async () => {
+  const originalPost = axios.post;
+  const oldGeneric = process.env.SUN2AGENT_MODEL_TIMEOUT_MS;
+  const oldNvidia = process.env.SUN2AGENT_NVIDIA_TIMEOUT_MS;
+  process.env.SUN2AGENT_MODEL_TIMEOUT_MS = '2400';
+  process.env.SUN2AGENT_NVIDIA_TIMEOUT_MS = '1200';
+  let timeout;
+  axios.post = async (_url, _body, options) => {
+    timeout = options.timeout;
+    return { data: { choices: [{ message: { role: 'assistant', content: 'ok' } }] } };
+  };
+  try {
+    await chatCompletion('key', 'model', []);
+    assert.strictEqual(timeout, 2400);
+  } finally {
+    axios.post = originalPost;
+    if (oldGeneric === undefined) delete process.env.SUN2AGENT_MODEL_TIMEOUT_MS;
+    else process.env.SUN2AGENT_MODEL_TIMEOUT_MS = oldGeneric;
+    if (oldNvidia === undefined) delete process.env.SUN2AGENT_NVIDIA_TIMEOUT_MS;
+    else process.env.SUN2AGENT_NVIDIA_TIMEOUT_MS = oldNvidia;
+  }
+});
+
+test('api: sends requests to a selected OpenAI-compatible endpoint', async () => {
+  const originalPost = axios.post;
+  let request;
+  axios.post = async (url, body, options) => {
+    request = { url, body, options };
+    return { data: { choices: [{ message: { role: 'assistant', content: 'custom reply' } }] } };
+  };
+  try {
+    const message = await chatCompletion(
+      'custom-key',
+      'vendor/model',
+      [{ role: 'user', content: 'hello' }],
+      undefined,
+      undefined,
+      undefined,
+      { url: 'https://provider.example/v1/chat/completions', provider: 'custom' }
+    );
+    assert.strictEqual(request.url, 'https://provider.example/v1/chat/completions');
+    assert.strictEqual(request.body.model, 'vendor/model');
+    assert.strictEqual(request.options.headers.Authorization, 'Bearer custom-key');
+    assert.strictEqual(message.content, 'custom reply');
+  } finally {
+    axios.post = originalPost;
+  }
+});

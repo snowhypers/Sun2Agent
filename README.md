@@ -9,8 +9,7 @@
 Sun2Agent is a free, open-source **AI agent CLI** and native **[Model Context Protocol](https://modelcontextprotocol.io) (MCP) client**. Connect any MCP server, let the agent discover and call tools automatically, apply reusable Skills and Agent instructions, and approve every sensitive action before it runs — all with zero telemetry.
 
 [![npm version](https://img.shields.io/npm/v/sun2agent?color=cb3837&logo=npm&label=npm)](https://www.npmjs.com/package/sun2agent)
-[![npm monthly downloads](https://img.shields.io/npm/dm/sun2agent?color=cb3837&logo=npm&label=monthly%20downloads)](https://www.npmjs.com/package/sun2agent)
-[![npm total downloads](https://img.shields.io/npm/dt/sun2agent?color=cb3837&logo=npm&label=total%20downloads)](https://www.npmjs.com/package/sun2agent)
+[![npm total downloads](https://img.shields.io/npm/dt/sun2agent?color=cb3837&logo=npm&label=%20downloads)](https://www.npmjs.com/package/sun2agent)
 [![Node.js version](https://img.shields.io/node/v/sun2agent?color=339933&logo=node.js&logoColor=white)](https://nodejs.org)
 [![License: MIT](https://img.shields.io/npm/l/sun2agent?color=blue)](https://github.com/snowhypers/Sun2Agent/blob/main/LICENSE)
 [![GitHub stars](https://img.shields.io/github/stars/snowhypers/Sun2Agent?style=social)](https://github.com/snowhypers/Sun2Agent/stargazers)
@@ -130,10 +129,18 @@ sun2agent
 | 🎯 | **Reusable Skills** | Save instruction blocks once, toggle them on per chat |
 | 📄 | **`AGENT.md` support** | Drop it in your project and the agent follows your conventions |
 | 📊 | **Optional LangSmith tracing** | Traces sanitized by the output guard before they leave your machine |
-| 🎛️ | **NVIDIA NIM models** | Nemotron, Muse Glimmer… swap anytime with `/config` |
+| 🎛️ | **Multiple model providers** | Built-in NVIDIA NIM plus reusable OpenAI-compatible providers and models |
 | 🔎 | **Optional web search (Tavily)** | Off by default; enable in `/config` for current events and live data |
 | ✈️ | **Optional Telegram chat** | Chat with your running agent from one allowlisted private Telegram account |
-| ⌨️ | **Calm terminal UI** | Live connection tags, `Esc` interrupts anything |
+| ⌨️ | **Responsive terminal UI** | Input box and footer adapt to terminal width; resizing preserves typed input |
+
+### Latest codebase updates
+
+- **Bring your own model provider:** save multiple OpenAI-compatible providers, add model IDs, and switch between them and built-in NVIDIA NIM through `/config`.
+- **Responsive input:** the input box redraws when the terminal resizes, with connection tags and model information fitted to the available width.
+- **Telegram search cancellation:** `/stop` cancels an active model response or pending Tavily search. The interrupted turn is removed from Telegram history so the next message can start cleanly.
+
+These updates describe the current source code. The published npm package may lag behind it; use the [development instructions](#development) to run your local checkout.
 
 ---
 
@@ -160,7 +167,7 @@ npx sun2agent
 ```
 </details>
 
-**Requirements:** Node.js 20 or 22+ and an NVIDIA NIM API key.
+**Requirements:** Node.js 20 or 22+, plus either an NVIDIA NIM API key or an OpenAI-compatible API endpoint.
 
 > [!NOTE]
 > Don't run `npm install sun2agent` (without `-g`) inside another project — it can trigger unrelated dependency-resolution errors in that project. Use `-g`, or `npx sun2agent`, instead.
@@ -172,12 +179,28 @@ npx sun2agent
 
 ```text
 1. sun2agent       Start the agent
-2. /config         Add an NVIDIA NIM API key and choose a model
+2. /config         Select NVIDIA or add an OpenAI-compatible provider and model
 3. /mcp            Add and connect an MCP server
 4. Ask naturally   "Read AGENT.md and run the tests"
 ```
 
 Get a free API key from **[NVIDIA Build](https://build.nvidia.com)**: pick a model, then select **Get API Key**. Keys begin with `nvapi-`.
+
+For another OpenAI-compatible service, choose **Add custom OpenAI-compatible provider** in `/config`, then enter its provider name, base URL (for example `https://api.example.com/v1`), API key, and model ID. Providers and model IDs are saved for later selection in the owner-only `~/.sun2agent/config.json` file.
+
+### Custom model providers
+
+1. Run `/config` and select **Add custom OpenAI-compatible provider**.
+2. Enter a provider name and its OpenAI-compatible base URL, such as `https://api.example.com/v1`.
+3. Enter the API key and the exact model ID supplied by that service.
+4. Answer whether the provider supports **OpenAI tool calling**. Browser, workspace, and other MCP tools require a model with compatible tool-calling support.
+5. Complete the remaining configuration prompts.
+
+To switch later, run `/config`, choose a saved provider, and select its model. Choose **Add another model ID** to save another model for that provider. NVIDIA NIM remains available as a built-in choice.
+
+Custom endpoints must support the OpenAI-compatible Chat Completions API; compatibility with other API formats is not implied. The setup currently requires a non-empty API key, including for local endpoints. Requests and chat context go to the selected provider, so only configure services you trust.
+
+### Tool approvals
 
 When a connected MCP tool is needed, Sun2Agent shows the exact proposed call and asks:
 
@@ -201,7 +224,9 @@ The CLI must remain running to receive Telegram messages. Beneath each user mess
 |---|---|
 | `/start` | Show pairing status and help |
 | `/new` | Clear this Telegram chat's context |
-| `/stop` | Abort the active model response |
+| `/stop` | Abort the active model response or pending web search |
+
+Stopping a turn removes its incomplete messages from Telegram history; earlier completed conversation remains available. Telegram still supports chat and optional Tavily search only, not browser, workspace, or user-added MCP tools.
 
 ---
 
@@ -234,7 +259,7 @@ Mutating and unknown MCP calls route through guardrails and an explicit approval
 | Command | Action |
 |---------|--------|
 | `/help`, `/?` | Show all commands and shortcuts |
-| `/config` | Configure NVIDIA NIM, optional services, and Telegram |
+| `/config` | Select/add model providers and configure optional services and Telegram |
 | `/workspace` | Connect filesystem tools for the current launch directory |
 | `/browser` | Connect isolated Playwright browser automation tools |
 | `/mcp` | Manage MCP servers — add/edit, connect one or all, disconnect |
@@ -313,7 +338,7 @@ Set `"enabled": false` on any server to skip it without deleting it.
 
 **3. Connect.** Run `/mcp` → **Connect MCP**, then pick a server — or **Connect all MCPs** to load every server at once. The active server shows as a green `@tag` under the input box (`@allMcps` when several are connected).
 
-Sun2Agent gives NVIDIA requests 60 seconds by default and each MCP connection 20 seconds. Override them with `SUN2AGENT_NVIDIA_TIMEOUT_MS` and `SUN2AGENT_MCP_CONNECT_TIMEOUT_MS`. An individual MCP entry can override the global connection timeout with `"connectTimeoutMs": 30000`.
+Sun2Agent gives model requests 60 seconds by default and each MCP connection 20 seconds. Override them with `SUN2AGENT_MODEL_TIMEOUT_MS` and `SUN2AGENT_MCP_CONNECT_TIMEOUT_MS` (`SUN2AGENT_NVIDIA_TIMEOUT_MS` remains supported for compatibility). An individual MCP entry can override the global connection timeout with `"connectTimeoutMs": 30000`.
 
 ---
 
@@ -501,7 +526,7 @@ Key points:
 ## Requirements
 
 - Node.js 20 or 22+
-- An [NVIDIA NIM](https://build.nvidia.com) API key (`nvapi-...`)
+- An [NVIDIA NIM](https://build.nvidia.com) API key (`nvapi-...`) or credentials for an OpenAI-compatible endpoint
 - Optional: MCP servers you want to connect
 - Optional: [Docker](https://www.docker.com) for sandboxing
 
@@ -572,10 +597,10 @@ Community pull requests will open in a later phase once the core is stable. For 
 ## ❓ FAQ
 
 **Is Sun2Agent free?**
-Yes — [MIT-licensed](https://github.com/snowhypers/Sun2Agent/blob/main/LICENSE) and free. You only pay for your own NVIDIA NIM model usage (many models have a free tier).
+Yes — [MIT-licensed](https://github.com/snowhypers/Sun2Agent/blob/main/LICENSE) and free. You only pay for usage charged by your selected model provider.
 
 **Does Sun2Agent send my data anywhere?**
-Only to NVIDIA NIM to run your prompt, and optionally to LangSmith, Tavily, or Telegram if you enable them yourself. Config, memory, and Skills stay local with zero telemetry. Telegram credentials are stored in the owner-only `~/.sun2agent/config.json` file.
+Only to the model provider you select, and optionally to LangSmith, Tavily, or Telegram if you enable them yourself. Config, memory, and Skills stay local with zero telemetry. Provider and Telegram credentials are stored in the owner-only `~/.sun2agent/config.json` file.
 
 **What's the difference between Sun2Agent and a desktop MCP client?**
 A lightweight terminal CLI — no IDE required — with built-in destructive-command guardrails, risk-based human approval, and an optional Docker sandbox.
@@ -584,7 +609,7 @@ A lightweight terminal CLI — no IDE required — with built-in destructive-com
 Yes. Any `stdio`, `http`, or `sse` MCP server can be added to `~/.sun2agent/mcp.json`.
 
 **Does it work with models other than NVIDIA NIM?**
-Sun2Agent currently targets NVIDIA NIM-hosted models (Nemotron and Muse Glimmer) through an OpenAI-compatible endpoint, configurable with `/config`.
+Yes. NVIDIA NIM remains built in, and `/config` can save and select multiple OpenAI-compatible providers and model IDs. Tool use depends on whether the selected model implements OpenAI-compatible tool calling.
 
 **Does Sun2Agent require Docker?**
 No — Docker sandboxing is entirely optional.
@@ -593,7 +618,7 @@ No — Docker sandboxing is entirely optional.
 `AGENT.md` is per-project and repo-scoped; memory and Skills are per-user and follow you across projects. Memory is preferences the agent remembers automatically; Skills are instruction blocks you write and toggle on deliberately.
 
 **Is Sun2Agent a good Claude Code or Codex CLI alternative?**
-It solves a related but different problem: Sun2Agent is MCP-first and model-agnostic within NVIDIA NIM's catalog, with guardrails on every call and human approval for mutating or unknown tools. See the [comparison table](#vs-alternatives) above.
+It solves a related but different problem: Sun2Agent is MCP-first and works with NVIDIA NIM or custom OpenAI-compatible providers, with guardrails on every call and human approval for mutating or unknown tools. See the [comparison table](#vs-alternatives) above.
 
 ---
 
@@ -612,6 +637,6 @@ It solves a related but different problem: Sun2Agent is MCP-first and model-agno
 
 [npm](https://www.npmjs.com/package/sun2agent) · [GitHub](https://github.com/snowhypers/Sun2Agent) · [Issues](https://github.com/snowhypers/Sun2Agent/issues) · [Discussions](https://github.com/snowhypers/Sun2Agent/discussions) · [Star it](https://github.com/snowhypers/Sun2Agent/stargazers)
 
-**Keywords:** AI agent CLI · terminal AI agent · MCP client · Model Context Protocol npm · open source AI agent · secure AI agent · autonomous coding agent · NVIDIA NIM · LLM tool calling · Docker sandboxed agent · developer AI tools · CLI chatbot · agentic terminal · human-in-the-loop AI · self-hosted AI agent · Claude Code alternative · Codex CLI alternative
+**Keywords:** AI agent CLI · terminal AI agent · MCP client · Model Context Protocol npm · open source AI agent · secure AI agent · autonomous coding agent · NVIDIA NIM · OpenAI-compatible API · LLM tool calling · Docker sandboxed agent · developer AI tools · CLI chatbot · agentic terminal · human-in-the-loop AI · self-hosted AI agent · Claude Code alternative · Codex CLI alternative
 
 </div>

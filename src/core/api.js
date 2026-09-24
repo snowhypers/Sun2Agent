@@ -2,13 +2,16 @@ const axios = require('axios');
 const observability = require('./observability');
 
 const NIM_URL = 'https://integrate.api.nvidia.com/v1/chat/completions';
-const DEFAULT_NVIDIA_TIMEOUT_MS = 60000;
+const DEFAULT_MODEL_TIMEOUT_MS = 60000;
+const DEFAULT_NVIDIA_TIMEOUT_MS = DEFAULT_MODEL_TIMEOUT_MS;
 
-function nvidiaTimeoutMs() {
-  const configured = Number(process.env.SUN2AGENT_NVIDIA_TIMEOUT_MS);
+function modelTimeoutMs() {
+  const configured = Number(
+    process.env.SUN2AGENT_MODEL_TIMEOUT_MS || process.env.SUN2AGENT_NVIDIA_TIMEOUT_MS
+  );
   return Number.isFinite(configured) && configured > 0
     ? Math.floor(configured)
-    : DEFAULT_NVIDIA_TIMEOUT_MS;
+    : DEFAULT_MODEL_TIMEOUT_MS;
 }
 
 function timeoutSeconds(timeoutMs) {
@@ -20,7 +23,7 @@ function timeoutSeconds(timeoutMs) {
 // tool_calls when MCP tools are attached. `tools` is optional (OpenAI format).
 // `signal` is an optional AbortSignal so the request can be cancelled (Esc).
 // `onToken` receives streamed assistant text as it arrives.
-async function chatCompletion(apiKey, model, messages, tools, signal, onToken) {
+async function chatCompletion(apiKey, model, messages, tools, signal, onToken, request = {}) {
   const body = {
     model,
     messages,
@@ -35,14 +38,15 @@ async function chatCompletion(apiKey, model, messages, tools, signal, onToken) {
     body.tools = tools;
     body.tool_choice = 'auto';
   }
+  if (request.body && typeof request.body === 'object') Object.assign(body, request.body);
 
   // Wrap the actual LLM call with LangSmith tracing when enabled.
   // The response format returned to callers is unchanged.
   return observability.traceLLM(async () => {
-    const timeout = nvidiaTimeoutMs();
+    const timeout = modelTimeoutMs();
     let response;
     try {
-      response = await axios.post(NIM_URL, body, {
+      response = await axios.post(request.url || NIM_URL, body, {
         headers: {
           Authorization: `Bearer ${apiKey}`,
           'Content-Type': 'application/json'
@@ -120,7 +124,7 @@ async function chatCompletion(apiKey, model, messages, tools, signal, onToken) {
     if (pending) consume(pending);
     if (!message.tool_calls.length) delete message.tool_calls;
     return message;
-  }, { model, provider: 'nvidia', messages });
+  }, { model, provider: request.provider || 'nvidia', messages });
 }
 
 // Backward-compatible helper that returns just the reply text.
@@ -129,4 +133,4 @@ async function askAI(apiKey, model, messages) {
   return msg.content;
 }
 
-module.exports = { askAI, chatCompletion, DEFAULT_NVIDIA_TIMEOUT_MS };
+module.exports = { askAI, chatCompletion, DEFAULT_MODEL_TIMEOUT_MS, DEFAULT_NVIDIA_TIMEOUT_MS };

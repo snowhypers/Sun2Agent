@@ -23,11 +23,10 @@ function getToolSpec(config) {
   return isEnabled(config) ? WEB_SEARCH_SPEC : null;
 }
 
-// Execute a web_search tool call. Always resolves — never throws — so a
-// search failure cannot crash the agent loop.
-async function executeTool(query, config) {
+// Search failures return text; an optional turn cancellation is propagated.
+async function executeTool(query, config, signal) {
   const apiKey = getApiKey(config);
-  return executeWebSearch(query, apiKey);
+  return executeWebSearch(query, apiKey, signal);
 }
 
 // Mask the API key for display in config confirmation messages.

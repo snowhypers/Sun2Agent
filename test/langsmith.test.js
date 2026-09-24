@@ -289,8 +289,8 @@ test('chat.js: /config asks about LangSmith after model selection', () => {
   assert.ok(/COMMANDS\[text\]/.test(chatSrc), 'chat.js must dispatch via COMMANDS registry');
   // The actual prompts now live in the command file.
   assert.ok(/Enable LangSmith observability/.test(configSrc), 'must prompt for LangSmith');
-  // The prompt must come AFTER model selection, not before.
-  const modelIdx = configSrc.indexOf("Select a model");
+  // The LangSmith prompt must come after provider/model configuration.
+  const modelIdx = configSrc.indexOf('configureProvider(ctx, config)');
   const lsIdx = configSrc.indexOf("Enable LangSmith observability");
   assert.ok(modelIdx > -1 && lsIdx > -1 && modelIdx < lsIdx, 'LangSmith prompt must follow model prompt');
 });

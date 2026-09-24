@@ -19,6 +19,7 @@ const context = require('../core/context');
 const memory = require('../core/memory');
 const search = require('../core/search');
 const skills = require('../core/skills');
+const providers = require('../core/providers');
 const { chatCompletion } = require('../core/api');
 const { dockerDownWarning } = require('./dockerStatus');
 const { isEmptyAssistantMessage, cleanHistory } = require('./history');
@@ -64,12 +65,13 @@ function truncate(s, n) {
 }
 
 async function chatTurn(config, history, signal, onToken, onToolTurn) {
+  const provider = providers.getActiveProvider(config);
   const { specs, routes } = mcp.getOpenAiTools();
 
   // Merge web_search spec when search is enabled. MCP tools are unchanged.
   const searchSpec = search.getToolSpec(config);
   const allSpecs = searchSpec ? [...specs, searchSpec] : specs;
-  const tools = allSpecs.length ? allSpecs : undefined;
+  const tools = provider.supportsTools && allSpecs.length ? allSpecs : undefined;
 
   const currentUserMessage = [...history].reverse().find((item) => item.role === 'user');
   const relevantMemories = memory.isEnabled() && currentUserMessage
@@ -127,14 +129,15 @@ async function chatTurn(config, history, signal, onToken, onToolTurn) {
     let msg;
     try {
       msg = await chatCompletion(
-        config.apiKey,
-        config.model,
+        provider.apiKey,
+        provider.model,
         messages,
         allowTools ? tools : undefined,
         signal,
         // Retry attempts run NON-STREAMING: a plain JSON response cannot lose
         // chunks the way a prematurely closed SSE stream can.
-        recoveryRetries ? undefined : streamText
+        recoveryRetries ? undefined : streamText,
+        { url: provider.url, provider: provider.id }
       );
     } catch (e) {
       if (signal && signal.aborted) {
@@ -155,7 +158,7 @@ async function chatTurn(config, history, signal, onToken, onToolTurn) {
       const detail = e.response?.data?.detail || e.response?.data?.error?.message || e.message || '';
       // Some models reject the `tools` param — retry once without tools.
       if (allowTools && /tool|function/i.test(String(detail))) {
-        spinner.text = chalk.gray(`model "${config.model}" can't use tools — continuing without them...`);
+        spinner.text = chalk.gray(`model "${provider.model}" can't use tools — continuing without them...`);
         allowTools = false;
         continue;
       }
@@ -305,7 +308,15 @@ async function chatTurn(config, history, signal, onToken, onToolTurn) {
           'not be completed, say clearly what worked and what failed.'
       }
     ];
-    const finalMsg = await chatCompletion(config.apiKey, config.model, wrapMessages, undefined, signal, streamText);
+    const finalMsg = await chatCompletion(
+      provider.apiKey,
+      provider.model,
+      wrapMessages,
+      undefined,
+      signal,
+      streamText,
+      { url: provider.url, provider: provider.id }
+    );
     spinner.stop();
     hitl.setSpinner(null);
     return finalMsg.content || '(no final answer produced)';

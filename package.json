@@ -1,7 +1,7 @@
 {
   "name": "sun2agent",
   "version": "1.6.1",
-  "description": "Open-source AI agent CLI and native MCP (Model Context Protocol) client for your terminal. Automatic tool-calling, Human-in-the-Loop approval, 5-layer security guardrails, optional Docker sandbox, and LangSmith observability — powered by NVIDIA NIM.",
+  "description": "Open-source AI agent CLI and MCP client with browser automation, workspace tools, Telegram chat, web search, HITL approvals, and NVIDIA NIM or custom OpenAI-compatible providers.",
   "main": "bin/sun2agent.js",
   "bin": {
     "sun2agent": "./bin/sun2agent.js"
@@ -42,6 +42,13 @@
     "sandbox",
     "docker",
     "nvidia-nim",
+    "openai-compatible-api",
+    "multi-provider",
+    "browser-automation",
+    "playwright-mcp",
+    "filesystem",
+    "web-search",
+    "tavily",
     "developer-tools",
     "devtools",
     "cli-tool",
@@ -50,8 +57,7 @@
     "langsmith",
     "observability",
     "workspace",
-    "telegram-bot",
-    "open-source"
+    "telegram-bot"
   ],
   "author": "",
   "license": "MIT",

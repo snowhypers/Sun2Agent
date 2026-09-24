@@ -82,6 +82,7 @@ function spawnCli({ home, inputs, timeoutMs = 60000 } = {}) {
     const promptMarkers = inputs.length === 1
       ? [/› /]
       : [
+          /Select AI provider/,
           /Paste your NVIDIA NIM API key/,
           /Select a model/,
           /Enable web search \(Tavily\)/,
@@ -173,6 +174,7 @@ test('first-run: clean exit after /config → /exit', () => serial(async () => {
     // handler only fires in TTY mode) — but the confirm prompts all default
     // to "No", so a bare Enter on each one is identical to "no thanks".
     inputs: [
+      '\n',                  // provider prompt: NVIDIA NIM
       'nvapi-smoke-test\n', // API key prompt (password)
       '\n',                  // model prompt: accept the default
       '\n',                  // search: keep current setting (off)
@@ -197,6 +199,7 @@ test('first-run: writes ~/.sun2agent/config.json with the typed API key', () => 
   await spawnCli({
     home,
     inputs: [
+      '\n',
       'nvapi-smoke-test\n',
       '\n', '\n', '\n', '\n', '\n',
       '/exit\n'
@@ -223,6 +226,7 @@ test('first-run: config.json is created with 0600 permissions', () => serial(asy
   await spawnCli({
     home,
     inputs: [
+      '\n',
       'nvapi-smoke-test\n',
       '\n', '\n', '\n', '\n', '\n',
       '/exit\n'
@@ -241,6 +245,7 @@ test('first-run: welcome banner is rendered', () => serial(async () => {
   const result = await spawnCli({
     home,
     inputs: [
+      '\n',
       'nvapi-smoke-test\n',
       '\n', '\n', '\n', '\n', '\n',
       '/exit\n'
@@ -252,8 +257,8 @@ test('first-run: welcome banner is rendered', () => serial(async () => {
   // most stable fragment — it appears in the boxen title bar, before any
   // model name or inquirer noise.
   assert.match(clean, /sun2Agent/, 'banner should mention sun2Agent');
-  // And the "No API key" warning, which is the first-run trigger.
-  assert.match(clean, /No API key found/, 'first-run should print the "No API key" warning');
+  // And the missing-provider warning, which is the first-run trigger.
+  assert.match(clean, /No provider credentials found/, 'first-run should print the missing-provider warning');
 }));
 
 test('second-run: skips /config when a valid config already exists', () => serial(async () => {
@@ -262,6 +267,7 @@ test('second-run: skips /config when a valid config already exists', () => seria
   await spawnCli({
     home,
     inputs: [
+      '\n',
       'nvapi-second-run\n',
       '\n', '\n', '\n', '\n', '\n',
       '/exit\n'
@@ -284,6 +290,6 @@ test('second-run: skips /config when a valid config already exists', () => seria
   const clean = stripAnsi(result.stdout);
   // The banner SHOULD still print (every boot shows the welcome).
   assert.match(clean, /sun2Agent/, 'banner should still render on second run');
-  // But the "No API key" warning MUST NOT — the user already has a key.
-  assert.doesNotMatch(clean, /No API key found/, 'second run should not re-prompt /config');
+  // But the missing-provider warning MUST NOT — the user already has a key.
+  assert.doesNotMatch(clean, /No provider credentials found/, 'second run should not re-prompt /config');
 }));

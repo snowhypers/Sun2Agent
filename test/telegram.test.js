@@ -71,6 +71,7 @@ test('/config disables Telegram without erasing credentials and verifies token t
     const noPrompts = [];
     let savedNo;
     const noAnswers = {
+      providerChoice: { providerChoice: 'nvidia' },
       apiKey: { apiKey: base.apiKey },
       model: { model: base.model },
       enableSearch: { enableSearch: false },
@@ -87,7 +88,7 @@ test('/config disables Telegram without erasing credentials and verifies token t
       }
     });
     assert.deepStrictEqual(noPrompts, [
-      'apiKey', 'model', 'enableSearch', 'enableLangSmith', 'enableMemory', 'connectTelegram'
+      'providerChoice', 'apiKey', 'model', 'enableSearch', 'enableLangSmith', 'enableMemory', 'connectTelegram'
     ]);
     assert.deepStrictEqual(savedNo.telegram, {
       enabled: false,
@@ -135,6 +136,7 @@ test('/config reuses saved Telegram credentials after they were disabled', async
     telegram: { enabled: false, botToken: TOKEN, chatId: CHAT_ID }
   };
   const answers = {
+    providerChoice: { providerChoice: 'nvidia' },
     apiKey: { apiKey: base.apiKey },
     model: { model: base.model },
     enableSearch: { enableSearch: false },
@@ -234,6 +236,36 @@ test('Telegram text chat calls the model without tools and saves history', async
   assert.strictEqual(responseUpdates[0].data.text, 'Agent is typing ...');
   assert.deepStrictEqual(responseUpdates[0].data.reply_parameters, { message_id: 42 });
   assert.strictEqual(responseUpdates.at(-1).data.text, 'Hello from Sun2Agent');
+});
+
+test('Telegram uses the active custom model provider', async () => {
+  const http = fakeHttp();
+  let invocation;
+  const runtime = new TelegramRuntime({
+    http,
+    complete: async (...args) => {
+      invocation = args;
+      return { role: 'assistant', content: 'Custom provider reply' };
+    }
+  });
+  runtime.config = {
+    ...runtimeConfig(),
+    activeProvider: 'custom',
+    providers: [{
+      id: 'custom', name: 'Custom API', type: 'openai-compatible',
+      baseUrl: 'https://custom.example/v1', apiKey: 'custom-key',
+      models: ['custom-model'], activeModel: 'custom-model', supportsTools: true
+    }]
+  };
+
+  await runtime.handleUpdate(messageUpdate('hello custom provider'));
+
+  assert.strictEqual(invocation[0], 'custom-key');
+  assert.strictEqual(invocation[1], 'custom-model');
+  assert.deepStrictEqual(invocation[6], {
+    url: 'https://custom.example/v1/chat/completions',
+    provider: 'custom'
+  });
 });
 
 test('Telegram exposes only Tavily web_search and returns results to the model', async () => {
@@ -343,6 +375,66 @@ test('Telegram /stop aborts an active model response', async () => {
     .map((call) => call.data.text);
   assert.ok(sentOrEdited.some((text) => /stopped/i.test(text)));
   assert.ok(!sentOrEdited.some((text) => /Unable to complete/.test(text)));
+});
+
+test('Telegram /stop cancels an active web search before its timeout', async () => {
+  const http = fakeHttp();
+  let searchStarted;
+  const started = new Promise((resolve) => { searchStarted = resolve; });
+  let searchSignal;
+  let modelCalls = 0;
+  let followUpMessages;
+  const runtime = new TelegramRuntime({
+    http,
+    searchProvider: {
+      getToolSpec: () => ({
+        type: 'function',
+        function: { name: 'web_search', description: 'Search', parameters: { type: 'object' } }
+      }),
+      executeTool: async (_query, _config, signal) => new Promise((_resolve, reject) => {
+        searchSignal = signal;
+        signal.addEventListener('abort', () => reject(new Error('canceled')), { once: true });
+        searchStarted();
+      })
+    },
+    complete: async (_key, _model, messages) => {
+      modelCalls += 1;
+      if (modelCalls > 1) {
+        followUpMessages = messages;
+        return { role: 'assistant', content: 'Ready for the next question.' };
+      }
+      return {
+        role: 'assistant', content: '',
+        tool_calls: [{
+          id: 'search-1', type: 'function',
+          function: { name: 'web_search', arguments: '{"query":"latest news"}' }
+        }]
+      };
+    }
+  });
+  runtime.config = {
+    ...runtimeConfig(),
+    search: { enabled: true, provider: 'tavily', apiKey: 'tvly-test' }
+  };
+
+  const activeTurn = runtime.handleUpdate(messageUpdate('Search the web'));
+  await started;
+  await runtime.handleUpdate(messageUpdate('/stop'));
+  await activeTurn;
+
+  assert.strictEqual(searchSignal.aborted, true);
+  assert.strictEqual(modelCalls, 1, 'a stopped search must not start another model call');
+  assert.strictEqual(runtime.active.has(CHAT_ID), false);
+  assert.deepStrictEqual(runtime.histories.get(CHAT_ID), [], 'stopped tool calls must not remain in history');
+  const responses = http.calls
+    .filter((call) => call.method === 'sendMessage' || call.method === 'editMessageText')
+    .map((call) => call.data.text);
+  assert.ok(responses.some((text) => /stopped/i.test(text)));
+  assert.ok(!responses.some((text) => /Unable to complete/.test(text)));
+
+  await runtime.handleUpdate(messageUpdate('Next question'));
+  assert.strictEqual(modelCalls, 2);
+  assert.deepStrictEqual(followUpMessages.map((message) => message.role), ['system', 'user']);
 });
 
 test('Telegram stops polling after one getUpdates conflict instead of retrying', async () => {

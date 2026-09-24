@@ -9,6 +9,8 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { PassThrough } = require('node:stream');
+const { askInput } = require('../src/cli/ui/input');
 
 const PROJECT = path.join(__dirname, '..');
 const skills = require('../src/core/skills');
@@ -404,25 +406,45 @@ test('skills: getTag filters non-string entries from config (defense in depth)',
 
 // --- wiring: input box + cli/index.js accept the skills tag ---------------
 
-test('skills: input.js accepts a skillTag option without breaking the MCP tag', () => {
-  const input = fs.readFileSync(path.join(PROJECT, 'src/cli/ui/input.js'), 'utf-8');
-  assert.match(input, /skillTag/);
-  // The footer logic must still render the MCP tag, and must include the
-  // skills tag path.
-  assert.match(input, /tag\s*\?\s*`@\$\{tag\}`/);
-  assert.match(input, /skillTagShown/);
+async function renderInputFooter(options) {
+  const originalStdin = Object.getOwnPropertyDescriptor(process, 'stdin');
+  const originalStdout = Object.getOwnPropertyDescriptor(process, 'stdout');
+  const stdin = new PassThrough();
+  const stdout = new PassThrough();
+  const output = [];
+  stdin.isTTY = true;
+  stdin.setRawMode = () => {};
+  stdout.isTTY = true;
+  stdout.columns = 100;
+  stdout.on('data', (chunk) => output.push(chunk.toString()));
+  Object.defineProperty(process, 'stdin', { configurable: true, value: stdin });
+  Object.defineProperty(process, 'stdout', { configurable: true, value: stdout });
+
+  try {
+    const answer = askInput(options);
+    const frame = output.join('').split('\x1b[0J').at(-1);
+    stdin.emit('keypress', '\r', { name: 'return' });
+    await answer;
+    return frame.trimEnd().split('\n').at(-1).replace(/\x1b\[[0-9;]*m/g, '');
+  } finally {
+    Object.defineProperty(process, 'stdin', originalStdin);
+    Object.defineProperty(process, 'stdout', originalStdout);
+    stdin.destroy();
+    stdout.destroy();
+  }
+}
+
+test('skills: input footer shows both MCP and skill tags', async () => {
+  const footer = await renderInputFooter({
+    tag: 'browser', skillTag: '[Skill: Coding]', model: 'test-model', hint: '/help · /exit'
+  });
+  assert.match(footer, /@browser\s+\[Skill: Coding\]/);
+  assert.match(footer, /→ test-model/);
 });
 
-test('skills: input.js footer separates the skills tag from the hint (no glue)', () => {
-  // Regression: the old `skillSep = (tag && skillTag) ? '  ' : ''` only
-  // set the separator when MCP was also connected. When the user had
-  // skills selected without an MCP server, the footer rendered as
-  // "[Skill: Coding]⎋ esc back..." with no space — looking like the tag
-  // wasn't there. skillSep must now be set whenever the skills tag is
-  // present, independent of MCP.
-  const input = fs.readFileSync(path.join(PROJECT, 'src/cli/ui/input.js'), 'utf-8');
-  assert.match(input, /const skillSep = skillTag \? '  ' : ''/);
-  assert.doesNotMatch(input, /const skillSep = \(tag && skillTag\)/);
+test('skills: input footer separates the skill tag from the hint without MCP', async () => {
+  const footer = await renderInputFooter({ skillTag: '[Skill: Coding]', hint: '/help · /exit' });
+  assert.match(footer, /\[Skill: Coding\] {2,}\/help/);
 });
 
 test('skills: cli/index.js passes both mcp tag and skills tag to askInput', () => {

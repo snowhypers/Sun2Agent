@@ -8,6 +8,7 @@
 const readline = require('readline');
 const chalk = require('chalk');
 const stringWidth = require('string-width');
+const { sliceToWidth, terminalWidth, truncateToWidth, wrapText } = require('./layout');
 
 const HIDE_CURSOR = '\x1b[?25l';
 const SHOW_CURSOR = '\x1b[?25h';
@@ -29,53 +30,6 @@ function printAboveInput(message) {
   process.stdout.write(`${message}\n`);
   activeInput.draw(true);
   return true;
-}
-
-function width() {
-  const cols = process.stdout.columns || 80;
-  // Stay one column short of the terminal so a full-width line never wraps
-  // (a wrapped line would break the up-N-lines redraw math).
-  return Math.max(20, Math.min(cols - 1, 120));
-}
-
-function sliceToWidth(value, maxWidth) {
-  let end = 0;
-  let used = 0;
-  for (const char of value) {
-    const charWidth = stringWidth(char);
-    if (used + charWidth > maxWidth) break;
-    used += charWidth;
-    end += char.length;
-  }
-  return value.slice(0, end);
-}
-
-// Wrap text to a column width. Breaks on spaces, and hard-breaks words that
-// are longer than the line. Always returns at least one (possibly empty) line.
-function wrapText(text, wcol) {
-  if (!text) return [''];
-  const lines = [];
-  let cur = '';
-  for (let word of text.split(' ')) {
-    // Hard-break any word longer than a full line.
-    while (stringWidth(word) > wcol) {
-      if (cur) {
-        lines.push(cur);
-        cur = '';
-      }
-      const part = sliceToWidth(word, wcol);
-      lines.push(part);
-      word = word.slice(part.length);
-    }
-    if (cur === '') cur = word;
-    else if (stringWidth(cur + ' ' + word) <= wcol) cur += ' ' + word;
-    else {
-      lines.push(cur);
-      cur = word;
-    }
-  }
-  lines.push(cur);
-  return lines;
 }
 
 // Fallback for non-interactive stdin (pipes, tests): plain readline.
@@ -100,7 +54,7 @@ function askInput(options = {}) {
   // (e.g. "@coding @debugging"). It already includes the @ prefixes and
   // is rendered verbatim next to the MCP tag.
   const skillTag = options.skillTag || '';
-  const hint = options.hint || '⎋ esc back  ·  /help  ·  /workspace  ·  /browser  ·  /mcp  ·  /skills  ·  /exit';
+  const hint = options.hint || '⎋ esc back  ·  /help  ·  /mcp  ·  /exit';
 
   return new Promise((resolve) => {
     let text = '';
@@ -110,17 +64,17 @@ function askInput(options = {}) {
     let prevLens = [];
     const visLen = stringWidth;
     const occupiedRows = () => {
-      const w = process.stdout.columns || 80;
+      const w = Math.max(1, Number(stdout.columns) || 80);
       return prevLens.reduce((sum, len) => sum + Math.max(1, Math.ceil(len / w)), 0);
     };
 
     function frame(withCaret) {
-      const w = width();
+      const w = terminalWidth(stdout, Infinity);
       const inner = w - 2; // space between the two vertical borders
 
       const promptStr = ' › '; // first line prefix
       const indent = '   '; //    continuation lines align under the text
-      const avail = Math.max(4, inner - promptStr.length - 1); // text width per line, reserve 1 for caret
+      const avail = Math.max(1, inner - promptStr.length - 1); // text width per line, reserve 1 for caret
 
       // Wrap the text so all of it stays visible — the box grows as needed.
       const segments = wrapText(text, avail);
@@ -144,52 +98,38 @@ function askInput(options = {}) {
       const top = YELLOW('╭' + '─'.repeat(inner) + '╮');
       const bot = YELLOW('╰' + '─'.repeat(inner) + '╯');
 
-      // Footer line under the box: active MCP tag + skills tag + hint on the
-      // left, model on the right. CRITICAL: the visible length must never
-      // exceed `w`, or the footer wraps and the redraw math (which counts it
-      // as one line) leaves stale boxes on every keystroke. Priority when
-      // short on space: mcp tag > skills tag > model > hint (hint gets
-      // truncated first, then the skills tag, then the model).
-      //
-      // tagSep is the gap BETWEEN the MCP tag and what follows it (skills
-      // tag, or hint if no skills). skillSep is the gap BETWEEN the
-      // skills tag and the hint. Both must be set whenever their
-      // respective tag is present — even when only one of the two is
-      // shown — otherwise the tag glues to the hint with no space and
-      // looks broken. The earlier `(tag && skillTag)` guard was wrong:
-      // skills are independent of MCP, so the skills tag can be shown
-      // without an MCP tag and must still get its own separator.
       const tagRaw = tag ? `@${tag}` : '';
-      const tagSep = tag ? '  ' : '';
-      const skillSep = skillTag ? '  ' : '';
-      const leftFixed = stringWidth(tagRaw + tagSep + skillTag + skillSep);
-      let rightRaw = model ? `→ ${model}` : '';
-      let hintShown = hint;
-      let skillTagShown = skillTag;
+      const rightRaw = model ? `→ ${model}` : '';
+      const tagShown = truncateToWidth(tagRaw, Math.floor(w * 0.35));
+      // Keep the full model name when possible; shorten the hints first.
+      const rightBudget = Math.max(0, w - stringWidth(tagShown) - (tagShown ? 2 : Math.min(16, Math.floor(w / 3))));
+      const rightShown = truncateToWidth(rightRaw, rightBudget);
+      const outerGap = rightShown ? 1 : 0;
+      let leftBudget = Math.max(0, w - stringWidth(rightShown) - outerGap);
+      const leftParts = [];
 
-      const hintBudget = w - leftFixed - stringWidth(rightRaw) - 1; // 1 = min gap
-      if (hintBudget < 0) {
-        // Not enough room even for the model. First trim hint, then model,
-        // then the skills tag. The MCP tag always stays (it's the most
-        // important — the user must know which server is active).
-        const room = w - stringWidth(tagRaw + tagSep) - 1;
-        if (room < stringWidth(skillTag)) {
-          skillTagShown = '';
+      if (tagShown) {
+        leftParts.push({ value: tagShown, color: chalk.green });
+        leftBudget -= stringWidth(tagShown);
+      }
+      if (skillTag && leftBudget > 2) {
+        const room = leftBudget - (leftParts.length ? 2 : 0);
+        const shown = truncateToWidth(skillTag, room);
+        if (shown) {
+          leftParts.push({ value: shown, color: chalk.green });
+          leftBudget -= stringWidth(shown) + (leftParts.length > 1 ? 2 : 0);
         }
-        hintShown = '';
-        rightRaw = sliceToWidth(rightRaw, Math.max(0, w - stringWidth(tagRaw + tagSep + skillTagShown) - 1));
-      } else if (stringWidth(hint) > hintBudget) {
-        hintShown = hintBudget > 1 ? sliceToWidth(hint, hintBudget - 1) + '…' : '';
+      }
+      if (hint && leftBudget > 2) {
+        const room = leftBudget - (leftParts.length ? 2 : 0);
+        const shown = truncateToWidth(w < 60 ? '/help · /exit' : hint, room);
+        if (shown) leftParts.push({ value: shown, color: chalk.gray });
       }
 
-      const usedLeft = stringWidth(tagRaw + tagSep + skillTagShown + skillSep + hintShown);
-      const gap = Math.max(1, w - usedLeft - stringWidth(rightRaw));
-      const footer =
-        (tag ? chalk.green(tagRaw) + tagSep : '') +
-        (skillTagShown ? chalk.green(skillTagShown) + skillSep : '') +
-        chalk.gray(hintShown) +
-        ' '.repeat(gap) +
-        chalk.cyan(rightRaw);
+      const left = leftParts.map(({ value, color }) => color(value)).join('  ');
+      const usedLeft = leftParts.reduce((sum, part, index) => sum + stringWidth(part.value) + (index ? 2 : 0), 0);
+      const gap = rightShown ? Math.max(outerGap, w - usedLeft - stringWidth(rightShown)) : 0;
+      const footer = left + ' '.repeat(gap) + chalk.cyan(rightShown);
 
       return [top, ...midLines, bot, footer];
     }
@@ -218,8 +158,13 @@ function askInput(options = {}) {
     function cleanup() {
       if (activeInput && activeInput.erase === erase) activeInput = null;
       stdin.removeListener('keypress', onKey);
+      stdout.removeListener('resize', onResize);
       if (stdin.isTTY) stdin.setRawMode(false);
       stdout.write(SHOW_CURSOR);
+    }
+
+    function onResize() {
+      draw(true);
     }
 
     function onKey(str, key) {
@@ -275,6 +220,7 @@ function askInput(options = {}) {
     stdin.resume();
     stdout.write(HIDE_CURSOR);
     stdin.on('keypress', onKey);
+    stdout.on('resize', onResize);
     activeInput = { erase, draw };
     draw(true);
   });

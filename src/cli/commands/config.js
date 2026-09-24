@@ -1,46 +1,26 @@
 // /config slash command — re-runs the first-run setup prompts to change
-// the NVIDIA NIM API key, model, search, LangSmith, memory, and Telegram settings.
+// the active AI provider/model, search, LangSmith, memory, and Telegram settings.
 
 const chalk = require('chalk');
-const { loadConfig, saveConfig, MODELS } = require('../../config/appConfig');
+const { loadConfig, saveConfig } = require('../../config/appConfig');
 const observability = require('../../core/observability');
 const memory = require('../../core/memory');
 const search = require('../../core/search');
 const telegram = require('../../core/telegram');
+const providers = require('../../core/providers');
+const { configureProvider } = require('./providerConfig');
 
 async function handleConfig(ctx) {
   const readConfig = ctx.loadConfig || loadConfig;
   const writeConfig = ctx.saveConfig || saveConfig;
   const config = readConfig();
 
-  const a1 = await ctx.promptBack([
-    {
-      type: 'password',
-      name: 'apiKey',
-      message: 'Paste your NVIDIA NIM API key:  ' + chalk.gray('(esc to cancel)'),
-      mask: '*',
-      default: config.apiKey || undefined
-    }
-  ]);
-  if (!a1) return;
-
-  const a2 = await ctx.promptBack([
-    {
-      type: 'list',
-      name: 'model',
-      message: 'Select a model:  ' + chalk.gray('(esc to cancel)'),
-      choices: MODELS.map((m) => ({
-        name: `${m.name}  ${chalk.cyan('[' + m.tag + ']')}`,
-        value: m.id
-      }))
-    }
-  ]);
-  if (!a2) return;
+  const providerConfig = await configureProvider(ctx, config);
+  if (!providerConfig) return;
 
   const newConfig = {
     ...config,
-    apiKey: a1.apiKey,
-    model: a2.model,
+    ...providerConfig,
     langsmith: config.langsmith || { enabled: false, project: 'sun2agent' },
     memory: config.memory || { enabled: false },
     search: config.search || { enabled: false, provider: 'tavily', apiKey: '' },
@@ -190,8 +170,9 @@ async function handleConfig(ctx) {
   }
 
   writeConfig(newConfig);
-  console.log(chalk.green('\n✔ NVIDIA API key configured'));
-  console.log(chalk.green('✔ Model configured'));
+  const activeProvider = providers.getActiveProvider(newConfig);
+  console.log(chalk.green(`\n✔ Provider: ${activeProvider.name}`));
+  console.log(chalk.green(`✔ Model: ${activeProvider.model}`));
   console.log(chalk.green(`✔ LangSmith observability: ${newConfig.langsmith.enabled ? 'Enabled' : 'Disabled'}`));
 
   // Web search confirmation (never print the full key).

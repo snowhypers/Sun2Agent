@@ -21,6 +21,8 @@ function defaultConfig() {
   return {
     apiKey: '',
     model: MODELS[0].id,
+    activeProvider: 'nvidia',
+    providers: [],
     langsmith: { enabled: false, project: 'sun2agent' },
     sandbox: { enabled: false, mode: 'host' },
     memory: { enabled: false },
@@ -31,11 +33,49 @@ function defaultConfig() {
   };
 }
 
+function normalizeProviders(value) {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((provider) => {
+    if (!provider || typeof provider !== 'object') return [];
+    const id = typeof provider.id === 'string' ? provider.id.trim() : '';
+    const name = typeof provider.name === 'string' ? provider.name.trim() : '';
+    const baseUrl = typeof provider.baseUrl === 'string' ? provider.baseUrl.trim() : '';
+    const apiKey = typeof provider.apiKey === 'string' ? provider.apiKey : '';
+    const models = [...new Set(
+      (Array.isArray(provider.models) ? provider.models : [])
+        .map((model) => typeof model === 'string' ? model.trim() : '')
+        .filter(Boolean)
+    )];
+    if (!id || id === 'nvidia' || !name || !baseUrl || !models.length) return [];
+    const requestedModel = typeof provider.activeModel === 'string'
+      ? provider.activeModel.trim()
+      : '';
+    const activeModel = models.includes(requestedModel) ? requestedModel : models[0];
+    return [{
+      id,
+      name,
+      type: 'openai-compatible',
+      baseUrl,
+      apiKey,
+      models,
+      activeModel,
+      supportsTools: provider.supportsTools !== false
+    }];
+  });
+}
+
 function loadConfig() {
   ensureConfigDir();
   if (!fs.existsSync(CONFIG_FILE)) return defaultConfig();
   try {
     const raw = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8'));
+    raw.providers = normalizeProviders(raw.providers);
+    if (
+      typeof raw.activeProvider !== 'string' ||
+      (raw.activeProvider !== 'nvidia' && !raw.providers.some((provider) => provider.id === raw.activeProvider))
+    ) {
+      raw.activeProvider = 'nvidia';
+    }
     // Ensure langsmith section exists for configs saved before the feature.
     if (!raw.langsmith) raw.langsmith = { enabled: false, project: 'sun2agent' };
     // Ensure sandbox section exists for configs saved before the feature.
@@ -77,4 +117,4 @@ function deleteConfig() {
   if (fs.existsSync(CONFIG_DIR)) fs.rmdirSync(CONFIG_DIR, { recursive: true });
 }
 
-module.exports = { MODELS, loadConfig, saveConfig, deleteConfig, CONFIG_FILE };
+module.exports = { MODELS, loadConfig, saveConfig, deleteConfig, CONFIG_FILE, defaultConfig, normalizeProviders };

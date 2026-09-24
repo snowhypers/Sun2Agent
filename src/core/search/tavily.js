@@ -28,7 +28,7 @@ function normalizeResult(r) {
 
 // POST a search to Tavily and return normalized results.
 // `apiKey` must never appear in logs or error messages.
-async function tavilySearch(query, apiKey) {
+async function tavilySearch(query, apiKey, signal) {
   if (!apiKey) {
     throw new Error(
       'Web search is enabled but no Tavily API key is configured. ' +
@@ -51,10 +51,12 @@ async function tavilySearch(query, apiKey) {
           Authorization:  `Bearer ${apiKey}`,
           'Content-Type': 'application/json'
         },
-        timeout: 10000   // 10 s — never block the agent indefinitely
+        timeout: 10000,  // 10 s — never block the agent indefinitely
+        signal
       }
     );
   } catch (err) {
+    if (signal?.aborted) throw err;
     // Axios wraps HTTP errors in err.response; network/timeout errors have no response.
     if (err.response) {
       const status = err.response.status;

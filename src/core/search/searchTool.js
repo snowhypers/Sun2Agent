@@ -45,20 +45,23 @@ function formatResults(results) {
 }
 
 // Execute a web_search tool call.
-// Returns a plain string (the formatted, sanitized search results) or a safe
-// error message — never throws, so the agent loop stays alive.
-async function executeWebSearch(query, apiKey) {
+// Returns formatted results or a safe error message. An aborted turn rejects
+// so the caller can stop immediately instead of asking the model to continue.
+async function executeWebSearch(query, apiKey, signal) {
   if (!query || !String(query).trim()) {
     return 'Search failed: query must not be empty.';
   }
 
   try {
-    const results = await tavilySearch(String(query).trim(), apiKey);
+    const results = await tavilySearch(String(query).trim(), apiKey, signal);
     const raw = formatResults(results);
     // Sanitize through outputGuard so any secrets that happen to appear in
     // search snippets are masked before they reach the model or the terminal.
     return guardrails.outputGuard(raw);
   } catch (err) {
+    // Cancellation belongs to the active turn; do not turn it into a search
+    // result that the model might continue processing after /stop.
+    if (signal?.aborted) throw err;
     // err.message is already a safe user-facing string from tavily.js.
     return err.message || 'Search failed: unknown error.';
   }

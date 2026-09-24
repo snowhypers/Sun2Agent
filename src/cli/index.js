@@ -6,6 +6,7 @@ const guardrails = require('../core/guardrails');
 const observability = require('../core/observability');
 const memory = require('../core/memory');
 const skills = require('../core/skills');
+const providers = require('../core/providers');
 const telegram = require('../core/telegram');
 const { askInput, ESC_BACK } = require('./ui/input');
 const { watchEscape, waitEnterOrEsc } = require('./ui/escapeWatcher');
@@ -56,8 +57,8 @@ async function startChat() {
   printIntro();
 
   // If no API key, force config first
-  if (!config.apiKey) {
-    console.log(chalk.yellow('No API key found. Please run /config first.\n'));
+  if (!providers.hasCredentials(config)) {
+    console.log(chalk.yellow('No provider credentials found. Please run /config first.\n'));
     await handleConfig({ promptBack, waitEnterOrEsc, dockerDownWarning });
     config = loadConfig();
   }
@@ -111,7 +112,7 @@ async function startChat() {
 
   while (true) {
     const input = await askInput({
-      model: config.model,
+      model: providers.getActiveModel(config),
       tag: mcp.getTag(),
       // Skills tag is shown in the chatbox footer (MCP-style) when any
       // skills are selected. The selected skills' content is injected
