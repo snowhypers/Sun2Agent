@@ -61,20 +61,24 @@ function getActiveName() {
   return it.done ? null : it.value;
 }
 
-// Tag shown under the input box. The built-in workspace remains available but
-// is not counted when deciding whether one or all user MCPs are selected.
+// Tag shown under the input box. Workspace keeps its existing quiet behavior
+// beside a user MCP; browser is always shown so browser control is visible.
 function getTag() {
   const userNames = [...connections]
     .filter(([, connection]) => !connection.builtin)
     .map(([name]) => name);
-  if (userNames.length === 1) return userNames[0];
-  if (userNames.length > 1) return 'allMcps';
-
   const builtinNames = [...connections]
     .filter(([, connection]) => connection.builtin)
     .map(([name]) => name);
+  const browserConnected = builtinNames.includes('browser');
+  if (userNames.length === 1) {
+    return browserConnected ? `browser @${userNames[0]}` : userNames[0];
+  }
+  if (userNames.length > 1) {
+    return browserConnected ? 'browser @allMcps' : 'allMcps';
+  }
   if (builtinNames.length === 1) return builtinNames[0];
-  if (builtinNames.length > 1) return 'allMcps';
+  if (builtinNames.length > 1) return builtinNames.join(' @');
   return null;
 }
 

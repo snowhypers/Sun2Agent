@@ -46,6 +46,28 @@ test('api: assembles streamed tool-call deltas without emitting them as text', a
   }
 });
 
+test('api: identifies a provider-aborted stream separately from user cancellation', async () => {
+  const originalPost = axios.post;
+  axios.post = async () => ({
+    data: Readable.from((async function* () {
+      throw new Error('aborted');
+    })())
+  });
+  try {
+    await assert.rejects(
+      chatCompletion('key', 'model', [], [], undefined, () => {}),
+      (error) => {
+        assert.strictEqual(error.code, 'MODEL_STREAM_INTERRUPTED');
+        assert.strictEqual(error.hasPartialOutput, false);
+        assert.match(error.message, /Model response stream was interrupted/);
+        return true;
+      }
+    );
+  } finally {
+    axios.post = originalPost;
+  }
+});
+
 test('api: applies the default 60-second NVIDIA timeout', async () => {
   const originalPost = axios.post;
   const originalTimeout = process.env.SUN2AGENT_NVIDIA_TIMEOUT_MS;

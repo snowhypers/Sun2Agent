@@ -9,6 +9,13 @@ const ora = require('ora');
 const mcp = require('../../core/mcp');
 const { getMcpFilePath, openMcpConfig, loadMcpConfig, getServers } = require('../../core/mcp/config');
 
+function builtinNote() {
+  const notes = [];
+  if (mcp.isBrowserConnected()) notes.push('Browser tools remain available.');
+  if (mcp.isWorkspaceConnected()) notes.push('Workspace tools remain available.');
+  return notes.length ? ' ' + notes.join(' ') : '';
+}
+
 async function mcpAddEdit(ctx) {
   const file = getMcpFilePath();
   console.log(chalk.gray(`\nOpening ${file}`));
@@ -29,10 +36,7 @@ async function mcpAddEdit(ctx) {
     // Esc disconnects user-configured MCPs; the built-in workspace remains.
     if (mcp.hasUserConnections()) {
       await mcp.disconnectUserServers();
-      const workspaceNote = mcp.isWorkspaceConnected()
-        ? ' Workspace tools remain available.'
-        : '';
-      console.log(chalk.gray(`\nDisconnected user MCP.${workspaceNote}\n`));
+      console.log(chalk.gray(`\nDisconnected user MCP.${builtinNote()}\n`));
     } else {
       console.log(chalk.gray('\nBack to simple chat.\n'));
     }
@@ -87,7 +91,7 @@ async function mcpConnect(ctx) {
             (allConnected ? connectedTag : ''),
           value: '__all__'
         },
-        { name: 'Disconnect user MCPs  (leave workspace unchanged)', value: '__disconnect__' },
+        { name: 'Disconnect user MCPs  (leave built-in plugins unchanged)', value: '__disconnect__' },
         new inquirer.Separator(),
         ...servers.map((s) => ({
           name:
@@ -103,10 +107,7 @@ async function mcpConnect(ctx) {
 
   if (choice === '__disconnect__') {
     await mcp.disconnectUserServers();
-    const workspaceNote = mcp.isWorkspaceConnected()
-      ? ' Workspace tools remain available.'
-      : '';
-    console.log(chalk.gray(`\nDisconnected user MCP servers.${workspaceNote}\n`));
+    console.log(chalk.gray(`\nDisconnected user MCP servers.${builtinNote()}\n`));
     return;
   }
 

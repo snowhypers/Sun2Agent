@@ -35,12 +35,23 @@ const WORKSPACE_SYSTEM_PROMPT =
   '- For deletion, use delete_file or delete_directory. Never simulate deletion by moving an item.\n' +
   '- Only delete the exact requested path. If it does not exist but a similar name does, ask the user to confirm before changing that item.';
 
+const BROWSER_SYSTEM_PROMPT =
+  '\n\nBrowser tool rules:\n' +
+  '- Browser tools are connected. For browser or website tasks, use them to take action instead of claiming you lack access or giving manual instructions.\n' +
+  '- Start safe, reversible steps immediately. Ask one concise question only when a missing detail prevents the requested action.\n' +
+  '- If authentication is required, open the sign-in page and ask the user to complete login; never request passwords in chat.\n' +
+  '- Consequential actions must still pass the existing human approval check.';
+
 function buildTurnSystemPrompt(config, relevantMemories, options = {}) {
   const withAgent = context.buildSystemPrompt(BASE_SYSTEM_PROMPT);
   const withSkills = skills.buildSkillsContext(withAgent, config);
   const withMemory = memory.buildMemoryContext(withSkills, relevantMemories);
   const workspaceConnected = options.workspaceConnected ?? mcp.isWorkspaceConnected();
-  return workspaceConnected ? withMemory + WORKSPACE_SYSTEM_PROMPT : withMemory;
+  const browserConnected = options.browserConnected ?? mcp.isBrowserConnected();
+  let prompt = withMemory;
+  if (workspaceConnected) prompt += WORKSPACE_SYSTEM_PROMPT;
+  if (browserConnected) prompt += BROWSER_SYSTEM_PROMPT;
+  return prompt;
 }
 
 // Terminal helpers used for tool-call batch + result rendering.
@@ -99,12 +110,10 @@ async function chatTurn(config, history, signal, onToken, onToolTurn) {
 
   // Loop so the model can chain tool calls before its final answer.
   const MAX_TOOL_STEPS = 30;
-  // One silent retry when the model answers with a completely empty message
-  // (no content, no tool calls). The retry runs in NON-STREAMING mode: an
-  // empty reply is almost always a prematurely closed SSE stream, and a plain
-  // JSON response cannot suffer chunk loss the way a stream can.
-  const EMPTY_RESPONSE_RETRIES = 1;
-  let emptyRetries = 0;
+  // One silent non-streaming recovery when NVIDIA either returns an empty
+  // message or closes the SSE stream before producing any response.
+  const RESPONSE_RECOVERY_RETRIES = 1;
+  let recoveryRetries = 0;
   for (let step = 0; step < MAX_TOOL_STEPS; step++) {
     if (signal && signal.aborted) {
       spinner.stop();
@@ -125,13 +134,23 @@ async function chatTurn(config, history, signal, onToken, onToolTurn) {
         signal,
         // Retry attempts run NON-STREAMING: a plain JSON response cannot lose
         // chunks the way a prematurely closed SSE stream can.
-        emptyRetries ? undefined : streamText
+        recoveryRetries ? undefined : streamText
       );
     } catch (e) {
       if (signal && signal.aborted) {
         spinner.stop();
         hitl.setSpinner(null);
         return null;
+      }
+      if (
+        e.code === 'MODEL_STREAM_INTERRUPTED' &&
+        !e.hasPartialOutput &&
+        recoveryRetries < RESPONSE_RECOVERY_RETRIES
+      ) {
+        recoveryRetries += 1;
+        if (typeof onToolTurn === 'function') onToolTurn();
+        ensureIndicator('model stream interrupted — retrying...');
+        continue;
       }
       const detail = e.response?.data?.detail || e.response?.data?.error?.message || e.message || '';
       // Some models reject the `tools` param — retry once without tools.
@@ -159,8 +178,8 @@ async function chatTurn(config, history, signal, onToken, onToolTurn) {
         hitl.setSpinner(null);
         return null;
       }
-      if (emptyRetries < EMPTY_RESPONSE_RETRIES) {
-        emptyRetries += 1;
+      if (recoveryRetries < RESPONSE_RECOVERY_RETRIES) {
+        recoveryRetries += 1;
         // Reset the streamed-output buffers for the retried attempt.
         if (typeof onToolTurn === 'function') onToolTurn();
         continue;
@@ -298,4 +317,10 @@ async function chatTurn(config, history, signal, onToken, onToolTurn) {
   }
 }
 
-module.exports = { chatTurn, buildTurnSystemPrompt, BASE_SYSTEM_PROMPT, WORKSPACE_SYSTEM_PROMPT };
+module.exports = {
+  chatTurn,
+  buildTurnSystemPrompt,
+  BASE_SYSTEM_PROMPT,
+  WORKSPACE_SYSTEM_PROMPT,
+  BROWSER_SYSTEM_PROMPT
+};

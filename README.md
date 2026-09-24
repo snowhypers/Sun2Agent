@@ -122,6 +122,7 @@ sun2agent
 | 🔌 | **Native MCP client** | `stdio`, `http` (Streamable HTTP), and `sse` transports, local or remote |
 | ⚙️ | **Automatic tool-calling** | No tool syntax to memorize — describe the task in plain English |
 | 📁 | **Opt-in workspace tools** | Run `/workspace` to create, read, and edit files under the launch directory |
+| 🌐 | **Opt-in browser automation** | Run `/browser` to connect an isolated Playwright browser only when needed |
 | 🛡️ | **5-layer guardrails** | Input, command, network, filesystem, and output guards catch risk before it runs |
 | ✋ | **Human-in-the-Loop** | Read-only tools run directly; mutating and unknown tools require per-session approval |
 | 🐳 | **Optional Docker sandbox** | The entire agent runs isolated, with automatic session resume when Docker restarts |
@@ -217,7 +218,7 @@ The agent combines your stated conventions with the tools available to it.
 
 **Automate browser tasks**
 > "Open this site, take a screenshot, and click the pricing link."
-Connect [Playwright MCP](https://github.com/microsoft/playwright-mcp) and describe the flow in plain English.
+Run `/browser`, then describe the flow in plain English. It uses installed Google Chrome with an isolated temporary profile. Logins, submissions, purchases, uploads, downloads, permission dialogs, and account changes require explicit approval.
 
 **Apply a consistent review process**
 Activate a `Code Review` or `Security Audit` Skill so every review follows the same checklist, every time.
@@ -235,6 +236,7 @@ Mutating and unknown MCP calls route through guardrails and an explicit approval
 | `/help`, `/?` | Show all commands and shortcuts |
 | `/config` | Configure NVIDIA NIM, optional services, and Telegram |
 | `/workspace` | Connect filesystem tools for the current launch directory |
+| `/browser` | Connect isolated Playwright browser automation tools |
 | `/mcp` | Manage MCP servers — add/edit, connect one or all, disconnect |
 | `/agent` | Open the project's `AGENT.md` (creates a template on first use) |
 | `/memory` | Open and edit local `~/.sun2agent/memory.md` |
@@ -246,7 +248,7 @@ Mutating and unknown MCP calls route through guardrails and an explicit approval
 |-----|--------|
 | `Enter` | Send message |
 | `Esc` *(while typing)* | Clear the input |
-| `Esc` *(empty box)* | Disconnect MCP/workspace or clear selected Skills |
+| `Esc` *(empty box)* | Disconnect MCP/browser/workspace or clear selected Skills |
 | `Esc` *(agent working)* | Stop the current reply or tool call |
 | `Esc` *(in menus)* | Go back / cancel |
 | `Ctrl+C` | Quit immediately |

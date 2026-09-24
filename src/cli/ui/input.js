@@ -100,7 +100,7 @@ function askInput(options = {}) {
   // (e.g. "@coding @debugging"). It already includes the @ prefixes and
   // is rendered verbatim next to the MCP tag.
   const skillTag = options.skillTag || '';
-  const hint = options.hint || '⎋ esc back  ·  /help  ·  /workspace  ·  /mcp  ·  /skills  ·  /exit';
+  const hint = options.hint || '⎋ esc back  ·  /help  ·  /workspace  ·  /browser  ·  /mcp  ·  /skills  ·  /exit';
 
   return new Promise((resolve) => {
     let text = '';

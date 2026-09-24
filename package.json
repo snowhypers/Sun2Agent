@@ -69,6 +69,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@modelcontextprotocol/server-filesystem": "2026.8.31",
+    "@playwright/mcp": "0.0.82",
     "axios": "^1.18.1",
     "boxen": "^5.1.2",
     "chalk": "^4.1.2",

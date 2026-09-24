@@ -27,7 +27,7 @@ function printBanner(config) {
   ];
   const welcome = 'Welcome back!';
   const modelLine = `Model ${model}`;
-  const helpLine = 'Tools: /workspace   ·   /mcp   ·   /help for commands';
+  const helpLine = 'Tools: /workspace   ·   /browser   ·   /mcp   ·   /help for commands';
   // Width must cover the LONGEST line (incl. footer) so everything centers.
   const W = Math.max(...art.map((l) => l.length), welcome.length, modelLine.length, helpLine.length) + 4;
   const center = (s) => {
@@ -91,6 +91,7 @@ function printHelp() {
     row('/help, /?', 'Show this help'),
     row('/config', 'Set your NVIDIA NIM API key and pick a model'),
     row('/workspace', 'Connect filesystem tools for the current folder'),
+    row('/browser', 'Connect isolated Playwright browser tools'),
     row('/mcp', 'Manage MCP servers (add/edit, connect one, disconnect)'),
     row('/agent', 'Edit the project’s AGENT.md instructions in your editor'),
     row('/memory', 'Open and edit local memory.md'),
@@ -101,7 +102,7 @@ function printHelp() {
     chalk.bold('Keyboard'),
     row('Enter', 'Send the message'),
     row('Esc (with text)', 'Clear what you are typing'),
-    row('Esc (empty box)', 'Disconnect MCP/workspace or clear skills'),
+    row('Esc (empty box)', 'Disconnect MCP/browser/workspace or clear skills'),
     row('Esc (while busy)', 'Stop the current reply / tool call'),
     row('Esc (in menus)', 'Go back / cancel'),
     row('Ctrl+C', 'Quit immediately'),

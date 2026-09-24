@@ -13,6 +13,7 @@
 //   ./transports.js   how a connection is built (stdio / http / sse),
 //                     including the safe child-env allowlist for stdio
 //   ./workspace.js    built-in filesystem MCP lifecycle and workspace policy
+//   ./browser.js      opt-in isolated Playwright MCP lifecycle
 //   ./index.js        (this file) connect/disconnect orchestration and the
 //                     guarded tool-call dispatch (guardrails + HITL +
 //                     observability tracing, in that order)
@@ -28,6 +29,7 @@ const hitl = require('../hitl/mcpApproval');
 const registry = require('./registry');
 const { loadSdk, buildTransport } = require('./transports');
 const workspace = require('./workspace');
+const browser = require('./browser');
 
 const DEFAULT_MCP_CONNECTION_TIMEOUT_MS = 20000;
 
@@ -47,6 +49,9 @@ function connectionTimeoutError(server, timeout) {
 async function connectServer(s) {
   if (workspace.isReservedUserServer(s)) {
     throw new Error(workspace.reservedNameError());
+  }
+  if (browser.isReservedUserServer(s)) {
+    throw new Error(browser.reservedNameError());
   }
   // A stdio server runs a real command — vet it before spawning anything.
   const verdict = guardrails.validateServer(s);
@@ -69,7 +74,7 @@ async function connectServer(s) {
       })
     ]);
     const listedTools = tools || [];
-    const localTools = s.builtin
+    const localTools = s.name === workspace.NAME
       ? workspace.getLocalTools().filter(
           (localTool) => !listedTools.some((tool) => tool.name === localTool.name)
         )
@@ -114,6 +119,18 @@ async function disconnectWorkspace() {
   return workspace.disconnect();
 }
 
+async function connectBrowser() {
+  return browser.connect(connectServer);
+}
+
+function isBrowserConnected() {
+  return browser.isConnected();
+}
+
+async function disconnectBrowser() {
+  return browser.disconnect();
+}
+
 // Connect every server in mcp.json. Returns per-server results so the caller
 // can show which connected and which failed without aborting on one bad entry.
 async function connectFromConfig() {
@@ -125,6 +142,14 @@ async function connectFromConfig() {
         type: s.type,
         ok: false,
         error: workspace.reservedNameError()
+      };
+    }
+    if (browser.isReservedUserServer(s)) {
+      return {
+        name: s.name,
+        type: s.type,
+        ok: false,
+        error: browser.reservedNameError()
       };
     }
     // Reconnect cleanly if it was already connected.
@@ -231,6 +256,11 @@ module.exports = {
   connectWorkspace,
   isWorkspaceConnected,
   disconnectWorkspace,
+  BROWSER_NAME: browser.NAME,
+  browserServer: browser.createServer,
+  connectBrowser,
+  isBrowserConnected,
+  disconnectBrowser,
   disconnectUserServers,
   hasUserConnections,
   connectFromConfig,

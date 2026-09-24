@@ -97,11 +97,25 @@ async function chatCompletion(apiKey, model, messages, tools, signal, onToken) {
         message.tool_calls[index] = call;
       }
     };
-    for await (const chunk of response.data) {
-      pending += Buffer.from(chunk).toString('utf8');
-      const lines = pending.split(/\r?\n/);
-      pending = lines.pop() || '';
-      lines.forEach(consume);
+    try {
+      for await (const chunk of response.data) {
+        pending += Buffer.from(chunk).toString('utf8');
+        const lines = pending.split(/\r?\n/);
+        pending = lines.pop() || '';
+        lines.forEach(consume);
+      }
+    } catch (error) {
+      if (signal?.aborted) throw error;
+      const interrupted = /aborted|premature|terminated|econnreset|socket hang up/i.test(
+        String(error?.code || '') + ' ' + String(error?.message || '')
+      );
+      if (!interrupted) throw error;
+      const streamError = new Error(
+        'Model response stream was interrupted. Try again or select another model.'
+      );
+      streamError.code = 'MODEL_STREAM_INTERRUPTED';
+      streamError.hasPartialOutput = Boolean(message.content || message.tool_calls.length);
+      throw streamError;
     }
     if (pending) consume(pending);
     if (!message.tool_calls.length) delete message.tool_calls;

@@ -23,11 +23,9 @@ const { dockerDownWarning } = require('./dockerStatus');
 
 async function syncTelegram(config) {
   try {
-    const status = await telegram.sync(config);
-    if (status.enabled) {
-      const username = status.username ? ` (@${status.username})` : '';
-      console.log(chalk.green(`✓ Telegram connected${username}\n`));
-    }
+    // Telegram starts quietly like the other configured background services.
+    // Keep failures visible so a broken connection is still diagnosable.
+    await telegram.sync(config);
   } catch (error) {
     console.log(chalk.yellow(`⚠ Telegram could not start: ${error.message || 'connection failed'}\n`));
   }
@@ -92,9 +90,10 @@ async function startChat() {
     }
   }
 
-  // Telegram is optional. Its long-poll listener runs beside the terminal
-  // chat and is restricted to the one private chat ID saved by /config.
-  await syncTelegram(config);
+  // Telegram is optional. Start it in the background so its network handshake
+  // never delays the first chat box. Errors redraw safely above active input.
+  // The listener remains restricted to the private chat ID saved by /config.
+  void syncTelegram(config);
 
   const history = [];
 
@@ -122,14 +121,20 @@ async function startChat() {
     });
 
     // Esc on an empty box disconnects user-configured MCPs first, then the
-    // opt-in workspace, then clears Skills. Each layer remains independent.
+    // opt-in browser and workspace, then clears Skills. Each layer remains independent.
     if (input === ESC_BACK) {
       if (mcp.hasUserConnections()) {
         await mcp.disconnectUserServers();
-        const workspaceNote = mcp.isWorkspaceConnected()
-          ? ' Workspace tools remain available.'
-          : '';
-        console.log(chalk.gray(`⎋ Disconnected user MCP.${workspaceNote}\n`));
+        const builtinNote = [
+          mcp.isBrowserConnected() ? 'Browser tools remain available.' : '',
+          mcp.isWorkspaceConnected() ? 'Workspace tools remain available.' : ''
+        ].filter(Boolean).join(' ');
+        console.log(chalk.gray(`⎋ Disconnected user MCP.${builtinNote ? ' ' + builtinNote : ''}\n`));
+        continue;
+      }
+      if (mcp.isBrowserConnected()) {
+        await mcp.disconnectBrowser();
+        console.log(chalk.gray('⎋ Disconnected /browser. Browser tools are unavailable.\n'));
         continue;
       }
       if (mcp.isWorkspaceConnected()) {
@@ -166,7 +171,7 @@ async function startChat() {
     }
     const handler = COMMANDS[text];
     if (handler) {
-      if (text === '/mcp' || text === '/workspace') {
+      if (text === '/mcp' || text === '/workspace' || text === '/browser') {
         const before = mcp.getConnectionSignature();
         await handler({ promptBack, waitEnterOrEsc, dockerDownWarning, loadConfig, saveConfig });
         const after = mcp.getConnectionSignature();

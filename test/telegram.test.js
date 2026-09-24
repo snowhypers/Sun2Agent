@@ -2,6 +2,8 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const {
   TelegramRuntime,
@@ -383,4 +385,37 @@ test('Telegram stops polling after one getUpdates conflict instead of retrying',
     'Polling stopped because this bot is already running in another process. Stop the other instance, then restart Sun2Agent.'
   ]);
   await runtime.stop();
+});
+
+test('Telegram starts quietly in the CLI while startup failures remain visible', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'cli', 'index.js'), 'utf8');
+  assert.doesNotMatch(source, /✓ Telegram connected/);
+  assert.match(source, /Telegram could not start/);
+  assert.match(source, /await telegram\.sync\(config\)/);
+  assert.match(source, /void syncTelegram\(config\)/);
+});
+
+test('Telegram background startup cannot revive polling after stop', async () => {
+  let finishGetMe;
+  const getMe = new Promise((resolve) => { finishGetMe = resolve; });
+  const runtime = new TelegramRuntime({
+    http: {
+      async post(url) {
+        if (url.endsWith('/getMe')) {
+          await getMe;
+          return { data: { ok: true, result: { username: 'sun_test_bot' } } };
+        }
+        throw new Error('polling must not start after stop');
+      }
+    }
+  });
+
+  const starting = runtime.start(runtimeConfig());
+  await new Promise((resolve) => setImmediate(resolve));
+  await runtime.stop();
+  finishGetMe();
+
+  assert.deepStrictEqual(await starting, { enabled: false });
+  assert.strictEqual(runtime.running, false);
+  assert.strictEqual(runtime.pollPromise, null);
 });

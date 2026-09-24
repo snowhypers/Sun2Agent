@@ -20,6 +20,7 @@ class TelegramRuntime {
     this.running = false;
     this.pollController = null;
     this.pollPromise = null;
+    this.generation = 0;
     this.offset = 0;
     this.histories = new Map();
     this.active = new Map();
@@ -27,11 +28,13 @@ class TelegramRuntime {
 
   async start(config) {
     await this.stop();
+    const generation = this.generation;
     const verdict = validateTelegramConfig(config && config.telegram);
     if (!verdict.ok) return { enabled: false };
 
     this.config = config;
     const bot = await telegramRequest(this.http, config.telegram.botToken, 'getMe');
+    if (generation !== this.generation) return { enabled: false };
     this.running = true;
     this.pollController = new AbortController();
     this.pollPromise = this.pollLoop(this.pollController.signal).catch((error) => {
@@ -41,6 +44,7 @@ class TelegramRuntime {
   }
 
   async stop() {
+    this.generation += 1;
     this.running = false;
     if (this.pollController) this.pollController.abort();
     for (const controller of this.active.values()) controller.abort();
