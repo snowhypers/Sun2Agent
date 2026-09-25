@@ -1,6 +1,6 @@
 {
   "name": "sun2agent",
-  "version": "1.6.1",
+  "version": "1.7.0",
   "description": "Open-source AI agent CLI and MCP client with browser automation, workspace tools, Telegram chat, web search, HITL approvals, and NVIDIA NIM or custom OpenAI-compatible providers.",
   "main": "bin/sun2agent.js",
   "bin": {
