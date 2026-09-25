@@ -3,6 +3,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { PassThrough } = require('node:stream');
+const { stripVTControlCharacters } = require('node:util');
 const { askInput, printAboveInput } = require('../src/cli/ui/input');
 
 test('Telegram notice redraws above active input without losing typed text', async () => {
@@ -33,7 +34,7 @@ test('Telegram notice redraws above active input without losing typed text', asy
     assert.ok(notice > 0);
     assert.match(rendered.slice(0, notice), /\x1b\[4A\r\x1b\[0J$/);
     assert.match(rendered.slice(notice), /Telegram: stopped\n[^]*╭/);
-    assert.match(rendered.slice(notice), / › hi/);
+    assert.match(stripVTControlCharacters(rendered.slice(notice)), / › hi/);
   } finally {
     Object.defineProperty(process, 'stdin', originalStdin);
     Object.defineProperty(process, 'stdout', originalStdout);

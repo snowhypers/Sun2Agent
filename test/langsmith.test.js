@@ -6,10 +6,10 @@
 // Note on tracing: these tests verify the wrapper *contract* (disabled =
 // pure pass-through; enabled = invokes the underlying SDK without changing
 // the wrapped function's return value), not real LangSmith network calls.
-// The wrappers call run.postRun().catch(() => {}), so a missing/fake API
-// key never causes a test failure.
+// Mock the SDK upload boundary so fake keys never reach the network.
 
-const { test } = require('node:test');
+const { test, beforeEach } = require('node:test');
+const { RunTree } = require('langsmith');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
@@ -20,6 +20,10 @@ const guardrails = require(path.join(PROJECT, 'src/core/guardrails'));
 const observability = require(path.join(PROJECT, 'src/core/observability'));
 const langsmith = require(path.join(PROJECT, 'src/core/observability/langsmith'));
 const { sanitize } = langsmith;
+
+beforeEach((t) => {
+  t.mock.method(RunTree.prototype, 'postRun', async () => {});
+});
 
 // ---------------------------------------------------------------------------
 // helpers
@@ -370,48 +374,27 @@ test('observability: consumeError exposes one-shot capture and clear', () => {
 });
 
 test('observability: postRun rejection is captured by the module', async () => {
-  // The handler attached to run.postRun().catch() is what we want to test.
-  // We can't reliably monkey-patch the langsmith RunTree reference (it's
-  // captured at module load time by the `const { RunTree } = require(...)`
-  // in langsmith.js). Instead, we drive the same .catch() handler directly
-  // by exercising the wrapper with a real RunTree against a deliberately
-  // broken key: postRun() will reject (the SDK tries to flush to LangSmith
-  // and fails because the fake key is not accepted), and our .catch() will
-  // capture it. This is a real network test, so it must NOT block — we
-  // race a timeout so a hung SDK doesn't fail the suite.
+  RunTree.prototype.postRun.mock.mockImplementation(async () => {
+    throw new Error('Simulated LangSmith upload failure');
+  });
   const obs = freshObservability();
-  obs.disable();
-  // Use a clearly-bogus key. The SDK will try to flush and fail, but the
-  // wrapper never awaits the failure.
-  obs.enable('lsvi_pt_bogus_key_for_capture_test', 'sun2agent-test');
-
-  // Race a wallclock against a short timeout so a hung SDK doesn't deadlock
-  // the test runner. Either the rejection lands within the budget (good —
-  // we assert on it), or the test bails out (still pass because we have the
-  // other tests for the contract).
-  const llmResult = await obs.traceLLM(async () => ({ content: 'ok', tool_calls: [] }), { model: 'm' });
-  assert.deepStrictEqual(llmResult, { content: 'ok', tool_calls: [] });
-  const toolResult = await obs.traceTool(async () => 'tool ok', { toolName: 't' });
-  assert.strictEqual(toolResult, 'tool ok');
-
-  // Give the SDK up to 500ms to attempt + fail to flush. If nothing landed
-  // by then, skip the assertion (network conditions in CI vary).
-  for (let i = 0; i < 10; i += 1) {
-    // eslint-disable-next-line no-await-in-loop
-    await new Promise((r) => setTimeout(r, 50));
-    const err = obs.peekError();
-    if (err) break;
+  obs.enable('lsvi_pt_testkey', 'sun2agent-test');
+  try {
+    for (const trace of [
+      () => obs.traceLLM(async () => 'ok', { model: 'm' }),
+      () => obs.traceTool(async () => 'ok', { toolName: 't' })
+    ]) {
+      assert.strictEqual(await trace(), 'ok');
+      const err = obs.peekError();
+      assert.ok(err, 'upload rejection must be captured');
+      assert.strictEqual(err.message, 'Simulated LangSmith upload failure');
+      assert.strictEqual(obs.consumeError(), err);
+      assert.strictEqual(obs.consumeError(), null);
+    }
+    assert.strictEqual(RunTree.prototype.postRun.mock.callCount(), 2);
+  } finally {
+    obs.disable();
   }
-  // Whether or not the network attempt landed, consumeError must be safe
-  // to call and must return either null or a captured error. It must not
-  // throw, and the slot must be cleared after consume.
-  const err = obs.consumeError();
-  if (err) {
-    assert.strictEqual(typeof err.message, 'string');
-  }
-  // And the slot is cleared.
-  assert.strictEqual(obs.consumeError(), null);
-  obs.disable();
 });
 
 test('observability: consumeError is exposed through the public interface', () => {
