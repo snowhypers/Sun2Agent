@@ -2,11 +2,10 @@
 
 # ☀️ Sun2Agent
 
-### Open-Source AI Agent CLI · Native MCP Client · Secure Tool Execution for Your Terminal
+### Open-Source AI Agent CLI · Native MCP Client ·  Automation
+**Your model. Your tools. AI automation in your terminal.**
 
-**The safest way to run an AI agent with real tool access — in your terminal, on your machine, under your control.**
-
-Sun2Agent is a free, open-source **AI agent CLI** and native **[Model Context Protocol](https://modelcontextprotocol.io) (MCP) client**. Connect any MCP server, let the agent discover and call tools automatically, apply reusable Skills and Agent instructions, and approve every sensitive action before it runs — all with zero telemetry.
+Sun2Agent is a free, open-source **AI agent harness** with MCP server connections, browser automation, workspace tools, web search, and Telegram chat. OpenAI-compatible models. Apply reusable **Skills (`skills.md`)**, **agent instructions (`AGENT.md`)**, and **custom memory (`memory.md`)**—with **5-layer guardrails**, **HITL approvals**, an optional **Docker sandbox** and **LangSmith tracing** with **zero built-in telemetry**.
 
 [![npm version](https://img.shields.io/npm/v/sun2agent?color=cb3837&logo=npm&label=npm)](https://www.npmjs.com/package/sun2agent)
 [![npm total downloads](https://img.shields.io/npm/dt/sun2agent?color=cb3837&logo=npm&label=%20downloads)](https://www.npmjs.com/package/sun2agent)
@@ -42,9 +41,6 @@ As an **agent harness**, Sun2Agent brings the model, project context, MCP tools,
 **Common searches this answers:**
 `terminal AI agent` · `npm MCP client` · `AI agent CLI open source` · `secure autonomous coding agent` · `Model Context Protocol client npm` · `Claude Code alternative` · `Codex CLI alternative` · `self-hosted AI agent` · `human-in-the-loop AI agent`
 
-### What is MCP (Model Context Protocol)?
-
-MCP is an open standard that lets AI applications connect to external tools and data sources — filesystems, browsers, databases, APIs — through one consistent protocol instead of a custom integration per tool. Sun2Agent implements a **native MCP client**, so any MCP server built by anyone becomes usable by the agent immediately.
 
 <p align="center">
   <p>Sun2Agent architecture diagram showing context layer, tools layer, security layer, and the AI agent runtime loop
@@ -188,18 +184,65 @@ Get a free API key from **[NVIDIA Build](https://build.nvidia.com)**: pick a mod
 
 For another OpenAI-compatible service, choose **Add custom OpenAI-compatible provider** in `/config`, then enter its provider name, base URL (for example `https://api.example.com/v1`), API key, and model ID. Providers and model IDs are saved for later selection in the owner-only `~/.sun2agent/config.json` file.
 
-### Custom model providers
+<a id="mcp-client--model-context-protocol"></a>
+## MCP Client & Model Context Protocol
 
-1. Run `/config` and select **Add custom OpenAI-compatible provider**.
-2. Enter a provider name and its OpenAI-compatible base URL, such as `https://api.example.com/v1`.
-3. Enter the API key and the exact model ID supplied by that service.
-4. Answer whether the provider supports **OpenAI tool calling**. Browser, workspace, and other MCP tools require a model with compatible tool-calling support.
-5. Complete the remaining configuration prompts.
+```text
+                    Sun2Agent
+                        │
+                 MCP Client Layer
+                        │
+        ┌───────────────┼────────────────┐
+        │               │                │
+      stdio            HTTP              SSE
+        │               │                │
+        ▼               ▼                ▼
+   Local Tools     Remote Tools     Remote Tools
+```
 
-To switch later, run `/config`, choose a saved provider, and select its model. Choose **Add another model ID** to save another model for that provider. NVIDIA NIM remains available as a built-in choice.
+Examples of what you can connect: filesystem tools, browser automation ([Playwright MCP](https://github.com/microsoft/playwright-mcp)), databases, internal APIs, or any custom MCP server.
 
-Custom endpoints must support the OpenAI-compatible Chat Completions API; compatibility with other API formats is not implied. The setup currently requires a non-empty API key, including for local endpoints. Requests and chat context go to the selected provider, so only configure services you trust.
+**1. Open the config.** Run `/mcp` → **Add / Edit MCP**. This opens `~/.sun2agent/mcp.json` in your editor.
 
+**2. Add servers** under `mcpServers`:
+
+```json
+{
+  "mcpServers": {
+    "filesystem": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"]
+    },
+    "playwright": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@latest"]
+    },
+    "my-http-server": {
+      "type": "http",
+      "url": "https://your-server.example.com/mcp",
+      "headers": { "AUTHORIZATION": "Bearer YOUR_KEY" }
+    },
+    "my-sse-server": {
+      "type": "sse",
+      "url": "https://your-server.example.com/sse"
+    }
+  }
+}
+```
+
+| `type` | Transport | Needs |
+|--------|-----------|-------|
+| `stdio` | Local child process | `command`, optional `args` / `env` |
+| `http` | Streamable HTTP (alias: `remote`) | `url`, optional `headers` |
+| `sse` | Server-Sent Events | `url`, optional `headers` |
+
+Set `"enabled": false` on any server to skip it without deleting it.
+
+**3. Connect.** Run `/mcp` → **Connect MCP**, then pick a server — or **Connect all MCPs** to load every server at once. The active server shows as a green `@tag` under the input box (`@allMcps` when several are connected).
+
+---
 ### Tool approvals
 
 When a connected MCP tool is needed, Sun2Agent shows the exact proposed call and asks:
@@ -279,68 +322,18 @@ Mutating and unknown MCP calls route through guardrails and an explicit approval
 | `Ctrl+C` | Quit immediately |
 
 ---
+### Custom model providers
 
-<a id="mcp-client--model-context-protocol"></a>
-## MCP Client & Model Context Protocol
+1. Run `/config` and select **Add custom OpenAI-compatible provider**.
+2. Enter a provider name and its OpenAI-compatible base URL, such as `https://api.example.com/v1`.
+3. Enter the API key and the exact model ID supplied by that service.
+4. Answer whether the provider supports **OpenAI tool calling**. Browser, workspace, and other MCP tools require a model with compatible tool-calling support.
+5. Complete the remaining configuration prompts.
 
-```text
-                    Sun2Agent
-                        │
-                 MCP Client Layer
-                        │
-        ┌───────────────┼────────────────┐
-        │               │                │
-      stdio            HTTP              SSE
-        │               │                │
-        ▼               ▼                ▼
-   Local Tools     Remote Tools     Remote Tools
-```
+To switch later, run `/config`, choose a saved provider, and select its model. Choose **Add another model ID** to save another model for that provider. NVIDIA NIM remains available as a built-in choice.
 
-Examples of what you can connect: filesystem tools, browser automation ([Playwright MCP](https://github.com/microsoft/playwright-mcp)), databases, internal APIs, or any custom MCP server.
+Custom endpoints must support the OpenAI-compatible Chat Completions API; compatibility with other API formats is not implied. The setup currently requires a non-empty API key, including for local endpoints. Requests and chat context go to the selected provider, so only configure services you trust.
 
-**1. Open the config.** Run `/mcp` → **Add / Edit MCP**. This opens `~/.sun2agent/mcp.json` in your editor.
-
-**2. Add servers** under `mcpServers`:
-
-```json
-{
-  "mcpServers": {
-    "filesystem": {
-      "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"]
-    },
-    "playwright": {
-      "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "@playwright/mcp@latest"]
-    },
-    "my-http-server": {
-      "type": "http",
-      "url": "https://your-server.example.com/mcp",
-      "headers": { "AUTHORIZATION": "Bearer YOUR_KEY" }
-    },
-    "my-sse-server": {
-      "type": "sse",
-      "url": "https://your-server.example.com/sse"
-    }
-  }
-}
-```
-
-| `type` | Transport | Needs |
-|--------|-----------|-------|
-| `stdio` | Local child process | `command`, optional `args` / `env` |
-| `http` | Streamable HTTP (alias: `remote`) | `url`, optional `headers` |
-| `sse` | Server-Sent Events | `url`, optional `headers` |
-
-Set `"enabled": false` on any server to skip it without deleting it.
-
-**3. Connect.** Run `/mcp` → **Connect MCP**, then pick a server — or **Connect all MCPs** to load every server at once. The active server shows as a green `@tag` under the input box (`@allMcps` when several are connected).
-
-Sun2Agent gives model requests 60 seconds by default and each MCP connection 20 seconds. Override them with `SUN2AGENT_MODEL_TIMEOUT_MS` and `SUN2AGENT_MCP_CONNECT_TIMEOUT_MS` (`SUN2AGENT_NVIDIA_TIMEOUT_MS` remains supported for compatibility). An individual MCP entry can override the global connection timeout with `"connectTimeoutMs": 30000`.
-
----
 
 <a id="context"></a>
 ## Context: AGENT.md, Memory & Skills
@@ -583,11 +576,11 @@ You don't need to touch a line of code to help — right now the most useful con
 
 | | How to help |
 |---|---|
-| 🐛 | **Report a bug** → [open an issue](https://github.com/snowhypers/Sun2Agent/issues) |
-| 💡 | **Suggest a feature** → [open an issue](https://github.com/snowhypers/Sun2Agent/issues) |
-| 💬 | **Ask a question or share feedback** → [start a discussion](https://github.com/snowhypers/Sun2Agent/discussions) |
-| ⭐ | **Star the repo** → [github.com/snowhypers/Sun2Agent](https://github.com/snowhypers/Sun2Agent/stargazers) — the single biggest thing that helps other developers find it |
-| 📣 | **Share it** → a tweet, a Reddit post, a Show HN, or just telling another developer |
+|  | **Report a bug** → [open an issue](https://github.com/snowhypers/Sun2Agent/issues) |
+|  | **Suggest a feature** → [open an issue](https://github.com/snowhypers/Sun2Agent/issues) |
+|  | **Ask a question or share feedback** → [start a discussion](https://github.com/snowhypers/Sun2Agent/discussions) |
+|  | **Star the repo** → [github.com/snowhypers/Sun2Agent](https://github.com/snowhypers/Sun2Agent/stargazers) — the single biggest thing that helps other developers find it |
+| | **Share it** → a tweet, a Reddit post, a Show HN, or just telling another developer |
 
 Community pull requests will open in a later phase once the core is stable. For now, **issues and discussions are the best way to contribute.**
 
