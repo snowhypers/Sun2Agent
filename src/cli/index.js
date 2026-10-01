@@ -121,9 +121,15 @@ async function startChat() {
       skillTag: skills.getTag(config)
     });
 
-    // Esc on an empty box disconnects user-configured MCPs first, then the
-    // opt-in browser and workspace, then clears Skills. Each layer remains independent.
+    // Esc on an empty box leaves desktop control first, then user MCPs,
+    // browser, workspace and Skills. Each layer remains independent.
     if (input === ESC_BACK) {
+      if (mcp.isComputerConnected()) {
+        await mcp.disconnectComputer();
+        history.length = 0;
+        console.log(chalk.gray('⎋ Disconnected /computer. Other plugins remain unchanged.\n'));
+        continue;
+      }
       if (mcp.hasUserConnections()) {
         await mcp.disconnectUserServers();
         const builtinNote = [
@@ -172,7 +178,7 @@ async function startChat() {
     }
     const handler = COMMANDS[text];
     if (handler) {
-      if (text === '/mcp' || text === '/workspace' || text === '/browser') {
+      if (text === '/mcp' || text === '/workspace' || text === '/browser' || text === '/computer' || text === '/computer disconnect') {
         const before = mcp.getConnectionSignature();
         await handler({ promptBack, waitEnterOrEsc, dockerDownWarning, loadConfig, saveConfig });
         const after = mcp.getConnectionSignature();

@@ -42,6 +42,12 @@ function isEnabled() {
 // any secrets that might appear in prompts, completions, or tool results.
 function sanitize(text) {
   if (text === null || text === undefined) return text;
+  if (Array.isArray(text)) return text.map((item) => item?.type === 'image_url'
+    ? { type: 'text', text: '[Screenshot omitted from trace]' }
+    : sanitize(item));
+  if (typeof text === 'object') return Object.fromEntries(Object.entries(text).map(([key, value]) => [
+    key, key === 'images' ? '[Screenshots omitted from trace]' : sanitize(value)
+  ]));
   if (typeof text !== 'string') return text;
   return guardrails.outputGuard(text);
 }

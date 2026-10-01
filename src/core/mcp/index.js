@@ -30,6 +30,7 @@ const registry = require('./registry');
 const { loadSdk, buildTransport } = require('./transports');
 const workspace = require('./workspace');
 const browser = require('./browser');
+const computer = require('./computer');
 
 const DEFAULT_MCP_CONNECTION_TIMEOUT_MS = 20000;
 
@@ -46,7 +47,9 @@ function connectionTimeoutError(server, timeout) {
 }
 
 // Connect a single server definition and record its tools. Throws on failure.
-async function connectServer(s) {
+async function connectServer(s, signal) {
+  if (signal?.aborted) throw new Error('Connection cancelled');
+  if (computer.isReservedUserServer(s)) throw new Error(computer.reservedNameError());
   if (workspace.isReservedUserServer(s)) {
     throw new Error(workspace.reservedNameError());
   }
@@ -62,8 +65,15 @@ async function connectServer(s) {
   const client = new S.Client({ name: 'sun2agent', version: VERSION }, { capabilities: {} });
   const timeout = connectionTimeoutMs(s);
   let timer;
+  let onAbort;
+  const cancelled = new Promise((_, reject) => {
+    onAbort = () => reject(new Error('Connection cancelled'));
+    signal?.addEventListener('abort', onAbort, { once: true });
+    if (signal?.aborted) onAbort();
+  });
   try {
     const { tools } = await Promise.race([
+      cancelled,
       (async () => {
         const requestOptions = { timeout, maxTotalTimeout: timeout };
         await client.connect(transport, requestOptions);
@@ -96,6 +106,7 @@ async function connectServer(s) {
     throw error;
   } finally {
     clearTimeout(timer);
+    signal?.removeEventListener('abort', onAbort);
   }
 }
 
@@ -136,6 +147,9 @@ async function disconnectBrowser() {
 async function connectFromConfig() {
   const servers = getServers();
   return Promise.all(servers.map(async (s) => {
+    if (computer.isReservedUserServer(s)) {
+      return { name: s.name, type: s.type, ok: false, error: computer.reservedNameError() };
+    }
     if (workspace.isReservedUserServer(s)) {
       return {
         name: s.name,
@@ -194,7 +208,7 @@ async function connectAll() {
 
 // Execute a tool call routed by getOpenAiTools() and return a text result.
 // `signal` is an optional AbortSignal so a long tool call can be cancelled.
-async function callTool(routes, fullName, args, signal) {
+async function callTool(routes, fullName, args, signal, options = {}) {
   const route = routes.get(fullName);
   if (!route) throw new Error(`no MCP tool named "${fullName}"`);
   const conn = registry.get(route.server);
@@ -221,6 +235,7 @@ async function callTool(routes, fullName, args, signal) {
       `could not proceed as proposed.`
     );
   }
+  if (signal?.aborted) throw new Error('Tool call cancelled before execution');
 
   // The actual MCP tool execution, wrapped by LangSmith tracing when enabled.
   // Tool args, routing, and the guardrail verdict above are unchanged.
@@ -238,19 +253,15 @@ async function callTool(routes, fullName, args, signal) {
       S.CallToolResultSchema,
       signal ? { signal } : undefined
     );
-    // Flatten MCP content blocks to plain text for the model.
-    if (Array.isArray(result.content) && result.content.length) {
-      return result.content
-        .map((b) => (b.type === 'text' ? b.text : JSON.stringify(b)))
-        .join('\n');
-    }
-    // Servers may return structured output with no text blocks.
-    if (result.structuredContent) return JSON.stringify(result.structuredContent);
-    return JSON.stringify(result);
+    return require('./toolResult').formatToolResult(result, options.includeImages === true);
   }, { toolName: route.tool, server: route.server, args });
 }
 
 module.exports = {
+  computerServer: computer.createServer,
+  connectComputer: (signal) => computer.connect(connectServer, signal),
+  isComputerConnected: computer.isConnected,
+  disconnectComputer: computer.disconnect,
   WORKSPACE_NAME: workspace.NAME,
   workspaceServer: workspace.createServer,
   connectWorkspace,

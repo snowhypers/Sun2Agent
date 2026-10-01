@@ -305,6 +305,8 @@ Mutating and unknown MCP calls route through guardrails and an explicit approval
 | `/config` | Select/add model providers and configure optional services and Telegram |
 | `/workspace` | Connect filesystem tools for the current launch directory |
 | `/browser` | Connect isolated Playwright browser automation tools |
+| `/computer` | Connect native desktop control on demand; check permissions and choose image support |
+| `/computer disconnect` | Disconnect desktop control without affecting other plugins |
 | `/mcp` | Manage MCP servers — add/edit, connect one or all, disconnect |
 | `/agent` | Open the project's `AGENT.md` (creates a template on first use) |
 | `/memory` | Open and edit local `~/.sun2agent/memory.md` |
@@ -322,6 +324,32 @@ Mutating and unknown MCP calls route through guardrails and an explicit approval
 | `Ctrl+C` | Quit immediately |
 
 ---
+### Computer control (optional)
+
+Run `/computer` to start the pinned `@zavora-ai/computer-use-mcp` package through `npx`.
+The first connection may need a download; startup has a 30-second timeout.
+This controls your **real desktop**, not an isolated browser. Node.js 20+ and an
+interactive desktop are required. Docker mode does not expose the host desktop.
+
+On macOS, grant the trusted host Accessibility and Screen Recording permissions;
+app scripting may additionally request Automation permission. The plugin runs
+`doctor` and displays its capability report. A connection alone does not guarantee
+that every application is controllable.
+
+Choose image support only if your selected model and endpoint support image input.
+Otherwise the agent uses accessibility tools; screenshots are omitted, not sent as
+base64 text. In vision mode the latest screenshot can be sent to your model provider;
+image bytes are excluded from saved chat history and LangSmith traces.
+
+Esc cancels connecting or an active task. Esc on an empty input disconnects
+`/computer` first, leaving other plugins connected. At an approval prompt, Esc
+declines that action. Completed actions cannot be undone by cancellation.
+Desktop mutations require fresh HITL approval when HITL is enabled.
+
+While `/computer` is connected, transient model HTTP failures retry once, respecting
+`Retry-After` up to 30 seconds. Longer cooldowns and invalid requests are returned
+without retrying. Completed desktop tools are not replayed by this retry.
+
 ### Custom model providers
 
 1. Run `/config` and select **Add custom OpenAI-compatible provider**.

@@ -551,7 +551,7 @@ test('skills: chat-loop still calls MCP and search tools (no regression)', () =>
   const turn = fs.readFileSync(path.join(PROJECT, 'src/cli/turn.js'), 'utf-8');
   assert.match(turn, /mcp\.getOpenAiTools\(\)/);
   assert.match(turn, /search\.getToolSpec\(config\)/);
-  assert.match(turn, /mcp\.callTool\(routes, fnName, args, signal\)/);
+  assert.match(turn, /mcp\.callTool\(routes, fnName, args, signal, \{/);
   assert.match(turn, /search\.executeTool/);
   assert.match(turn, /memory\.buildMemoryContext/);
 });

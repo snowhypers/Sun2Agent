@@ -328,7 +328,7 @@ test('sandbox: mcp.js guardrails run BEFORE sandbox wrap (source-text check)', (
 
   // Extract the connectServer function body and verify validateServer appears
   // before buildTransport within that function (runtime call order).
-  const connectStart = mcpSource.indexOf('async function connectServer(s)');
+  const connectStart = mcpSource.indexOf('async function connectServer(s, signal)');
   assert.ok(connectStart !== -1, 'connectServer function must exist');
   const nextFunc = mcpSource.indexOf('\nasync function ', connectStart + 1);
   const connectBody = nextFunc !== -1

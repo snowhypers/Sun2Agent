@@ -1,4 +1,5 @@
 const axios = require('axios');
+const { requestWithRetry } = require('./modelRetry');
 const observability = require('./observability');
 
 const NIM_URL = 'https://integrate.api.nvidia.com/v1/chat/completions';
@@ -46,7 +47,7 @@ async function chatCompletion(apiKey, model, messages, tools, signal, onToken, r
     const timeout = modelTimeoutMs();
     let response;
     try {
-      response = await axios.post(request.url || NIM_URL, body, {
+      response = await requestWithRetry(() => axios.post(request.url || NIM_URL, body, {
         headers: {
           Authorization: `Bearer ${apiKey}`,
           'Content-Type': 'application/json'
@@ -54,7 +55,7 @@ async function chatCompletion(apiKey, model, messages, tools, signal, onToken, r
         signal,
         timeout,
         responseType: body.stream ? 'stream' : 'json'
-      });
+      }), { enabled: request.retryOnce === true, signal, onRetry: request.onRetry });
     } catch (error) {
       const timedOut = !signal?.aborted && (
         error?.code === 'ECONNABORTED' ||

@@ -70,12 +70,13 @@ function getTag() {
   const builtinNames = [...connections]
     .filter(([, connection]) => connection.builtin)
     .map(([name]) => name);
-  const browserConnected = builtinNames.includes('browser');
+  const visibleBuiltins = builtinNames.filter((name) => name === 'browser' || name === 'computer');
+  const prefix = visibleBuiltins.length ? visibleBuiltins.join(' @') + ' @' : '';
   if (userNames.length === 1) {
-    return browserConnected ? `browser @${userNames[0]}` : userNames[0];
+    return prefix + userNames[0];
   }
   if (userNames.length > 1) {
-    return browserConnected ? 'browser @allMcps' : 'allMcps';
+    return prefix + 'allMcps';
   }
   if (builtinNames.length === 1) return builtinNames[0];
   if (builtinNames.length > 1) return builtinNames.join(' @');

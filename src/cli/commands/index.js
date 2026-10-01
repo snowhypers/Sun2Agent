@@ -14,6 +14,7 @@ const { handleHelp, handleHelpShort } = require('./help');
 const { handleSkills } = require('./skills');
 const { handleWorkspace } = require('./workspace');
 const { handleBrowser } = require('./browser');
+const { handleComputer, disconnectComputer } = require('./computer');
 
 // name -> (ctx) => Promise<void>
 const COMMANDS = {
@@ -23,6 +24,8 @@ const COMMANDS = {
   '/mcp': handleMcp,
   '/workspace': handleWorkspace,
   '/browser': handleBrowser,
+  '/computer': handleComputer,
+  '/computer disconnect': disconnectComputer,
   '/agent': handleAgent,
   '/memory': handleMemory,
   '/delete': handleDelete,

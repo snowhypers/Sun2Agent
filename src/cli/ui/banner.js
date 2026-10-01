@@ -113,6 +113,7 @@ function printHelp() {
   row('/config', 'Select NVIDIA or a custom AI provider and model');
   row('/workspace', 'Connect filesystem tools for the current folder');
   row('/browser', 'Connect isolated Playwright browser tools');
+  row('/computer', 'Connect desktop control; Esc on empty input disconnects');
   row('/mcp', 'Manage MCP servers (add/edit, connect one, disconnect)');
   row('/agent', 'Edit the project’s AGENT.md instructions in your editor');
   row('/memory', 'Open and edit local memory.md');

@@ -136,6 +136,8 @@ async function promptApproval({ server, tool, args, remember = true }) {
   return new Promise((resolve) => {
     const stdin = process.stdin;
     readline.emitKeypressEvents(stdin);
+    const previousKeyListeners = stdin.listeners('keypress');
+    const previousRawMode = Boolean(stdin.isRaw);
     stdin.removeAllListeners('keypress');
     stdin.setRawMode(true);
     stdin.resume();
@@ -163,7 +165,9 @@ async function promptApproval({ server, tool, args, remember = true }) {
 
     function cleanup(allowed) {
       stdin.removeListener('keypress', onKey);
-      if (stdin.isTTY) stdin.setRawMode(false);
+      // Resume the turn's Esc watcher after the approval UI releases stdin.
+      for (const listener of previousKeyListeners) stdin.on('keypress', listener);
+      if (stdin.isTTY) stdin.setRawMode(previousRawMode);
       process.stdout.write(SHOW_CURSOR + '\n');
       if (allowed && remember) allowedTools.add(tool);
       resolve(allowed);
@@ -178,8 +182,13 @@ async function checkApproval({ server, tool, args, annotations, enabled, _prompt
   if (!on) return true;
 
   const browserDecision = server === 'browser' ? browserApproval(tool, args) : null;
-  const required = browserDecision ? browserDecision.required : requiresApproval(tool, annotations);
-  const remember = browserDecision ? browserDecision.remember : true;
+  const desktopReadOnly = new Set(['doctor', 'policy_status', 'get_ui_tree', 'get_focused_element',
+    'find_element', 'get_frontmost_app', 'list_windows', 'discover_applications', 'list_running_apps',
+    'get_display_size', 'list_displays', 'get_window', 'get_cursor_window', 'cursor_position',
+    'snapshot', 'screenshot', 'zoom', 'wait', 'get_tool_guide', 'get_app_capabilities', 'get_tool_metadata']);
+  const required = server === 'computer' ? !desktopReadOnly.has(tool)
+    : browserDecision ? browserDecision.required : requiresApproval(tool, annotations);
+  const remember = server === 'computer' ? false : browserDecision ? browserDecision.remember : true;
 
   if (!required) {
     updateSpinner(browserDecision
