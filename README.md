@@ -181,6 +181,16 @@ npx sun2agent
 4. Ask naturally   "Read AGENT.md and run the tests"
 ```
 
+Use `/new` to start a fresh CLI conversation. The previous chat is saved locally in
+`~/.sun2agent/sessions/`; connected tools and your selected model stay as they are.
+The input footer shows an estimated **context percentage left** for the selected
+built-in NVIDIA model. This uses the model's published maximum and estimated
+prompt tokens—not exact provider usage. Hosted endpoints may enforce a smaller
+limit. For custom providers or unknown models, the footer shows estimated tokens
+used without a percentage because their context limit is not known.
+While a model or tool turn is running, a non-editable input frame and the same
+footer stay at the bottom of supported terminals; press Esc to stop the turn.
+
 Get a free API key from **[NVIDIA Build](https://build.nvidia.com)**: pick a model, then select **Get API Key**. Keys begin with `nvapi-`.
 
 For another OpenAI-compatible service, choose **Add custom OpenAI-compatible provider** in `/config`, then enter its provider name, base URL (for example `https://api.example.com/v1`), API key, and model ID. Providers and model IDs are saved for later selection in the owner-only `~/.sun2agent/config.json` file.

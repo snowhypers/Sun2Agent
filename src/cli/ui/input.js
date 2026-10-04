@@ -21,6 +21,50 @@ const ESC_BACK = Symbol('escBack');
 const YELLOW = chalk.hex('#b5a642');
 let activeInput = null;
 
+function renderFooter(options = {}, stdout = process.stdout) {
+  const w = terminalWidth(stdout, Infinity);
+  const model = options.model ? String(options.model).split('/').pop() : '';
+  const tag = options.tag || '';
+  const skillTag = options.skillTag || '';
+  const contextEstimate = options.contextEstimate || '';
+  const hint = options.hint || '⎋ esc back  ·  /help  ·  /new  ·  /mcp  ·  /exit';
+  const tagRaw = tag ? `@${tag}` : '';
+  const rightRaw = model ? `→ ${model}` : '';
+  const tagShown = truncateToWidth(tagRaw, Math.floor(w * 0.35));
+  const rightBudget = Math.max(0, w - stringWidth(tagShown) - (tagShown ? 2 : Math.min(16, Math.floor(w / 3))));
+  const rightShown = truncateToWidth(rightRaw, rightBudget);
+  const outerGap = rightShown ? 1 : 0;
+  let leftBudget = Math.max(0, w - stringWidth(rightShown) - outerGap);
+  const leftParts = [];
+
+  if (tagShown) {
+    leftParts.push({ value: tagShown, color: chalk.green });
+    leftBudget -= stringWidth(tagShown);
+  }
+  if (skillTag && leftBudget > 2) {
+    const room = leftBudget - (leftParts.length ? 2 : 0);
+    const shown = truncateToWidth(skillTag, room);
+    if (shown) {
+      leftParts.push({ value: shown, color: chalk.green });
+      leftBudget -= stringWidth(shown) + (leftParts.length > 1 ? 2 : 0);
+    }
+  }
+  if (contextEstimate && leftBudget > stringWidth(contextEstimate) + (leftParts.length ? 2 : 0)) {
+    leftParts.push({ value: contextEstimate, color: chalk.gray });
+    leftBudget -= stringWidth(contextEstimate) + (leftParts.length > 1 ? 2 : 0);
+  }
+  if (hint && leftBudget > 2) {
+    const room = leftBudget - (leftParts.length ? 2 : 0);
+    const shown = truncateToWidth(w < 60 && !options.hint ? '/help · /exit' : hint, room);
+    if (shown) leftParts.push({ value: shown, color: chalk.gray });
+  }
+
+  const left = leftParts.map(({ value, color }) => color(value)).join('  ');
+  const usedLeft = leftParts.reduce((sum, part, index) => sum + stringWidth(part.value) + (index ? 2 : 0), 0);
+  const gap = rightShown ? Math.max(outerGap, w - usedLeft - stringWidth(rightShown)) : 0;
+  return left + ' '.repeat(gap) + chalk.cyan(rightShown);
+}
+
 // Background Telegram failures must be printed above the live input box.
 // Writing directly to stderr while the box is drawn invalidates its cursor
 // position, so the next keystroke can erase or duplicate part of the frame.
@@ -47,14 +91,6 @@ function askInput(options = {}) {
   const stdin = process.stdin;
   const stdout = process.stdout;
   if (!stdin.isTTY) return askInputSimple();
-
-  const model = options.model ? String(options.model).split('/').pop() : '';
-  const tag = options.tag || ''; // active MCP server name, if any
-  // Skills tag is a pre-formatted, space-separated list of "@<id>" tokens
-  // (e.g. "@coding @debugging"). It already includes the @ prefixes and
-  // is rendered verbatim next to the MCP tag.
-  const skillTag = options.skillTag || '';
-  const hint = options.hint || '⎋ esc back  ·  /help  ·  /mcp  ·  /exit';
 
   return new Promise((resolve) => {
     let text = '';
@@ -98,40 +134,7 @@ function askInput(options = {}) {
       const top = YELLOW('╭' + '─'.repeat(inner) + '╮');
       const bot = YELLOW('╰' + '─'.repeat(inner) + '╯');
 
-      const tagRaw = tag ? `@${tag}` : '';
-      const rightRaw = model ? `→ ${model}` : '';
-      const tagShown = truncateToWidth(tagRaw, Math.floor(w * 0.35));
-      // Keep the full model name when possible; shorten the hints first.
-      const rightBudget = Math.max(0, w - stringWidth(tagShown) - (tagShown ? 2 : Math.min(16, Math.floor(w / 3))));
-      const rightShown = truncateToWidth(rightRaw, rightBudget);
-      const outerGap = rightShown ? 1 : 0;
-      let leftBudget = Math.max(0, w - stringWidth(rightShown) - outerGap);
-      const leftParts = [];
-
-      if (tagShown) {
-        leftParts.push({ value: tagShown, color: chalk.green });
-        leftBudget -= stringWidth(tagShown);
-      }
-      if (skillTag && leftBudget > 2) {
-        const room = leftBudget - (leftParts.length ? 2 : 0);
-        const shown = truncateToWidth(skillTag, room);
-        if (shown) {
-          leftParts.push({ value: shown, color: chalk.green });
-          leftBudget -= stringWidth(shown) + (leftParts.length > 1 ? 2 : 0);
-        }
-      }
-      if (hint && leftBudget > 2) {
-        const room = leftBudget - (leftParts.length ? 2 : 0);
-        const shown = truncateToWidth(w < 60 ? '/help · /exit' : hint, room);
-        if (shown) leftParts.push({ value: shown, color: chalk.gray });
-      }
-
-      const left = leftParts.map(({ value, color }) => color(value)).join('  ');
-      const usedLeft = leftParts.reduce((sum, part, index) => sum + stringWidth(part.value) + (index ? 2 : 0), 0);
-      const gap = rightShown ? Math.max(outerGap, w - usedLeft - stringWidth(rightShown)) : 0;
-      const footer = left + ' '.repeat(gap) + chalk.cyan(rightShown);
-
-      return [top, ...midLines, bot, footer];
+      return [top, ...midLines, bot, renderFooter(options, stdout)];
     }
 
     function draw(withCaret) {
@@ -226,4 +229,4 @@ function askInput(options = {}) {
   });
 }
 
-module.exports = { askInput, ESC_BACK, printAboveInput };
+module.exports = { askInput, ESC_BACK, printAboveInput, renderFooter };

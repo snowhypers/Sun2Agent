@@ -833,9 +833,9 @@ test('sandbox: launcher waits for Docker and relaunches with resume (source-text
 
 test('sandbox: chat.js persists and restores the session (source-text)', () => {
   const chatSource = fs.readFileSync(path.join(PROJECT, 'src/cli/index.js'), 'utf-8');
-  const sessionSource = fs.readFileSync(path.join(PROJECT, 'src/cli/session.js'), 'utf-8');
+  const sessionSource = fs.readFileSync(path.join(PROJECT, 'src/core/context-management/session.js'), 'utf-8');
 
-  // Save/load/clear helpers must exist (in src/cli/session.js after the refactor).
+  // Save/load/clear helpers must exist in the core conversation module.
   assert.ok(sessionSource.includes('function saveSession('), 'saveSession must exist in session module');
   assert.ok(sessionSource.includes('function loadSession('), 'loadSession must exist in session module');
   assert.ok(sessionSource.includes('function clearSession('), 'clearSession must exist in session module');

@@ -111,6 +111,7 @@ function printHelp() {
   add(chalk.bold('Commands'));
   row('/help, /?', 'Show this help');
   row('/config', 'Select NVIDIA or a custom AI provider and model');
+  row('/new', 'Save this chat locally and start a fresh conversation');
   row('/browser', 'Connect isolated Playwright browser tools');
   row('/computer', 'Connect desktop control; Esc on empty input disconnects');
   row('/mcp', 'Manage MCP servers (add/edit, connect one, disconnect)');

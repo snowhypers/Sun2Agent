@@ -9,13 +9,16 @@ const skills = require('../core/skills');
 const providers = require('../core/providers');
 const telegram = require('../core/telegram');
 const { askInput, ESC_BACK } = require('./ui/input');
+const { startBusyFooter } = require('./ui/busyFooter');
 const { watchEscape, waitEnterOrEsc } = require('./ui/escapeWatcher');
 const { printBanner, printIntro } = require('./ui/banner');
-const { saveSession, loadSession, clearSession } = require('./session');
+const { saveSession, loadSession, clearSession, archiveSession } = require('../core/context-management/session');
 const { cleanHistory } = require('./history');
+const { estimateContextTokens, contextLabel } = require('../core/context-management/contextMeter');
 const { COMMANDS, handleConfig } = require('./commands');
 const { createTokenHandler, finalFlush } = require('./streaming');
-const { chatTurn } = require('./turn');
+const { chatTurn, buildTurnSystemPrompt } = require('./turn');
+const search = require('../core/search');
 const { resumeAfterModel500 } = require('./modelRecovery');
 const { promptBack, printUserLine, sanitizeTerminalText } = require('./prompt');
 
@@ -120,6 +123,12 @@ async function startChat() {
   }
 
   while (true) {
+    const toolSpecs = mcp.getOpenAiTools().specs;
+    const searchSpec = search.getToolSpec(config);
+    const contextEstimate = contextLabel(estimateContextTokens(
+      buildTurnSystemPrompt(config, []), cleanHistory(history),
+      searchSpec ? [...toolSpecs, searchSpec] : toolSpecs
+    ), providers.getActiveProvider(config));
     const input = await askInput({
       model: providers.getActiveModel(config),
       tag: mcp.getTag(),
@@ -127,7 +136,8 @@ async function startChat() {
       // skills are selected. The selected skills' content is injected
       // into the system prompt by turn.js, so the model applies them
       // automatically — no need to reference them in the typed message.
-      skillTag: skills.getTag(config)
+      skillTag: skills.getTag(config),
+      contextEstimate
     });
 
     // Esc on an empty box leaves desktop control first, then user MCPs,
@@ -178,6 +188,20 @@ async function startChat() {
       console.log(chalk.yellow('Goodbye! 👋'));
       process.exit(0);
     }
+    if (text === '/new') {
+      try {
+        const archived = archiveSession(cleanHistory(history));
+        clearSession(true);
+        history.length = 0;
+        hitl.startPrompt();
+        console.log(chalk.green(archived
+          ? 'New conversation started. Previous chat saved locally.\n'
+          : 'New conversation started.\n'));
+      } catch (error) {
+        console.log(chalk.red(`Could not save the previous chat; context was not cleared: ${error.message}\n`));
+      }
+      continue;
+    }
     const handler = COMMANDS[text];
     if (handler) {
       if (text === '/mcp' || text === '/browser' || text === '/computer' || text === '/computer disconnect') {
@@ -213,12 +237,6 @@ async function startChat() {
       continue;
     }
 
-    const workspaceResult = await workspaceReady;
-    if (!workspaceResult.ok && !workspaceWarningShown) {
-      workspaceWarningShown = true;
-      console.log(chalk.yellow(`⚠ Workspace tools unavailable: ${workspaceResult.error}\n`));
-    }
-
     // Send to AI (with MCP tools if any are connected).
     // While it works, watch for Esc to abort the request/tool call and drop
     // back to an empty input box.
@@ -226,6 +244,18 @@ async function startChat() {
     hitl.startPrompt();
     history.push({ role: 'user', content: text });
     saveSession(cleanHistory(history));
+
+    const busyToolSpecs = mcp.getOpenAiTools().specs;
+    const busyContext = contextLabel(estimateContextTokens(
+      buildTurnSystemPrompt(config, []), cleanHistory(history),
+      searchSpec ? [...busyToolSpecs, searchSpec] : busyToolSpecs
+    ), providers.getActiveProvider(config));
+    const stopBusyFooter = startBusyFooter({
+      model: providers.getActiveModel(config),
+      tag: mcp.getTag(),
+      skillTag: skills.getTag(config),
+      contextEstimate: busyContext
+    });
 
     const controller = new AbortController();
     // Streaming render layer lives in src/cli/streaming.js. See the file for
@@ -235,6 +265,11 @@ async function startChat() {
     const onToolTurn = stream.onToolTurn;
     const stopWatch = watchEscape(() => controller.abort());
     try {
+      const workspaceResult = await workspaceReady;
+      if (!workspaceResult.ok && !workspaceWarningShown) {
+        workspaceWarningShown = true;
+        console.log(chalk.yellow(`⚠ Workspace tools unavailable: ${workspaceResult.error}\n`));
+      }
       const reply = await resumeAfterModel500(
         () => chatTurn(config, history, controller.signal, onToken, onToolTurn,
           (snapshot) => saveSession(cleanHistory(snapshot))),
@@ -286,6 +321,7 @@ async function startChat() {
       }
     } finally {
       stopWatch();
+      stopBusyFooter();
     }
   }
 }
