@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const PROJECT = path.join(__dirname, '..');
-const browser = require('../src/core/mcp/browser');
+const browser = require('../src/core/browser');
 const registry = require('../src/core/mcp/registry');
 const mcp = require('../src/core/mcp');
 
@@ -49,7 +49,7 @@ test('browser: lifecycle is independent from workspace and user MCPs', async () 
   });
   assert.strictEqual(result.ok, true, result.error);
   assert.strictEqual(mcp.isBrowserConnected(), true);
-  assert.strictEqual(mcp.getTag(), 'workspace @browser');
+  assert.strictEqual(mcp.getTag(), 'browser');
 
   registry.set('user-fixture', fakeConnection('user-fixture', false));
   assert.strictEqual(mcp.getTag(), 'browser @user-fixture');
@@ -62,7 +62,7 @@ test('browser: lifecycle is independent from workspace and user MCPs', async () 
   await mcp.disconnectBrowser();
   assert.strictEqual(mcp.isBrowserConnected(), false);
   assert.strictEqual(mcp.isWorkspaceConnected(), true);
-  assert.strictEqual(mcp.getTag(), 'workspace');
+  assert.strictEqual(mcp.getTag(), null);
 });
 
 test('browser: reserved name and workspace-only local tools stay isolated', () => {
@@ -70,7 +70,7 @@ test('browser: reserved name and workspace-only local tools stay isolated', () =
   assert.strictEqual(browser.isReservedUserServer({ name: 'browser', builtin: true }), false);
 
   const source = fs.readFileSync(path.join(PROJECT, 'src/core/mcp/index.js'), 'utf8');
-  assert.match(source, /const localTools = s\.name === workspace\.NAME/);
+  assert.match(source, /const localTools = s\.name === filesystem\.NAME/);
   assert.doesNotMatch(source, /const localTools = s\.builtin/);
 });
 

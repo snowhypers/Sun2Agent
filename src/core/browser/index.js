@@ -2,7 +2,7 @@
 // requested and uses an isolated profile that is discarded on disconnect.
 
 const path = require('path');
-const registry = require('./registry');
+const registry = require('../mcp/registry');
 
 const NAME = 'browser';
 

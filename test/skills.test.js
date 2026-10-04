@@ -538,7 +538,7 @@ test('skills: turn.js requires ../core/skills and calls buildSkillsContext', () 
 
 test('skills: existing commands still intact after /skills added', () => {
   const cmds = require('../src/cli/commands');
-  for (const name of ['/help', '/?', '/config', '/mcp', '/workspace', '/agent', '/memory', '/delete', '/skills']) {
+  for (const name of ['/help', '/?', '/config', '/mcp', '/agent', '/memory', '/delete', '/skills']) {
     assert.strictEqual(typeof cmds.COMMANDS[name], 'function', `${name} must still be registered`);
   }
   assert.strictEqual(typeof require('../src/cli/commands/memory').handleMemory, 'function');
@@ -807,9 +807,7 @@ test('skills: Esc handler in the chat loop clears skills (and saves) when MCP is
   assert.match(src, /config = loadConfig\(\);/);
 });
 
-test('skills: Esc handler keeps MCP and workspace precedence before clearing skills', () => {
-  // User MCPs disconnect first, then the opt-in workspace. Skills are cleared
-  // only when neither tool layer is active.
+test('skills: Esc disconnects opt-in tools but keeps automatic workspace tools', () => {
   const src = fs.readFileSync(path.join(PROJECT, 'src/cli/index.js'), 'utf-8');
   const escBlock = src.match(/if \(input === ESC_BACK\) \{[\s\S]*?\n    \}/);
   assert.ok(escBlock, 'expected to find the ESC_BACK block');
@@ -817,15 +815,14 @@ test('skills: Esc handler keeps MCP and workspace precedence before clearing ski
   // MCP disconnect comes first…
   assert.match(block, /mcp\.hasUserConnections\(\)/);
   assert.match(block, /mcp\.disconnectUserServers\(\)/);
-  // Workspace comes next, and Skills remain last.
+  // Automatic workspace tools remain available; Skills clear after opt-in tools.
   const mcpIndex = block.indexOf('mcp.disconnectUserServers()');
-  const workspaceIndex = block.indexOf('mcp.disconnectWorkspace()');
+  const browserIndex = block.indexOf('mcp.disconnectBrowser()');
   const skillsIndex = block.indexOf('skills.clearSelected');
-  assert.ok(mcpIndex !== -1 && workspaceIndex !== -1 && skillsIndex !== -1);
-  assert.ok(mcpIndex < workspaceIndex, 'user MCP branch must be checked before workspace');
-  assert.ok(workspaceIndex < skillsIndex, 'workspace branch must be checked before skills');
-  assert.match(block, /continue;\s*\}\s*\n\s*if \(mcp\.isWorkspaceConnected\(\)\)/);
-  assert.match(block, /disconnectWorkspace\(\);[\s\S]*?continue;\s*\}\s*\n\s*if \(skills\.getSelected/);
+  assert.ok(mcpIndex !== -1 && browserIndex !== -1 && skillsIndex !== -1);
+  assert.ok(mcpIndex < browserIndex, 'user MCP branch must be checked before browser');
+  assert.ok(browserIndex < skillsIndex, 'browser branch must be checked before skills');
+  assert.doesNotMatch(block, /disconnectWorkspace\(\)/);
 });
 
 test('skills: Esc hint in the input-box footer mentions back behavior', () => {

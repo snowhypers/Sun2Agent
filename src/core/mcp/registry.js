@@ -61,8 +61,8 @@ function getActiveName() {
   return it.done ? null : it.value;
 }
 
-// Tag shown under the input box. Workspace keeps its existing quiet behavior
-// beside a user MCP; browser is always shown so browser control is visible.
+// Tag shown under the input box. Automatic workspace tools stay invisible;
+// opted-in browser/computer and user MCPs remain visible.
 function getTag() {
   const userNames = [...connections]
     .filter(([, connection]) => !connection.builtin)
@@ -71,16 +71,10 @@ function getTag() {
     .filter(([, connection]) => connection.builtin)
     .map(([name]) => name);
   const visibleBuiltins = builtinNames.filter((name) => name === 'browser' || name === 'computer');
-  const prefix = visibleBuiltins.length ? visibleBuiltins.join(' @') + ' @' : '';
-  if (userNames.length === 1) {
-    return prefix + userNames[0];
-  }
-  if (userNames.length > 1) {
-    return prefix + 'allMcps';
-  }
-  if (builtinNames.length === 1) return builtinNames[0];
-  if (builtinNames.length > 1) return builtinNames.join(' @');
-  return null;
+  const names = [...visibleBuiltins];
+  if (userNames.length === 1) names.push(userNames[0]);
+  else if (userNames.length > 1) names.push('allMcps');
+  return names.length ? names.join(' @') : null;
 }
 
 // Stable signature of what is connected, for detecting changes (e.g. to reset

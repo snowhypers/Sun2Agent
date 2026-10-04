@@ -12,7 +12,6 @@ const { handleMemory } = require('./memory');
 const { handleDelete } = require('./delete');
 const { handleHelp, handleHelpShort } = require('./help');
 const { handleSkills } = require('./skills');
-const { handleWorkspace } = require('./workspace');
 const { handleBrowser } = require('./browser');
 const { handleComputer, disconnectComputer } = require('./computer');
 
@@ -22,7 +21,6 @@ const COMMANDS = {
   '/?': handleHelpShort,
   '/config': handleConfig,
   '/mcp': handleMcp,
-  '/workspace': handleWorkspace,
   '/browser': handleBrowser,
   '/computer': handleComputer,
   '/computer disconnect': disconnectComputer,
@@ -32,4 +30,4 @@ const COMMANDS = {
   '/skills': handleSkills
 };
 
-module.exports = { COMMANDS, handleConfig, handleSkills, handleWorkspace, handleBrowser };
+module.exports = { COMMANDS, handleConfig, handleSkills, handleBrowser };

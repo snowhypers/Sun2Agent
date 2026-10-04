@@ -3,7 +3,7 @@
 // discard.
 
 const chalk = require('chalk');
-const context = require('../../core/context');
+const context = require('../../core/rules');
 
 async function handleAgent(ctx) {
   const file = context.getAgentMdPath();

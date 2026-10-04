@@ -16,6 +16,7 @@ const { cleanHistory } = require('./history');
 const { COMMANDS, handleConfig } = require('./commands');
 const { createTokenHandler, finalFlush } = require('./streaming');
 const { chatTurn } = require('./turn');
+const { resumeAfterModel500 } = require('./modelRecovery');
 const { promptBack, printUserLine, sanitizeTerminalText } = require('./prompt');
 
 // Check whether the Docker sandbox is enabled and Docker has gone down.
@@ -96,6 +97,14 @@ async function startChat() {
   // The listener remains restricted to the private chat ID saved by /config.
   void syncTelegram(config);
 
+  // Prepare the built-in filesystem tools in the background. The first input
+  // box appears immediately; an ordinary chat turn waits for this connection
+  // before offering tools to the model. Workspace access stays scoped to cwd.
+  const workspaceReady = mcp.connectWorkspace().catch((error) => ({
+    ok: false, error: error.message
+  }));
+  let workspaceWarningShown = false;
+
   const history = [];
 
   // Relaunch after a Docker outage (the host launcher sets SUN2AGENT_RESUME=1):
@@ -122,7 +131,7 @@ async function startChat() {
     });
 
     // Esc on an empty box leaves desktop control first, then user MCPs,
-    // browser, workspace and Skills. Each layer remains independent.
+    // browser and Skills. Automatic workspace tools remain available.
     if (input === ESC_BACK) {
       if (mcp.isComputerConnected()) {
         await mcp.disconnectComputer();
@@ -132,21 +141,13 @@ async function startChat() {
       }
       if (mcp.hasUserConnections()) {
         await mcp.disconnectUserServers();
-        const builtinNote = [
-          mcp.isBrowserConnected() ? 'Browser tools remain available.' : '',
-          mcp.isWorkspaceConnected() ? 'Workspace tools remain available.' : ''
-        ].filter(Boolean).join(' ');
-        console.log(chalk.gray(`⎋ Disconnected user MCP.${builtinNote ? ' ' + builtinNote : ''}\n`));
+        const builtinNote = mcp.isBrowserConnected() ? ' Browser tools remain available.' : '';
+        console.log(chalk.gray(`⎋ Disconnected user MCP.${builtinNote}\n`));
         continue;
       }
       if (mcp.isBrowserConnected()) {
         await mcp.disconnectBrowser();
         console.log(chalk.gray('⎋ Disconnected /browser. Browser tools are unavailable.\n'));
-        continue;
-      }
-      if (mcp.isWorkspaceConnected()) {
-        await mcp.disconnectWorkspace();
-        console.log(chalk.gray('⎋ Disconnected /workspace. Filesystem tools are unavailable.\n'));
         continue;
       }
       if (skills.getSelected(config).length) {
@@ -171,6 +172,7 @@ async function startChat() {
     // Command handling
     if (text === '/exit') {
       await telegram.stop();
+      await workspaceReady;
       await mcp.disconnectAll();
       clearSession(); // clean exit — nothing to resume next time
       console.log(chalk.yellow('Goodbye! 👋'));
@@ -178,7 +180,7 @@ async function startChat() {
     }
     const handler = COMMANDS[text];
     if (handler) {
-      if (text === '/mcp' || text === '/workspace' || text === '/browser' || text === '/computer' || text === '/computer disconnect') {
+      if (text === '/mcp' || text === '/browser' || text === '/computer' || text === '/computer disconnect') {
         const before = mcp.getConnectionSignature();
         await handler({ promptBack, waitEnterOrEsc, dockerDownWarning, loadConfig, saveConfig });
         const after = mcp.getConnectionSignature();
@@ -211,10 +213,19 @@ async function startChat() {
       continue;
     }
 
+    const workspaceResult = await workspaceReady;
+    if (!workspaceResult.ok && !workspaceWarningShown) {
+      workspaceWarningShown = true;
+      console.log(chalk.yellow(`⚠ Workspace tools unavailable: ${workspaceResult.error}\n`));
+    }
+
     // Send to AI (with MCP tools if any are connected).
     // While it works, watch for Esc to abort the request/tool call and drop
     // back to an empty input box.
+    // HITL approvals are scoped to this user prompt, including model retries.
+    hitl.startPrompt();
     history.push({ role: 'user', content: text });
+    saveSession(cleanHistory(history));
 
     const controller = new AbortController();
     // Streaming render layer lives in src/cli/streaming.js. See the file for
@@ -224,7 +235,17 @@ async function startChat() {
     const onToolTurn = stream.onToolTurn;
     const stopWatch = watchEscape(() => controller.abort());
     try {
-      const reply = await chatTurn(config, history, controller.signal, onToken, onToolTurn);
+      const reply = await resumeAfterModel500(
+        () => chatTurn(config, history, controller.signal, onToken, onToolTurn,
+          (snapshot) => saveSession(cleanHistory(snapshot))),
+        {
+          signal: controller.signal,
+          onRetry: () => {
+            onToolTurn();
+            console.log(chalk.yellow('Model unavailable — resuming once from saved tool progress...'));
+          }
+        }
+      );
       if (controller.signal.aborted) {
         console.log(chalk.gray('⎋ stopped\n'));
       } else {
@@ -260,7 +281,7 @@ async function startChat() {
       if (controller.signal.aborted) {
         console.log(chalk.gray('⎋ stopped\n'));
       } else {
-        const msg = err.response?.data?.detail || err.message;
+        const msg = err.message;
         console.log(chalk.red('Error: ' + msg + '\n'));
       }
     } finally {

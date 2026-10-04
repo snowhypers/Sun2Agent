@@ -1,4 +1,4 @@
-// Loads AGENT.md from the current project directory.
+// Loads project AGENT.md rules from the current directory.
 //
 // AGENT.md is plain-text repository context/instructions that the project
 // owner writes (similar to a CLAUDE.md or .cursorrules file). When present,

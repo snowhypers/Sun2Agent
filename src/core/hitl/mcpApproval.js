@@ -1,6 +1,6 @@
-// Human-in-the-Loop (HITL): risk-based MCP tool-call approval — per session.
-// Read-only tools run without prompting. Once a mutating/unknown tool is
-// approved, it is remembered for the entire chat session.
+// Human-in-the-Loop (HITL): risk-based MCP tool-call approval — per prompt.
+// Read-only tools run without prompting. One approval covers routine changes
+// on the same MCP server for this prompt; high-risk actions always ask again.
 // Designed for continuous indicator: spinner runs through thinking → waiting → running.
 
 const readline = require('readline');
@@ -16,9 +16,8 @@ function isEnabled() {
   return !(config.hitl && config.hitl.mcpApproval === false);
 }
 
-// Per-session allowed tools (keyed by tool name only). This is intentionally
-// in memory only: every call to startSession() begins with an empty set.
-const allowedTools = new Set();
+// Never carry an approval into another prompt or another MCP server.
+const allowedScopes = new Set();
 
 // Single pending approval at a time (simplifies continuous UI).
 let pendingEntry = null;
@@ -37,7 +36,7 @@ function updateSpinner(text) {
 }
 
 function startSession() {
-  allowedTools.clear();
+  allowedScopes.clear();
 }
 
 const MUTATING_WORDS = new Set([
@@ -53,6 +52,44 @@ const READ_ONLY_WORDS = new Set([
   'read', 'research', 'resolve', 'search', 'select', 'show', 'stat', 'stats',
   'tree', 'view'
 ]);
+
+const ROUTINE_CHANGE_WORDS = new Set([
+  'add', 'apply', 'copy', 'create', 'edit', 'insert', 'move', 'mutate',
+  'patch', 'put', 'rename', 'set', 'update', 'upsert', 'write'
+]);
+
+const HIGH_RISK_WORDS = new Set([
+  'account', 'admin', 'auth', 'command', 'credential', 'delete', 'deploy',
+  'download', 'drop', 'erase', 'execute', 'grant', 'install', 'payment',
+  'permission', 'permissions', 'post', 'publish', 'purchase', 'remove',
+  'restart', 'revoke', 'run', 'send', 'share', 'shell', 'stop', 'submit',
+  'token', 'transfer', 'trigger', 'truncate', 'uninstall', 'upload'
+]);
+
+const COMPUTER_READ_ONLY = new Set([
+  'doctor', 'policy_status', 'get_ui_tree', 'get_focused_element',
+  'find_element', 'get_frontmost_app', 'list_windows', 'list_menu_bar',
+  'discover_applications', 'list_running_apps', 'get_display_size',
+  'list_displays', 'get_window', 'get_cursor_window', 'cursor_position',
+  'snapshot', 'screenshot', 'zoom', 'wait', 'get_tool_guide',
+  'get_app_capabilities', 'get_tool_metadata', 'sun2agent_wait_for_window',
+  'sun2agent_search_tools'
+]);
+function isComputerReadOnly(tool) { return COMPUTER_READ_ONLY.has(tool); }
+
+// Only these known app-navigation calls can share approval. Window clicks,
+// menu selections, keypresses, typing and scripts remain fresh decisions.
+const COMPUTER_APP_NAVIGATION = new Set(['open_application', 'activate_app']);
+function computerNavigationScope(tool, args, annotations) {
+  if (!COMPUTER_APP_NAVIGATION.has(tool) || annotations?.destructiveHint === true) return null;
+  const app = args?.bundle_id;
+  if (typeof app !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._-]{2,127}$/.test(app)) return null;
+  const allowedKeys = tool === 'activate_app' ? ['bundle_id', 'timeout_ms'] : ['bundle_id'];
+  if (Object.keys(args).some((key) => !allowedKeys.includes(key))) return null;
+  if (args.timeout_ms !== undefined &&
+      (!Number.isInteger(args.timeout_ms) || args.timeout_ms < 0 || args.timeout_ms > 30000)) return null;
+  return `computer:app-navigation:${app}`;
+}
 
 const SAFE_BROWSER_TOOLS = new Set([
   'browser_close', 'browser_console_messages', 'browser_drag',
@@ -94,7 +131,10 @@ function browserApproval(tool, args = {}) {
   return null;
 }
 
-function approvalArgs(server, args) {
+function approvalArgs(server, args, tool) {
+  if (server === 'workspace' && tool === 'run_maven_tests') {
+    return { command: 'mvn test', warning: 'Executes project code in this workspace' };
+  }
   if (server !== 'browser') return args || {};
 
   function mask(value) {
@@ -132,7 +172,7 @@ function requiresApproval(tool, annotations = {}) {
 }
 
 // Inline approval prompt — minimal, runs alongside spinner.
-async function promptApproval({ server, tool, args, remember = true }) {
+async function promptApproval({ server, tool, args, scope }) {
   return new Promise((resolve) => {
     const stdin = process.stdin;
     readline.emitKeypressEvents(stdin);
@@ -143,9 +183,14 @@ async function promptApproval({ server, tool, args, remember = true }) {
     stdin.resume();
     process.stdout.write(HIDE_CURSOR);
 
-    const argsStr = sanitizeOutput(JSON.stringify(approvalArgs(server, args))).slice(0, 120);
+    const argsStr = sanitizeOutput(JSON.stringify(approvalArgs(server, args, tool))).slice(0, 120);
+    const question = scope
+      ? server === 'computer'
+        ? `Allow app navigation for ${args.bundle_id} in this prompt?`
+        : `Allow routine changes on @${server} for this prompt?`
+      : 'Allow this MCP tool call?';
     const promptLine =
-      `\n  ${chalk.yellow('⚠')}  ${chalk.bold('Allow this MCP tool call?')}\n` +
+      `\n  ${chalk.yellow('⚠')}  ${chalk.bold(question)}\n` +
       `  ${chalk.bold(tool)}  ${chalk.gray(argsStr)}\n` +
       `  ${chalk.cyan('Allow')}  ${chalk.gray('—')}  ${chalk.red("Don't allow")}\n` +
       `  ${chalk.gray('[Enter]')} ${chalk.cyan('Allow')}    ${chalk.gray('[Esc]')} ${chalk.red("Don't allow")}: `;
@@ -169,7 +214,6 @@ async function promptApproval({ server, tool, args, remember = true }) {
       for (const listener of previousKeyListeners) stdin.on('keypress', listener);
       if (stdin.isTTY) stdin.setRawMode(previousRawMode);
       process.stdout.write(SHOW_CURSOR + '\n');
-      if (allowed && remember) allowedTools.add(tool);
       resolve(allowed);
     }
 
@@ -182,13 +226,17 @@ async function checkApproval({ server, tool, args, annotations, enabled, _prompt
   if (!on) return true;
 
   const browserDecision = server === 'browser' ? browserApproval(tool, args) : null;
-  const desktopReadOnly = new Set(['doctor', 'policy_status', 'get_ui_tree', 'get_focused_element',
-    'find_element', 'get_frontmost_app', 'list_windows', 'discover_applications', 'list_running_apps',
-    'get_display_size', 'list_displays', 'get_window', 'get_cursor_window', 'cursor_position',
-    'snapshot', 'screenshot', 'zoom', 'wait', 'get_tool_guide', 'get_app_capabilities', 'get_tool_metadata']);
-  const required = server === 'computer' ? !desktopReadOnly.has(tool)
+  const mavenRun = server === 'workspace' && tool === 'run_maven_tests';
+  const required = mavenRun ? true : server === 'computer' ? !COMPUTER_READ_ONLY.has(tool)
     : browserDecision ? browserDecision.required : requiresApproval(tool, annotations);
-  const remember = server === 'computer' ? false : browserDecision ? browserDecision.remember : true;
+  const words = toolWords(tool);
+  const routine = server !== 'browser' && server !== 'computer' && !mavenRun &&
+    annotations?.destructiveHint !== true &&
+    !words.some((word) => HIGH_RISK_WORDS.has(word)) &&
+    words.some((word) => ROUTINE_CHANGE_WORDS.has(word));
+  const scope = server === 'computer'
+    ? computerNavigationScope(tool, args, annotations)
+    : routine ? `${server || ''}:routine-change` : null;
 
   if (!required) {
     updateSpinner(browserDecision
@@ -197,17 +245,16 @@ async function checkApproval({ server, tool, args, annotations, enabled, _prompt
     return true;
   }
 
-  // Already allowed in this chat session: do not ask again, but keep the
-  // same spinner alive and make the reason visible before execution begins.
-  if (remember && allowedTools.has(tool)) {
-    updateSpinner(`✓ already approved this session — running tool: ${tool}...`);
+  // Routine approval is valid only for this MCP server and user prompt.
+  if (scope && allowedScopes.has(scope)) {
+    updateSpinner(`✓ approved for this prompt — running tool: ${tool}...`);
     return true;
   }
 
   // Test override
   if (_prompt) {
     const result = await _prompt({ server, tool, args: args || {} });
-    if (result && remember) allowedTools.add(tool);
+    if (result && scope) allowedScopes.add(scope);
     return result;
   }
 
@@ -221,7 +268,8 @@ async function checkApproval({ server, tool, args, annotations, enabled, _prompt
   // Continuous indicator: update spinner to "waiting for approval"
   updateSpinner(`waiting for approval: ${tool}...`);
 
-  const allowed = await promptApproval({ server, tool, args, remember });
+  const allowed = await promptApproval({ server, tool, args, scope });
+  if (allowed && scope) allowedScopes.add(scope);
 
   // Keep the indicator alive after the decision as well.  A denied call is
   // still part of the running turn, but must not claim that execution began.
@@ -237,8 +285,8 @@ function log(line) {
   console.log(line);
 }
 
-// Start of a new chat session. The allow-list must never persist across
-// sessions or process restarts.
+// Called at startup and before each user prompt. The allow-list is in memory
+// only and never survives a later prompt or process restart.
 function startPrompt() { startSession(); }
 function resetApprovals() { startSession(); }
 
@@ -258,6 +306,7 @@ module.exports = {
   log,
   setSpinner,
   requiresApproval,
+  isComputerReadOnly,
   browserApproval,
   _resetForTesting
 };

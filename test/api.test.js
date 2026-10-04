@@ -2,7 +2,7 @@ const { test } = require('node:test');
 const assert = require('node:assert');
 const { Readable } = require('stream');
 const axios = require('axios');
-const { chatCompletion, DEFAULT_NVIDIA_TIMEOUT_MS } = require('../src/core/api');
+const { chatCompletion, DEFAULT_NVIDIA_TIMEOUT_MS } = require('../src/core/model/api');
 
 test('api: streams assistant text and returns the complete message', async () => {
   const originalPost = axios.post;
@@ -159,4 +159,27 @@ test('api: sends requests to a selected OpenAI-compatible endpoint', async () =>
   } finally {
     axios.post = originalPost;
   }
+});
+
+test('api: HTTP errors expose safe request metadata, not response text or keys', async () => {
+  const originalPost = axios.post;
+  const responseBody = Readable.from(['private prompt: secret-value']);
+  let destroyed = false;
+  responseBody.destroy = () => { destroyed = true; return responseBody; };
+  axios.post = async () => {
+    const error = new Error('Request failed with status code 500');
+    error.response = { status: 500, headers: { 'x-request-id': 'req-123' }, data: responseBody };
+    throw error;
+  };
+  try {
+    await assert.rejects(
+      chatCompletion('secret-api-key', 'model', [{ role: 'user', content: 'private prompt' }], [{}]),
+      (error) => {
+        assert.match(error.message, /HTTP 500; 1 messages, 1 tools, \d+ KiB request; request ID req-123/);
+        assert.doesNotMatch(error.message, /secret-api-key|private prompt|secret-value/);
+        return true;
+      }
+    );
+    assert.strictEqual(destroyed, true);
+  } finally { axios.post = originalPost; }
 });

@@ -1,7 +1,7 @@
 'use strict';
 
 const axios = require('axios');
-const { chatCompletion } = require('../api');
+const { chatCompletion } = require('../model/api');
 const search = require('../search');
 const { validateTelegramConfig } = require('./config');
 const { telegramRequest } = require('./client');

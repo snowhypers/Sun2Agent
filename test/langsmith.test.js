@@ -201,12 +201,12 @@ test('observability: sanitize() leaves ordinary text untouched', () => {
 // ===========================================================================
 
 test('api.js: requires observability module', () => {
-  const src = fs.readFileSync(path.join(PROJECT, 'src/core/api.js'), 'utf-8');
-  assert.ok(src.includes("require('./observability')"));
+  const src = fs.readFileSync(path.join(PROJECT, 'src/core/model/api.js'), 'utf-8');
+  assert.ok(src.includes("require('../observability')"));
 });
 
 test('api.js: chatCompletion wraps request in traceLLM', () => {
-  const src = fs.readFileSync(path.join(PROJECT, 'src/core/api.js'), 'utf-8');
+  const src = fs.readFileSync(path.join(PROJECT, 'src/core/model/api.js'), 'utf-8');
   assert.ok(/observability\.traceLLM/.test(src), 'must call traceLLM');
   // Returns response.data.choices[0].message — format unchanged.
   assert.ok(/choices\[0\]\.message/.test(src));
@@ -324,7 +324,7 @@ test('security: AGENT.md, guardrails, observability are independent modules', ()
   // observability must NOT import the src/context/AGENT.md module.
   assert.ok(!obsSrc.includes('context'), 'observability must not depend on AGENT.md');
 
-  const ctxSrc = fs.readFileSync(path.join(PROJECT, 'src/core/context/index.js'), 'utf-8');
+  const ctxSrc = fs.readFileSync(path.join(PROJECT, 'src/core/rules/index.js'), 'utf-8');
   assert.ok(!ctxSrc.includes('observability'), 'AGENT.md must not depend on observability');
 });
 

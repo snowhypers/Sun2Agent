@@ -1,6 +1,6 @@
 'use strict';
 
-const context = require('../context');
+const context = require('../rules');
 const memory = require('../memory');
 const skills = require('../skills');
 const providers = require('../providers');

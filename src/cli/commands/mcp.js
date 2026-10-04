@@ -12,7 +12,6 @@ const { getMcpFilePath, openMcpConfig, loadMcpConfig, getServers } = require('..
 function builtinNote() {
   const notes = [];
   if (mcp.isBrowserConnected()) notes.push('Browser tools remain available.');
-  if (mcp.isWorkspaceConnected()) notes.push('Workspace tools remain available.');
   return notes.length ? ' ' + notes.join(' ') : '';
 }
 
@@ -33,7 +32,7 @@ async function mcpAddEdit(ctx) {
       chalk.bold('Esc') + chalk.gray(' to go back to simple chat... ')
   );
   if (key === 'escape') {
-    // Esc disconnects user-configured MCPs; the built-in workspace remains.
+    // Esc disconnects user-configured MCPs; built-in tools remain.
     if (mcp.hasUserConnections()) {
       await mcp.disconnectUserServers();
       console.log(chalk.gray(`\nDisconnected user MCP.${builtinNote()}\n`));

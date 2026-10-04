@@ -13,8 +13,8 @@ const os = require('os');
 const PROJECT = path.join(__dirname, '..');
 const guardrails = require(path.join(PROJECT, 'src/core/guardrails'));
 const { loadAgentMd, openAgentMd, ensureAgentMd, agentMdPath, AGENT_FILENAME } =
-  require(path.join(PROJECT, 'src/core/context/agentLoader'));
-const { buildPromptWithAgent } = require(path.join(PROJECT, 'src/core/context/promptBuilder'));
+  require(path.join(PROJECT, 'src/core/rules/agentLoader'));
+const { buildPromptWithAgent } = require(path.join(PROJECT, 'src/core/rules/promptBuilder'));
 
 // --- helpers ---------------------------------------------------------------
 // Each test gets its own throwaway directory so they don't interfere.
@@ -81,9 +81,9 @@ test('AGENT.md: framing explicitly forbids overriding src/guardrails/security', 
   assert.ok(/guardrail|safety|security/i.test(result));
 });
 
-test('AGENT.md: src/core/context/index exposes a single simple interface', () => {
-  delete require.cache[require.resolve(path.join(PROJECT, 'src/core/context'))];
-  const ctx = require(path.join(PROJECT, 'src/core/context'));
+test('AGENT.md: src/core/rules/index exposes a single simple interface', () => {
+  delete require.cache[require.resolve(path.join(PROJECT, 'src/core/rules'))];
+  const ctx = require(path.join(PROJECT, 'src/core/rules'));
   assert.strictEqual(typeof ctx.buildSystemPrompt, 'function');
   assert.strictEqual(typeof ctx.loadAgentContext, 'function');
   assert.strictEqual(typeof ctx.reload, 'function');
@@ -99,8 +99,8 @@ test('AGENT.md: context.buildSystemPrompt composes base + AGENT.md', () => {
   const origCwd = process.cwd();
   process.chdir(dir);
   try {
-    delete require.cache[require.resolve(path.join(PROJECT, 'src/core/context'))];
-    const ctx = require(path.join(PROJECT, 'src/core/context'));
+    delete require.cache[require.resolve(path.join(PROJECT, 'src/core/rules'))];
+    const ctx = require(path.join(PROJECT, 'src/core/rules'));
     const out = ctx.buildSystemPrompt('BASE PERSONA');
     assert.ok(out.startsWith('BASE PERSONA'));
     assert.ok(out.includes('Use jest for tests'));
@@ -115,8 +115,8 @@ test('AGENT.md: reload() forces a re-read from disk', () => {
   const origCwd = process.cwd();
   process.chdir(dir);
   try {
-    delete require.cache[require.resolve(path.join(PROJECT, 'src/core/context'))];
-    const ctx = require(path.join(PROJECT, 'src/core/context'));
+    delete require.cache[require.resolve(path.join(PROJECT, 'src/core/rules'))];
+    const ctx = require(path.join(PROJECT, 'src/core/rules'));
 
     fs.writeFileSync(path.join(dir, AGENT_FILENAME), 'version one');
     let out = ctx.buildSystemPrompt('BASE');
@@ -244,8 +244,8 @@ test('app: chat.js loads without throwing', () => {
   assert.doesNotThrow(() => require(path.join(PROJECT, 'src/cli')));
 });
 
-test('app: src/core/context/ is a new directory with the 3 required files', () => {
-  const ctxDir = path.join(PROJECT, 'src/core/context');
+test('app: src/core/rules/ contains the 3 required files', () => {
+  const ctxDir = path.join(PROJECT, 'src/core/rules');
   assert.ok(fs.existsSync(path.join(ctxDir, 'index.js')), 'index.js');
   assert.ok(fs.existsSync(path.join(ctxDir, 'agentLoader.js')), 'agentLoader.js');
   assert.ok(fs.existsSync(path.join(ctxDir, 'promptBuilder.js')), 'promptBuilder.js');
@@ -307,8 +307,8 @@ test('app: end-to-end — AGENT.md instructions reach the composed system prompt
   const origCwd = process.cwd();
   process.chdir(dir);
   try {
-    delete require.cache[require.resolve(path.join(PROJECT, 'src/core/context'))];
-    const ctx = require(path.join(PROJECT, 'src/core/context'));
+    delete require.cache[require.resolve(path.join(PROJECT, 'src/core/rules'))];
+    const ctx = require(path.join(PROJECT, 'src/core/rules'));
 
     // Mirror what chat.js builds: base persona (+tools) then AGENT.md appended.
     const base = 'You are sun2Agent, a helpful assistant running in a terminal.';
@@ -333,8 +333,8 @@ test('app: no AGENT.md => identical behavior to before (base prompt returned)', 
   const origCwd = process.cwd();
   process.chdir(dir);
   try {
-    delete require.cache[require.resolve(path.join(PROJECT, 'src/core/context'))];
-    const ctx = require(path.join(PROJECT, 'src/core/context'));
+    delete require.cache[require.resolve(path.join(PROJECT, 'src/core/rules'))];
+    const ctx = require(path.join(PROJECT, 'src/core/rules'));
     const base = 'You are sun2Agent, a helpful assistant running in a terminal.';
     assert.strictEqual(ctx.buildSystemPrompt(base), base);
   } finally {
@@ -347,7 +347,7 @@ test('terminal turn: no AGENT.md still produces a text system prompt', () => {
   const origCwd = process.cwd();
   process.chdir(dir);
   try {
-    const ctx = require(path.join(PROJECT, 'src/core/context'));
+    const ctx = require(path.join(PROJECT, 'src/core/rules'));
     ctx.reload();
     const { buildTurnSystemPrompt } = require(path.join(PROJECT, 'src/cli/turn'));
     const prompt = buildTurnSystemPrompt({ selectedSkills: [] }, []);
@@ -357,6 +357,6 @@ test('terminal turn: no AGENT.md still produces a text system prompt', () => {
     assert.doesNotMatch(prompt, /\[object Object\]/);
   } finally {
     process.chdir(origCwd);
-    require(path.join(PROJECT, 'src/core/context')).reload();
+    require(path.join(PROJECT, 'src/core/rules')).reload();
   }
 });

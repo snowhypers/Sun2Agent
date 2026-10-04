@@ -41,11 +41,12 @@ test('workspace: bundled MCP creates and reads files in any launch folder', asyn
 
     const connected = await mcp.connectWorkspace();
     assert.strictEqual(connected.ok, true, connected.error);
-    assert.strictEqual(mcp.getTag(), 'workspace');
+    assert.strictEqual(mcp.getTag(), null, 'automatic workspace tools stay out of the footer');
   assert.ok(connected.tools.some((tool) => tool.name === 'create_directory'));
   assert.ok(connected.tools.some((tool) => tool.name === 'write_file'));
   assert.ok(connected.tools.some((tool) => tool.name === 'delete_file'));
   assert.ok(connected.tools.some((tool) => tool.name === 'delete_directory'));
+  assert.ok(connected.tools.some((tool) => tool.name === 'run_maven_tests'));
 
   const realApproval = hitl.checkApproval;
   hitl.checkApproval = async () => true;
@@ -63,6 +64,16 @@ test('workspace: bundled MCP creates and reads files in any launch folder', asyn
 
     assert.strictEqual(output.trim(), 'Hello from Sun2Agent');
     assert.strictEqual(fs.readFileSync(file, 'utf8'), 'Hello from Sun2Agent');
+
+    const testFile = path.join(actualWorkspaceRoot, 'src/test/java/UserTest.java');
+    await mcp.callTool(routes, 'workspace__create_directory', {
+      path: path.dirname(testFile)
+    });
+    const verifiedWrite = await mcp.callTool(routes, 'workspace__write_file', {
+      path: testFile, content: 'class UserTest {}\n'
+    });
+    assert.match(verifiedWrite, /Verified Java test on disk: src\/test\/java\/UserTest\.java/);
+    assert.strictEqual(fs.readFileSync(testFile, 'utf8'), 'class UserTest {}\n');
 
     await mcp.callTool(routes, 'workspace__delete_file', { path: file });
     assert.strictEqual(fs.existsSync(file), false);
@@ -101,8 +112,23 @@ test('workspace: bundled MCP creates and reads files in any launch folder', asyn
     try {
       const outsideFile = path.join(outsideDirectory, 'keep.txt');
       fs.writeFileSync(outsideFile, 'keep');
+      const outsideWrite = path.join(outsideDirectory, 'new.txt');
+      await assert.rejects(
+        mcp.callTool(routes, 'workspace__write_file', {
+          path: outsideWrite, content: 'must stay inside workspace'
+        }),
+        /outside the project root/
+      );
+      assert.strictEqual(fs.existsSync(outsideWrite), false);
       const linkedDirectory = path.join(actualWorkspaceRoot, 'outside-link');
       fs.symlinkSync(outsideDirectory, linkedDirectory, 'dir');
+      await assert.rejects(
+        mcp.callTool(routes, 'workspace__write_file', {
+          path: path.join(linkedDirectory, 'new.txt'), content: 'must not follow symlink'
+        }),
+        /Access denied|outside allowed directories/
+      );
+      assert.strictEqual(fs.existsSync(outsideWrite), false, 'workspace write must not follow an escaping symlink');
       await assert.rejects(
         mcp.callTool(routes, 'workspace__delete_file', {
           path: path.join(linkedDirectory, 'keep.txt')
@@ -158,28 +184,19 @@ test('workspace: refuses to expose the filesystem root', () => {
   assert.throws(() => mcp.workspaceServer(root), /refusing to expose the filesystem root/);
 });
 
-test('workspace: /workspace is opt-in, registered, documented, and confirms access', async () => {
+test('workspace: starts automatically and is absent from the command UI', async () => {
   const cliSource = fs.readFileSync(path.join(PROJECT, 'src/cli/index.js'), 'utf8');
-  assert.doesNotMatch(cliSource, /await mcp\.connectWorkspace\(\);/);
+  assert.match(cliSource, /const workspaceReady = mcp\.connectWorkspace\(\)/);
+  assert.match(cliSource, /await workspaceReady/);
+  assert.doesNotMatch(cliSource, /text === '\/workspace'/);
+  assert.doesNotMatch(cliSource, /mcp\.disconnectWorkspace\(\)/);
 
   const commands = require(path.join(PROJECT, 'src/cli/commands'));
-  assert.strictEqual(commands.COMMANDS['/workspace'], commands.handleWorkspace);
+  assert.strictEqual(commands.COMMANDS['/workspace'], undefined);
 
   const banner = fs.readFileSync(path.join(PROJECT, 'src/cli/ui/banner.js'), 'utf8');
-  assert.ok(banner.includes("row('/workspace'"));
-
-  const realLog = console.log;
-  const output = [];
-  if (mcp.isWorkspaceConnected()) await mcp.disconnectWorkspace();
-  console.log = (line) => output.push(String(line));
-  try {
-    await commands.handleWorkspace();
-    assert.strictEqual(mcp.isWorkspaceConnected(), true);
-  } finally {
-    console.log = realLog;
-    await mcp.disconnectWorkspace();
-  }
-  assert.match(output.join('\n'), /Connected \/workspace plugin — agent can access your workspace/);
+  assert.doesNotMatch(banner, /row\('\/workspace'/);
+  assert.doesNotMatch(fs.readFileSync(path.join(PROJECT, 'README.md'), 'utf8'), /`\/workspace`/);
 });
 
 test('workspace: prompt requires direct operations and exact-name deletion', () => {
@@ -200,4 +217,38 @@ test('workspace: prompt requires direct operations and exact-name deletion', () 
   assert.match(withWorkspace, /complete requested content/);
   assert.match(withWorkspace, /Never simulate deletion by moving/);
   assert.match(withWorkspace, /similar name does, ask the user to confirm/);
+  assert.match(withWorkspace, /run_maven_tests once after all edits/);
+});
+
+test('workspace: Maven tests run only at workspace root with a fixed command', async () => {
+  const childProcess = require('node:child_process');
+  const originalExecFile = childProcess.execFile;
+  const originalApproval = hitl.checkApproval;
+  const connected = await mcp.connectWorkspace();
+  assert.strictEqual(connected.ok, true, connected.error);
+  const routes = mcp.getOpenAiTools().routes;
+  hitl.checkApproval = async () => true;
+  try {
+    const missing = await mcp.callTool(routes, 'workspace__run_maven_tests', {});
+    assert.match(missing, /NOT RUN: no pom.xml/);
+    fs.writeFileSync(path.join(actualWorkspaceRoot, 'pom.xml'), '<project/>');
+    let seen;
+    childProcess.execFile = (command, argv, options, done) => {
+      seen = { command, argv, options };
+      done(null, 'BUILD SUCCESS', '');
+    };
+    const result = await mcp.callTool(routes, 'workspace__run_maven_tests', {});
+    assert.match(result, /Maven tests PASSED/);
+    assert.strictEqual(seen.command, process.platform === 'win32' ? (process.env.ComSpec || 'cmd.exe') : 'mvn');
+    assert.deepStrictEqual(seen.argv, process.platform === 'win32' ? ['/d', '/s', '/c', 'mvn test'] : ['test']);
+    assert.strictEqual(seen.options.cwd, actualWorkspaceRoot);
+    assert.strictEqual(seen.options.timeout, 120000);
+    assert.strictEqual(seen.options.env.NVIDIA_API_KEY, undefined);
+    childProcess.execFile = (_command, _argv, _options, done) => done(Object.assign(new Error('failed'), { code: 1 }), '', 'Tests failed');
+    assert.match(await mcp.callTool(routes, 'workspace__run_maven_tests', {}), /Maven tests FAILED.*Tests failed/s);
+  } finally {
+    childProcess.execFile = originalExecFile;
+    hitl.checkApproval = originalApproval;
+    await mcp.disconnectWorkspace();
+  }
 });

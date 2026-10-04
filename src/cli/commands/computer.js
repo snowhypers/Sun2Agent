@@ -1,7 +1,7 @@
 const chalk = require('chalk');
 const ora = require('ora');
 const mcp = require('../../core/mcp');
-const computer = require('../../core/mcp/computer');
+const computer = require('../../core/computer');
 const sandbox = require('../../core/sandbox');
 const { watchEscape } = require('../ui/escapeWatcher');
 

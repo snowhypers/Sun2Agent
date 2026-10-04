@@ -13,16 +13,18 @@ const chalk = require('chalk');
 const ora = require('ora');
 
 const mcp = require('../core/mcp');
-const computer = require('../core/mcp/computer');
+const computer = require('../core/computer');
 const hitl = require('../core/hitl/mcpApproval');
 const guardrails = require('../core/guardrails');
-const context = require('../core/context');
+const context = require('../core/rules');
 const memory = require('../core/memory');
 const search = require('../core/search');
 const skills = require('../core/skills');
 const providers = require('../core/providers');
-const { chatCompletion } = require('../core/api');
+const { chatCompletion } = require('../core/model/api');
 const { dockerDownWarning } = require('./dockerStatus');
+const { selectToolSpecs } = require('./computerTools');
+const { pendingComputerOutcome, unverifiedComputerMessage } = require('../core/computer/outcome');
 const { isEmptyAssistantMessage, cleanHistory } = require('./history');
 const { sanitizeTerminalText } = require('./prompt');
 
@@ -35,7 +37,9 @@ const WORKSPACE_SYSTEM_PROMPT =
   '- Use the fewest direct filesystem calls needed to complete the request.\n' +
   '- Write the complete requested content; do not replace it with placeholder code.\n' +
   '- For deletion, use delete_file or delete_directory. Never simulate deletion by moving an item.\n' +
-  '- Only delete the exact requested path. If it does not exist but a similar name does, ask the user to confirm before changing that item.';
+  '- Only delete the exact requested path. If it does not exist but a similar name does, ask the user to confirm before changing that item.\n' +
+  '- Java test writes are read back by the workspace tool. In a Maven project, call run_maven_tests once after all edits. ' +
+  'Only say tests passed when that tool reports PASSED; if it fails, is declined, or cannot run, report partial/unverified work.';
 
 const BROWSER_SYSTEM_PROMPT =
   '\n\nBrowser tool rules:\n' +
@@ -57,6 +61,10 @@ function buildTurnSystemPrompt(config, relevantMemories, options = {}) {
     prompt += '\n\nComputer tools control the real desktop, not an isolated browser. ' +
       'Use tools for the requested task, target the intended app/window, prefer accessibility controls, ' +
       'and execute desktop actions sequentially. Stop and explain missing OS permissions. ' +
+      'For a known app, check its existing window before discovering apps or opening another. ' +
+      'Use sun2agent_wait_for_window once after opening an app instead of repeated wait/list_windows model turns. ' +
+      'For web tasks, inspect accessibility text before taking a screenshot; use a screenshot only when text is insufficient. ' +
+      'Use sun2agent_search_tools only when a necessary computer tool is not visible. ' +
       'Never claim to have seen omitted screenshots. Ask the user to complete authentication themselves. ' +
       'Verify the requested outcome using fresh evidence; a successful click is not proof. ' +
       'If an action times out, inspect the current state before repeating any change. ' +
@@ -75,14 +83,48 @@ function truncate(s, n) {
   return s.length > n ? s.slice(0, Math.max(0, n - 1)) + '…' : s;
 }
 
-async function chatTurn(config, history, signal, onToken, onToolTurn) {
+function mavenVerificationNotice(history) {
+  let start = 0;
+  for (let i = 0; i < history.length; i++) {
+    if (history[i].role === 'user' &&
+        !/^\s*(continue|retry|resume|go on)\s*[.!]?\s*$/i.test(String(history[i].content || ''))) {
+      start = i;
+    }
+  }
+  let status = null;
+  const runIds = new Set();
+  for (const message of history.slice(start)) {
+    for (const call of message.role === 'assistant' ? message.tool_calls || [] : []) {
+      const name = call.function?.name;
+      if (name === 'workspace__write_file' || name === 'workspace__edit_file') {
+        let args;
+        try { args = JSON.parse(call.function.arguments || '{}'); } catch (_) { args = {}; }
+        const filePath = String(args.path || '').replace(/\\/g, '/');
+        if (/(?:^|\/)src\/test\/.*\.java$/i.test(filePath)) status = 'pending';
+      }
+      if (name === 'workspace__run_maven_tests') runIds.add(call.id);
+    }
+    if (message.role === 'tool' && runIds.has(message.tool_call_id)) {
+      status = /^Maven tests PASSED\./.test(String(message.content || '')) ? 'passed' : 'failed';
+    }
+  }
+  if (status === 'pending') return '\n\nVerification: Java tests were changed but Maven tests have not passed. Work is partial/unverified.';
+  if (status === 'failed') return '\n\nVerification: Maven tests did not pass. Work is partial/unverified.';
+  return '';
+}
+
+async function chatTurn(config, history, signal, onToken, onToolTurn, onCheckpoint) {
   const provider = providers.getActiveProvider(config);
   const { specs, routes } = mcp.getOpenAiTools();
 
-  // Merge web_search spec when search is enabled. MCP tools are unchanged.
+  // Keep every MCP route guarded and executable, but send the model a smaller
+  // starting catalog for computer use. It can discover extra schemas on demand.
   const searchSpec = search.getToolSpec(config);
   const allSpecs = searchSpec ? [...specs, searchSpec] : specs;
-  const tools = provider.supportsTools && allSpecs.length ? allSpecs : undefined;
+  const discoveredComputerTools = new Set();
+  const visibleSpecs = () => computer.isConnected()
+    ? selectToolSpecs(allSpecs, routes, discoveredComputerTools) : allSpecs;
+  let tools = provider.supportsTools && allSpecs.length ? visibleSpecs() : undefined;
 
   const currentUserMessage = [...history].reverse().find((item) => item.role === 'user');
   const relevantMemories = memory.isEnabled() && currentUserMessage
@@ -128,6 +170,7 @@ async function chatTurn(config, history, signal, onToken, onToolTurn) {
   const RESPONSE_RECOVERY_RETRIES = 1;
   let recoveryRetries = 0;
   let latestImages = [];
+  let verificationNudge = false;
   for (let step = 0; step < MAX_TOOL_STEPS; step++) {
     if (signal && signal.aborted) {
       spinner.stop();
@@ -152,9 +195,9 @@ async function chatTurn(config, history, signal, onToken, onToolTurn) {
         signal,
         // Retry attempts run NON-STREAMING: a plain JSON response cannot lose
         // chunks the way a prematurely closed SSE stream can.
-        recoveryRetries ? undefined : streamText,
+        recoveryRetries || pendingComputerOutcome(history) ? undefined : streamText,
         { url: provider.url, provider: provider.id,
-          retryOnce: mcp.isComputerConnected(),
+          retryOnce: mcp.isComputerConnected() || mcp.isWorkspaceConnected(),
           onRetry: (ms) => ensureIndicator(`model temporarily unavailable — retrying once in ${Math.ceil(ms / 1000)}s (Esc to stop)...`) }
       );
     } catch (e) {
@@ -210,6 +253,18 @@ async function chatTurn(config, history, signal, onToken, onToolTurn) {
       throw new Error('Model returned an empty response — please try again.');
     }
 
+    const pendingOutcome = pendingComputerOutcome(history);
+    if (!msg.tool_calls?.length && pendingOutcome && !pendingOutcome.failed && !pendingOutcome.checked &&
+        !verificationNudge && allowTools) {
+      verificationNudge = true;
+      system.content += '\nBefore finishing, inspect the current app state once to check the effect of ' +
+        `${pendingOutcome.tool}. Do not repeat the action. If it cannot be confirmed, report uncertainty.`;
+      continue;
+    }
+    if (!msg.tool_calls?.length) {
+      const unverified = unverifiedComputerMessage(pendingOutcome);
+      if (unverified) msg.content = unverified;
+    }
     history.push(msg);
 
     if (allowTools && msg.tool_calls && msg.tool_calls.length) {
@@ -231,11 +286,26 @@ async function chatTurn(config, history, signal, onToken, onToolTurn) {
         return { call, fnName, args };
       });
 
+      const checkpointBatch = () => {
+        if (typeof onCheckpoint !== 'function') return;
+        onCheckpoint([
+          ...history,
+          ...batch.map(({ call }, index) => ({
+            role: 'tool',
+            tool_call_id: call.id,
+            content: index < contents.length ? contents[index]
+              : 'Tool not completed before interruption. Inspect current state before retrying.'
+          }))
+        ]);
+      };
+
       // Run tools sequentially so spinner updates cleanly: waiting → running → thinking...
       const contents = [];
+      checkpointBatch();
       for (const { call, fnName, args } of batch) {
         if (signal && signal.aborted) {
           contents.push('interrupted');
+          checkpointBatch();
           continue;
         }
 
@@ -245,6 +315,7 @@ async function chatTurn(config, history, signal, onToken, onToolTurn) {
           const content = await search.executeTool(args.query, config);
           console.log(chalk.gray(`     ↳ ${truncate(sanitizeTerminalText(content), Math.max(20, termWidth() - 8))}`));
           contents.push(content);
+          checkpointBatch();
           spinner.text = chalk.gray('sun2Agent is thinking...  (⎋ esc to stop)');
           continue;
         }
@@ -257,6 +328,7 @@ async function chatTurn(config, history, signal, onToken, onToolTurn) {
             `Tool "${fnName}" does not exist. The only available tools are: ${available}. ` +
             `Call one of those, or answer directly if none fit.`
           );
+          checkpointBatch();
           continue;
         }
         try {
@@ -267,6 +339,10 @@ async function chatTurn(config, history, signal, onToken, onToolTurn) {
           const result = await mcp.callTool(routes, fnName, args, signal, {
             includeImages: computer.usesVision() && routes.get(fnName)?.server === 'computer'
           });
+          if (fnName === 'computer__sun2agent_search_tools' && typeof args.query === 'string') {
+            for (const match of computer.searchToolNames(args.query)) discoveredComputerTools.add(match.name);
+            if (allowTools) tools = visibleSpecs();
+          }
           const raw = typeof result === 'string' ? result : result.text;
           if (routes.get(fnName)?.server === 'computer') latestImages = result.images || [];
           const content = guardrails.outputGuard(raw);
@@ -275,6 +351,7 @@ async function chatTurn(config, history, signal, onToken, onToolTurn) {
           }
           console.log(chalk.gray(`     ↳ ${truncate(sanitizeTerminalText(content), Math.max(20, termWidth() - 8))}`));
           contents.push(content);
+          checkpointBatch();
           // Spinner updates back to "thinking" for next model call.
           spinner.text = chalk.gray('sun2Agent is thinking...  (⎋ esc to stop)');
         } catch (e) {
@@ -282,7 +359,7 @@ async function chatTurn(config, history, signal, onToken, onToolTurn) {
             contents.push('interrupted');
             continue;
           }
-          const content = 'Tool error: ' + e.message;
+          const content = guardrails.outputGuard('Tool error: ' + e.message);
           console.log(chalk.red(`     ↳ ${sanitizeTerminalText(content)}`));
           // If Docker went down mid-session, warn the user clearly.
           const dockerWarn = dockerDownWarning();
@@ -290,6 +367,7 @@ async function chatTurn(config, history, signal, onToken, onToolTurn) {
             console.log(chalk.red('  ⛔ ' + dockerWarn));
           }
           contents.push(content);
+          checkpointBatch();
         }
       }
 
@@ -307,7 +385,7 @@ async function chatTurn(config, history, signal, onToken, onToolTurn) {
 
     spinner.stop();
     hitl.setSpinner(null);
-    return msg.content; // final answer
+    return (msg.content || '') + mavenVerificationNotice(history);
   }
 
   // Hit the tool-call cap. Don't dead-end — ask the model once more WITHOUT
@@ -341,7 +419,8 @@ async function chatTurn(config, history, signal, onToken, onToolTurn) {
     );
     spinner.stop();
     hitl.setSpinner(null);
-    return finalMsg.content || '(no final answer produced)';
+    const unverified = unverifiedComputerMessage(pendingComputerOutcome(history));
+    return (unverified || finalMsg.content || '(no final answer produced)') + mavenVerificationNotice(history);
   } catch (e) {
     spinner.stop();
     hitl.setSpinner(null);
@@ -355,5 +434,6 @@ module.exports = {
   buildTurnSystemPrompt,
   BASE_SYSTEM_PROMPT,
   WORKSPACE_SYSTEM_PROMPT,
-  BROWSER_SYSTEM_PROMPT
+  BROWSER_SYSTEM_PROMPT,
+  mavenVerificationNotice
 };

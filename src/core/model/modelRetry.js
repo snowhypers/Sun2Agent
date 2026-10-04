@@ -1,3 +1,4 @@
+// Retry only the model request; completed tools are never replayed here.
 const { setTimeout: delay } = require('node:timers/promises');
 
 function retryDelay(error, now = Date.now()) {

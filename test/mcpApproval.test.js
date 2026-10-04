@@ -119,7 +119,7 @@ test('HITL: essential browser actions require a fresh approval every time', asyn
   }
 });
 
-test('HITL: an approved tool is remembered for the session and not re-asked', async () => {
+test('HITL: one approval covers routine changes on one server in a prompt', async () => {
   let calls = 0;
   const fakePrompt = async () => {
     calls++;
@@ -127,13 +127,15 @@ test('HITL: an approved tool is remembered for the session and not re-asked', as
   };
   const first = await hitl.checkApproval({ server: 'fs', tool: 'write_file', args: {}, _prompt: fakePrompt });
   assert.strictEqual(first, true);
-  // Follow-up / retry of the same call: memoized, no re-ask.
-  const second = await hitl.checkApproval({ server: 'fs', tool: 'write_file', args: {}, _prompt: fakePrompt });
+  // Creating a directory and editing another file on this server are covered.
+  const second = await hitl.checkApproval({ server: 'fs', tool: 'create_directory', args: {}, _prompt: fakePrompt });
+  const third = await hitl.checkApproval({ server: 'fs', tool: 'edit_file', args: {}, _prompt: fakePrompt });
   assert.strictEqual(second, true);
+  assert.strictEqual(third, true);
   assert.strictEqual(calls, 1);
 });
 
-test('HITL: a new chat session clears previously approved tools', async () => {
+test('HITL: the next user prompt requires a new routine approval', async () => {
   let calls = 0;
   const fakePrompt = async () => {
     calls++;
@@ -145,18 +147,26 @@ test('HITL: a new chat session clears previously approved tools', async () => {
   assert.strictEqual(calls, 2);
 });
 
-test('HITL: a session-approved tool updates the live indicator before running', async () => {
+test('HITL: Maven test execution requires fresh approval every time', async () => {
+  let prompts = 0;
+  const prompt = async () => { prompts++; return true; };
+  await hitl.checkApproval({ server: 'workspace', tool: 'run_maven_tests', args: {}, _prompt: prompt });
+  await hitl.checkApproval({ server: 'workspace', tool: 'run_maven_tests', args: {}, _prompt: prompt });
+  assert.strictEqual(prompts, 2);
+});
+
+test('HITL: a prompt-approved tool updates the live indicator before running', async () => {
   const spinner = { isSpinning: true, text: '' };
   hitl.setSpinner(spinner);
   await hitl.checkApproval({ server: 'fs', tool: 'write_file', args: {}, _prompt: async () => true });
   await hitl.checkApproval({ server: 'fs', tool: 'write_file', args: {}, _prompt: async () => {
     throw new Error('should not re-prompt');
   } });
-  assert.match(spinner.text, /already approved this session/);
+  assert.match(spinner.text, /approved for this prompt/);
   assert.match(spinner.text, /running tool: write_file/);
 });
 
-test('HITL: a new prompt does NOT reset approvals (per-session)', async () => {
+test('HITL: another server requires its own approval in the same prompt', async () => {
   let calls = 0;
   const fakePrompt = async () => {
     calls++;
@@ -164,24 +174,36 @@ test('HITL: a new prompt does NOT reset approvals (per-session)', async () => {
   };
   await hitl.checkApproval({ server: 'fs', tool: 'write_file', args: {}, _prompt: fakePrompt });
   assert.strictEqual(calls, 1);
-  // Next user prompt: approvals persist for the session.
-  await hitl.checkApproval({ server: 'fs', tool: 'write_file', args: {}, _prompt: fakePrompt });
+  await hitl.checkApproval({ server: 'other', tool: 'write_file', args: {}, _prompt: fakePrompt });
+  assert.strictEqual(calls, 2);
+});
+
+test('HITL: distinct sequential routine calls need only one approval', async () => {
+  let calls = 0;
+  const fakePrompt = async () => {
+    calls++;
+    return true;
+  };
+  const a = await hitl.checkApproval({ server: 'fs', tool: 'create_directory', args: {}, _prompt: fakePrompt });
+  const b = await hitl.checkApproval({ server: 'fs', tool: 'write_file', args: {}, _prompt: fakePrompt });
+  assert.strictEqual(a, true);
+  assert.strictEqual(b, true);
   assert.strictEqual(calls, 1);
 });
 
-test('HITL: distinct calls in one batch are approved concurrently', async () => {
-  let calls = 0;
-  const fakePrompt = async () => {
-    calls++;
-    return true;
-  };
-  const [a, b] = await Promise.all([
-    hitl.checkApproval({ server: 'fs', tool: 'create_directory', args: {}, _prompt: fakePrompt }),
-    hitl.checkApproval({ server: 'fs', tool: 'write_file', args: {}, _prompt: fakePrompt })
-  ]);
-  assert.strictEqual(a, true);
-  assert.strictEqual(b, true);
-  assert.strictEqual(calls, 2);
+test('HITL: deletes, sends, execution, unknown tools and destructive hints always ask', async () => {
+  for (const [tool, annotations] of [
+    ['delete_file', {}], ['send_message', {}], ['run_command', {}],
+    ['mystery_action', {}], ['write_file', { destructiveHint: true }]
+  ]) {
+    let calls = 0;
+    const options = { server: 'fs', tool, annotations,
+      _prompt: async () => { calls++; return true; } };
+    await hitl.checkApproval(options);
+    await hitl.checkApproval(options);
+    assert.strictEqual(calls, 2, tool);
+    hitl.startPrompt();
+  }
 });
 
 test('HITL: a denied call blocks that call, but next call asks again', async () => {

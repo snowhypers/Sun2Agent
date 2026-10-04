@@ -1,6 +1,6 @@
 const axios = require('axios');
 const { requestWithRetry } = require('./modelRetry');
-const observability = require('./observability');
+const observability = require('../observability');
 
 const NIM_URL = 'https://integrate.api.nvidia.com/v1/chat/completions';
 const DEFAULT_MODEL_TIMEOUT_MS = 60000;
@@ -40,6 +40,7 @@ async function chatCompletion(apiKey, model, messages, tools, signal, onToken, r
     body.tool_choice = 'auto';
   }
   if (request.body && typeof request.body === 'object') Object.assign(body, request.body);
+  const requestBytes = Buffer.byteLength(JSON.stringify(body));
 
   // Wrap the actual LLM call with LangSmith tracing when enabled.
   // The response format returned to callers is unchanged.
@@ -69,6 +70,18 @@ async function chatCompletion(apiKey, model, messages, tools, signal, onToken, r
         );
         timeoutError.code = 'MODEL_TIMEOUT';
         throw timeoutError;
+      }
+      const status = error?.response?.status;
+      if (status) {
+        // Do not print provider response bodies: they can echo private prompts
+        // or tool data. Counts and a provider request ID are safe diagnostics.
+        const headers = error.response.headers || {};
+        const rawId = headers['x-request-id'] || headers['x-correlation-id'] || headers['nv-request-id'];
+        const requestId = typeof rawId === 'string' && /^[A-Za-z0-9._:-]{1,128}$/.test(rawId)
+          ? `; request ID ${rawId}` : '';
+        error.message = `Model request failed (HTTP ${status}; ${messages.length} messages, ` +
+          `${body.tools?.length || 0} tools, ${Math.ceil(requestBytes / 1024)} KiB request${requestId}).`;
+        error.response.data?.destroy?.();
       }
       throw error;
     }

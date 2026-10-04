@@ -111,7 +111,6 @@ function printHelp() {
   add(chalk.bold('Commands'));
   row('/help, /?', 'Show this help');
   row('/config', 'Select NVIDIA or a custom AI provider and model');
-  row('/workspace', 'Connect filesystem tools for the current folder');
   row('/browser', 'Connect isolated Playwright browser tools');
   row('/computer', 'Connect desktop control; Esc on empty input disconnects');
   row('/mcp', 'Manage MCP servers (add/edit, connect one, disconnect)');
@@ -124,7 +123,7 @@ function printHelp() {
   add(chalk.bold('Keyboard'));
   row('Enter', 'Send the message');
   row('Esc (with text)', 'Clear what you are typing');
-  row('Esc (empty box)', 'Disconnect MCP/browser/workspace or clear skills');
+  row('Esc (empty box)', 'Disconnect MCP/browser or clear skills');
   row('Esc (while busy)', 'Stop the current reply / tool call');
   row('Esc (in menus)', 'Go back / cancel');
   row('Ctrl+C', 'Quit immediately');

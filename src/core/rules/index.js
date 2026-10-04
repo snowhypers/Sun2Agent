@@ -1,4 +1,4 @@
-// One simple interface for the AGENT.md repository-instructions feature.
+// One simple interface for the AGENT.md repository-rules feature.
 //
 // chat.js imports only this module:
 //   - loadAgentContext() reads AGENT.md from the project directory (cached)
@@ -53,6 +53,5 @@ module.exports = {
   ensureAgentMd,
   AGENT_FILENAME
 };
-
 
 

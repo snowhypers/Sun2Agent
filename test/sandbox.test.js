@@ -359,7 +359,7 @@ test('sandbox: AGENT.md + LangSmith + sandbox modules remain independent', () =>
   // No require() cross-imports between these independent feature modules.
   // We check require() calls, not comments, to avoid false positives from
   // documentation strings that mention other modules by name.
-  const contextSource = fs.readFileSync(path.join(PROJECT, 'src/core/context/index.js'), 'utf-8');
+  const contextSource = fs.readFileSync(path.join(PROJECT, 'src/core/rules/index.js'), 'utf-8');
   const observSource = fs.readFileSync(path.join(PROJECT, 'src/core/observability/index.js'), 'utf-8');
   const sandboxSource = fs.readFileSync(path.join(PROJECT, 'src/core/sandbox/index.js'), 'utf-8');
 
@@ -432,7 +432,7 @@ test('sandbox: chat.js detects Docker-down mid-session on tool error (source-tex
   assert.ok(turnSource.includes("require('./dockerStatus')"), 'turn.js must require dockerStatus');
 
   // Tool error catch block must call dockerDownWarning
-  const toolCatchIdx = turnSource.indexOf("content = 'Tool error: '");
+  const toolCatchIdx = turnSource.indexOf("'Tool error: ' + e.message");
   assert.ok(toolCatchIdx !== -1, 'turn.js must have tool error handler');
   // Find the next dockerDownWarning after the tool error
   const warnAfterTool = turnSource.indexOf('dockerDownWarning', toolCatchIdx);

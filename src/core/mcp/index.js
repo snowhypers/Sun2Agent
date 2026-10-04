@@ -12,8 +12,9 @@
 //                     (getOpenAiTools, getTag, getConnectionSignature, …)
 //   ./transports.js   how a connection is built (stdio / http / sse),
 //                     including the safe child-env allowlist for stdio
-//   ./workspace.js    built-in filesystem MCP lifecycle and workspace policy
-//   ./browser.js      opt-in isolated Playwright MCP lifecycle
+//   ../filesystem/    built-in filesystem MCP lifecycle and workspace policy
+//   ../browser/       opt-in isolated Playwright MCP lifecycle
+//   ../computer/      opt-in native desktop MCP lifecycle
 //   ./index.js        (this file) connect/disconnect orchestration and the
 //                     guarded tool-call dispatch (guardrails + HITL +
 //                     observability tracing, in that order)
@@ -28,9 +29,9 @@ const observability = require('../observability');
 const hitl = require('../hitl/mcpApproval');
 const registry = require('./registry');
 const { loadSdk, buildTransport } = require('./transports');
-const workspace = require('./workspace');
-const browser = require('./browser');
-const computer = require('./computer');
+const filesystem = require('../filesystem');
+const browser = require('../browser');
+const computer = require('../computer');
 
 const DEFAULT_MCP_CONNECTION_TIMEOUT_MS = 20000;
 
@@ -50,8 +51,8 @@ function connectionTimeoutError(server, timeout) {
 async function connectServer(s, signal) {
   if (signal?.aborted) throw new Error('Connection cancelled');
   if (computer.isReservedUserServer(s)) throw new Error(computer.reservedNameError());
-  if (workspace.isReservedUserServer(s)) {
-    throw new Error(workspace.reservedNameError());
+  if (filesystem.isReservedUserServer(s)) {
+    throw new Error(filesystem.reservedNameError());
   }
   if (browser.isReservedUserServer(s)) {
     throw new Error(browser.reservedNameError());
@@ -84,10 +85,14 @@ async function connectServer(s, signal) {
       })
     ]);
     const listedTools = tools || [];
-    const localTools = s.name === workspace.NAME
-      ? workspace.getLocalTools().filter(
+    const localTools = s.name === filesystem.NAME
+      ? filesystem.getLocalTools().filter(
           (localTool) => !listedTools.some((tool) => tool.name === localTool.name)
         )
+      : s.name === computer.NAME
+        ? computer.getLocalTools().filter(
+            (localTool) => !listedTools.some((tool) => tool.name === localTool.name)
+          )
       : [];
     const availableTools = [...listedTools, ...localTools];
     registry.set(s.name, {
@@ -111,23 +116,23 @@ async function connectServer(s, signal) {
 }
 
 async function connectWorkspace(root = process.cwd()) {
-  return workspace.connect(root, connectServer);
+  return filesystem.connect(root, connectServer);
 }
 
 async function disconnectUserServers() {
-  return workspace.disconnectUserServers();
+  return filesystem.disconnectUserServers();
 }
 
 function hasUserConnections() {
-  return workspace.hasUserConnections();
+  return filesystem.hasUserConnections();
 }
 
 function isWorkspaceConnected() {
-  return workspace.isConnected();
+  return filesystem.isConnected();
 }
 
 async function disconnectWorkspace() {
-  return workspace.disconnect();
+  return filesystem.disconnect();
 }
 
 async function connectBrowser() {
@@ -150,12 +155,12 @@ async function connectFromConfig() {
     if (computer.isReservedUserServer(s)) {
       return { name: s.name, type: s.type, ok: false, error: computer.reservedNameError() };
     }
-    if (workspace.isReservedUserServer(s)) {
+    if (filesystem.isReservedUserServer(s)) {
       return {
         name: s.name,
         type: s.type,
         ok: false,
-        error: workspace.reservedNameError()
+        error: filesystem.reservedNameError()
       };
     }
     if (browser.isReservedUserServer(s)) {
@@ -240,8 +245,11 @@ async function callTool(routes, fullName, args, signal, options = {}) {
   // The actual MCP tool execution, wrapped by LangSmith tracing when enabled.
   // Tool args, routing, and the guardrail verdict above are unchanged.
   return observability.traceTool(async () => {
-    if (route.server === workspace.NAME && workspace.isLocalTool(route.tool)) {
-      return workspace.callLocalTool(route.tool, args);
+    if (route.server === filesystem.NAME && filesystem.isLocalTool(route.tool)) {
+      return filesystem.callLocalTool(route.tool, { ...args, signal });
+    }
+    if (route.server === computer.NAME && computer.isLocalTool(route.tool)) {
+      return computer.callLocalTool(route.tool, args, signal);
     }
     // Use client.request() directly instead of client.callTool(): callTool()
     // rejects responses from servers that declare an outputSchema but return
@@ -253,7 +261,17 @@ async function callTool(routes, fullName, args, signal, options = {}) {
       S.CallToolResultSchema,
       signal ? { signal } : undefined
     );
-    return require('./toolResult').formatToolResult(result, options.includeImages === true);
+    const formatted = require('./toolResult').formatToolResult(result, options.includeImages === true);
+    if (result.isError === true) {
+      throw new Error('MCP tool reported an error: ' +
+        (typeof formatted === 'string' ? formatted : formatted.text));
+    }
+    if (route.server === filesystem.NAME && result.isError !== true &&
+        (route.tool === 'write_file' || route.tool === 'edit_file')) {
+      const verified = await filesystem.verifyJavaTestWrite(route.tool, args);
+      if (verified) return `${formatted}\n${verified}`;
+    }
+    return formatted;
   }, { toolName: route.tool, server: route.server, args });
 }
 
@@ -262,8 +280,8 @@ module.exports = {
   connectComputer: (signal) => computer.connect(connectServer, signal),
   isComputerConnected: computer.isConnected,
   disconnectComputer: computer.disconnect,
-  WORKSPACE_NAME: workspace.NAME,
-  workspaceServer: workspace.createServer,
+  WORKSPACE_NAME: filesystem.NAME,
+  workspaceServer: filesystem.createServer,
   connectWorkspace,
   isWorkspaceConnected,
   disconnectWorkspace,

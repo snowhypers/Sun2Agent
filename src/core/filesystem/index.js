@@ -1,18 +1,26 @@
 // Built-in workspace filesystem MCP.
 //
-// When enabled with /workspace, access is scoped to the directory where
-// Sun2Agent started. It is kept separate from user-configured MCP servers so
+// Access is scoped to the directory where Sun2Agent started. It is kept
+// separate from user-configured MCP servers so
 // /mcp can connect and disconnect those servers independently.
 
 const path = require('path');
 const fs = require('fs');
 const fsp = require('fs/promises');
-const registry = require('./registry');
+const childProcess = require('child_process');
+const registry = require('../mcp/registry');
 
 const NAME = 'workspace';
 let activeRoot = null;
 
 const LOCAL_TOOLS = [
+  {
+    name: 'run_maven_tests',
+    description:
+      'Run mvn test in the connected workspace when pom.xml exists. This executes project code, ' +
+      'requires fresh human approval, and has a 2-minute limit. Use after writing Java tests.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false }
+  },
   {
     name: 'delete_file',
     description:
@@ -120,7 +128,7 @@ function isInside(root, target) {
 }
 
 async function resolveDeleteTarget(inputPath) {
-  if (!activeRoot) throw new Error('/workspace is not connected');
+  if (!activeRoot) throw new Error('workspace tools are not connected');
   if (typeof inputPath !== 'string' || !inputPath.trim()) {
     throw new Error('an exact path is required');
   }
@@ -139,6 +147,7 @@ async function resolveDeleteTarget(inputPath) {
 }
 
 async function callLocalTool(name, args = {}) {
+  if (name === 'run_maven_tests') return runMavenTests(args.signal);
   const target = await resolveDeleteTarget(args.path);
   const stat = await fsp.lstat(target);
 
@@ -162,6 +171,56 @@ async function callLocalTool(name, args = {}) {
   throw new Error(`unknown workspace tool "${name}"`);
 }
 
+async function runMavenTests(signal) {
+  if (!activeRoot) throw new Error('workspace tools are not connected');
+  const pom = path.join(activeRoot, 'pom.xml');
+  let stat;
+  try { stat = await fsp.lstat(pom); } catch (_) { return 'Maven tests NOT RUN: no pom.xml at the workspace root.'; }
+  if (!stat.isFile() || stat.isSymbolicLink()) {
+    return 'Maven tests NOT RUN: pom.xml must be a regular file at the workspace root.';
+  }
+
+  // Fixed command and cwd only: never execute model-supplied shell text.
+  // Maven may execute project code, so the dispatch boundary requires fresh
+  // approval and the child receives no model/API credentials from this process.
+  const isWindows = process.platform === 'win32';
+  const command = isWindows ? (process.env.ComSpec || 'cmd.exe') : 'mvn';
+  const argv = isWindows ? ['/d', '/s', '/c', 'mvn test'] : ['test'];
+  const env = Object.fromEntries(
+    ['PATH', 'HOME', 'USERPROFILE', 'APPDATA', 'LOCALAPPDATA', 'SYSTEMROOT',
+      'JAVA_HOME', 'TMPDIR', 'TEMP', 'LANG', 'LC_ALL']
+      .filter((key) => process.env[key] !== undefined)
+      .map((key) => [key, process.env[key]])
+  );
+  return new Promise((resolve, reject) => {
+    childProcess.execFile(command, argv, {
+      cwd: activeRoot, env, signal, timeout: 120000, maxBuffer: 4 * 1024 * 1024
+    }, (error, stdout, stderr) => {
+      if (signal?.aborted) return reject(new Error('Maven tests cancelled'));
+      const output = `${stdout || ''}\n${stderr || ''}`.trim().slice(-20000);
+      if (!error) return resolve(`Maven tests PASSED.\n${output}`);
+      if (error.code === 'ENOENT') return resolve('Maven tests NOT RUN: Maven is not installed or not on PATH.');
+      if (error.killed) return resolve(`Maven tests NOT VERIFIED: process timed out or output limit was reached.\n${output}`);
+      return resolve(`Maven tests FAILED (exit ${error.code || 'unknown'}).\n${output}`);
+    });
+  });
+}
+
+async function verifyJavaTestWrite(tool, args = {}) {
+  if (!activeRoot || typeof args.path !== 'string') return '';
+  const filePath = args.path.replace(/\\/g, '/');
+  if (!/(?:^|\/)src\/test\/.*\.java$/i.test(filePath)) return '';
+  const target = path.resolve(activeRoot, args.path);
+  if (!isInside(activeRoot, target)) throw new Error('Java test path is outside the workspace');
+  const realTarget = await fsp.realpath(target);
+  if (!isInside(activeRoot, realTarget)) throw new Error('Java test path resolves outside the workspace');
+  const contents = await fsp.readFile(realTarget, 'utf8');
+  if (tool === 'write_file' && contents !== args.content) {
+    throw new Error('Java test read-back did not match the requested content');
+  }
+  return `Verified Java test on disk: ${path.relative(activeRoot, realTarget)}`;
+}
+
 module.exports = {
   NAME,
   createServer,
@@ -174,5 +233,6 @@ module.exports = {
   disconnect,
   getLocalTools,
   isLocalTool,
-  callLocalTool
+  callLocalTool,
+  verifyJavaTestWrite
 };

@@ -116,10 +116,11 @@ sun2agent
 | 🤖 | **AI Agent CLI** | Full agent loop directly from your terminal — no browser tab, no desktop app |
 | 🔌 | **Native MCP client** | `stdio`, `http` (Streamable HTTP), and `sse` transports, local or remote |
 | ⚙️ | **Automatic tool-calling** | No tool syntax to memorize — describe the task in plain English |
-| 📁 | **Opt-in workspace tools** | Run `/workspace` to create, read, and edit files under the launch directory |
+| 📁 | **Automatic workspace tools** | Ask the agent to create, read, or edit files under the launch directory; it calls filesystem tools when needed |
+| ✅ | **Maven test verification** | After writing Java tests, run `mvn test` in the workspace with fresh approval; report unverified work until it passes |
 | 🌐 | **Opt-in browser automation** | Run `/browser` to connect an isolated Playwright browser only when needed |
 | 🛡️ | **5-layer guardrails** | Input, command, network, filesystem, and output guards catch risk before it runs |
-| ✋ | **Human-in-the-Loop** | Read-only tools run directly; mutating and unknown tools require per-session approval |
+| ✋ | **Human-in-the-Loop** | Read-only tools run directly; one approval covers routine changes per MCP server and prompt, while high-risk calls ask each time |
 | 🐳 | **Optional Docker sandbox** | The entire agent runs isolated, with automatic session resume when Docker restarts |
 | 🧠 | **Local preference memory** | `~/.sun2agent/memory.md`, keyword search, zero external calls |
 | 🎯 | **Reusable Skills** | Save instruction blocks once, toggle them on per chat |
@@ -253,7 +254,7 @@ Allow — Don't allow
 [Enter] Allow    [Esc] Don't allow
 ```
 
-An allowed tool is remembered only for the current chat session; a denied call is skipped and reported back to the model, which can try a safer alternative.
+Read-only calls need no approval. One approval covers routine changes on the same MCP server for the current prompt, then expires. Deletes, sends, code execution, unknown actions, and other high-risk calls require a fresh decision. A denied call is skipped and reported back to the model.
 
 ### Telegram (optional)
 
@@ -303,7 +304,6 @@ Mutating and unknown MCP calls route through guardrails and an explicit approval
 |---------|--------|
 | `/help`, `/?` | Show all commands and shortcuts |
 | `/config` | Select/add model providers and configure optional services and Telegram |
-| `/workspace` | Connect filesystem tools for the current launch directory |
 | `/browser` | Connect isolated Playwright browser automation tools |
 | `/computer` | Connect native desktop control on demand; check permissions and choose image support |
 | `/computer disconnect` | Disconnect desktop control without affecting other plugins |
@@ -318,7 +318,7 @@ Mutating and unknown MCP calls route through guardrails and an explicit approval
 |-----|--------|
 | `Enter` | Send message |
 | `Esc` *(while typing)* | Clear the input |
-| `Esc` *(empty box)* | Disconnect MCP/browser/workspace or clear selected Skills |
+| `Esc` *(empty box)* | Disconnect MCP/browser or clear selected Skills; workspace tools stay available |
 | `Esc` *(agent working)* | Stop the current reply or tool call |
 | `Esc` *(in menus)* | Go back / cancel |
 | `Ctrl+C` | Quit immediately |
@@ -344,7 +344,16 @@ image bytes are excluded from saved chat history and LangSmith traces.
 Esc cancels connecting or an active task. Esc on an empty input disconnects
 `/computer` first, leaving other plugins connected. At an approval prompt, Esc
 declines that action. Completed actions cannot be undone by cancellation.
-Desktop mutations require fresh HITL approval when HITL is enabled.
+Read-only desktop checks, including menu-bar inspection, need no HITL approval.
+Opening or activating the same app shares one approval for the current prompt;
+another app or prompt asks again. Clicks, menu selections, typing, scripts and
+other desktop changes still require fresh approval when HITL is enabled.
+
+To keep model requests smaller, Sun2Agent initially exposes common computer
+tools and lets the agent find other tools with `computer__sun2agent_search_tools` when
+needed. `computer__sun2agent_wait_for_window` checks for an app window locally, avoiding
+repeated model calls just to wait and inspect. These helpers do not bypass
+guardrails or action approvals.
 
 While `/computer` is connected, transient model HTTP failures retry once, respecting
 `Retry-After` up to 30 seconds. Longer cooldowns and invalid requests are returned
@@ -455,7 +464,7 @@ Allow      Don't allow
 Execute      Skipped
 ```
 
-Approval is per-session: allow a tool once, and it's remembered for the rest of that chat.
+Routine-change approval lasts only for the current prompt and MCP server. High-risk actions require fresh approval.
 
 ---
 
