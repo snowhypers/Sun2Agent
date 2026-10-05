@@ -20,12 +20,21 @@ test('context estimate includes system instructions, history and tool schemas', 
   assert.ok(base > 0);
   assert.ok(withHistory > base);
   assert.ok(withTools > withHistory);
+  assert.ok(estimateContextTokens('AGENT.md, Skills, memory', [
+    { role: 'tool', content: 'A file result' }
+  ]) > base);
   assert.equal(contextLabel(75), 'ctx ~75 used');
   assert.equal(contextLabel(1250), 'ctx ~1.3k used');
-  assert.equal(contextLabel(3200, { id: 'nvidia', model: 'nvidia/nemotron-3-ultra-550b-a55b' }), 'ctx ~99.7% left');
-  assert.equal(contextLabel(3200, { id: 'nvidia', model: 'meta/muse-glimmer-30b' }), 'ctx ~97.6% left');
-  assert.equal(contextLabel(262144, { id: 'nvidia', model: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning' }), 'ctx ~0.0% left');
-  assert.equal(contextLabel(3200, { id: 'custom', model: 'meta/muse-glimmer-30b' }), 'ctx ~3.2k used');
+  assert.equal(contextLabel(3200, { model: 'nvidia/nemotron-3-ultra-550b-a55b' }), 'ctx ~99.7% left');
+  assert.equal(contextLabel(3200, { model: 'meta/muse-glimmer-30b' }), 'ctx ~97.6% left');
+  assert.equal(contextLabel(100, { model: 'nvidia/nemotron-3-ultra-550b-a55b' }), 'ctx ~99.9% left');
+  assert.equal(contextLabel(262144, { model: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning' }), 'ctx ~0.0% left');
+  const custom = { activeProvider: 'custom', providers: [{ id: 'custom', activeModel: 'model-a',
+    contextWindows: { 'model-a': 64000 } }] };
+  assert.equal(contextLabel(3200, custom), 'ctx ~95.0% left');
+  assert.equal(contextLabel(3200, { activeProvider: 'groq', providers: [{ id: 'groq',
+    baseUrl: 'https://api.groq.com/openai/v1', activeModel: 'openai/gpt-oss-120b' }] }), 'ctx ~97.6% left');
+  assert.equal(contextLabel(3200, { activeProvider: 'custom', providers: [{ id: 'custom', activeModel: 'model-a' }] }), 'ctx ~3.2k used');
 });
 
 test('/new archive saves chat privately and clears the resume snapshot', (t) => {

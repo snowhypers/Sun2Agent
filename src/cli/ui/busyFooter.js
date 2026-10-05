@@ -4,6 +4,7 @@
 const chalk = require('chalk');
 const { terminalWidth, truncateToWidth } = require('./layout');
 const { renderFooter } = require('./input');
+const { printUserLine } = require('../prompt');
 
 const BORDER = chalk.hex('#b5a642');
 
@@ -66,6 +67,11 @@ function startBusyFooter(options = {}, stdout = process.stdout) {
     stdout.write(`\x1b[${scrollBottom + 1};1H`);
   }
 
+  stopBusyFooter.updateContext = (value) => {
+    options.contextEstimate = value;
+    if (active) draw();
+  };
+
   stdout.write(`\x1b[1;${scrollBottom}r\x1b[${scrollBottom};1H`);
   draw();
   stdout.on('resize', onResize);
@@ -74,4 +80,12 @@ function startBusyFooter(options = {}, stdout = process.stdout) {
   return stopBusyFooter;
 }
 
-module.exports = { startBusyFooter };
+// Reserve the footer before echoing the user's message. Otherwise its first
+// clear can erase a message printed in the bottom four terminal rows.
+function startTurnDisplay(text, options = {}, stdout = process.stdout) {
+  const stop = startBusyFooter(options, stdout);
+  printUserLine(text, stdout);
+  return stop;
+}
+
+module.exports = { startBusyFooter, startTurnDisplay };

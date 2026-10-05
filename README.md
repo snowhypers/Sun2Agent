@@ -181,13 +181,13 @@ npx sun2agent
 4. Ask naturally   "Read AGENT.md and run the tests"
 ```
 
-Use `/new` to start a fresh CLI conversation. The previous chat is saved locally in
-`~/.sun2agent/sessions/`; connected tools and your selected model stay as they are.
-The input footer shows an estimated **context percentage left** for the selected
-built-in NVIDIA model. This uses the model's published maximum and estimated
-prompt tokens—not exact provider usage. Hosted endpoints may enforce a smaller
-limit. For custom providers or unknown models, the footer shows estimated tokens
-used without a percentage because their context limit is not known.
+Each normal launch starts a fresh conversation. Use `/new` to clear the current
+conversation; the previous chat is saved locally in `~/.sun2agent/sessions/`.
+Connected tools and the selected model stay as they are. The footer estimates
+**context left** against the active model's window, counting instructions,
+conversation, tool results, and available tool schemas. For custom models, enter their context
+window in `/config`; if unknown, the footer shows estimated tokens used instead.
+The estimate is not provider-reported usage, and an endpoint may enforce a smaller limit.
 While a model or tool turn is running, a non-editable input frame and the same
 footer stay at the bottom of supported terminals; press Esc to stop the turn.
 
@@ -422,6 +422,16 @@ Enable memory from `/config` to let Sun2Agent retain explicit preferences betwee
 - Local keyword relevance selects up to five memories; the full file is never injected.
 - Explicit phrases such as "remember that…", "I prefer…", and "always…" can be saved automatically.
 - Memory is contextual only and cannot override `AGENT.md`, guardrails, security policy, or Docker restrictions.
+
+### Approved lessons from failures
+
+After a clear tool error, failed Java test run, or unverified desktop action,
+Sun2Agent may suggest one short operational lesson. **Save / Discard defaults to
+Discard**; nothing is stored without your approval. Saved lessons live in the
+owner-only `~/.sun2agent/lessons.json`, separate from `memory.md`. At most one
+keyword-relevant lesson is added to a later task, as advisory context only.
+Lesson drafting is local and makes no extra model or network call; it never
+edits code, `AGENT.md`, guardrails, or approval settings.
 
 <a id="ai-agent-skills"></a>
 ### AI Agent Skills (`skills.md`)

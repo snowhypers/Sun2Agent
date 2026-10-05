@@ -55,12 +55,12 @@ function promptBack(questions) {
 }
 
 // Print the user's submitted message as a transcript line: "› text   HH:MM".
-function printUserLine(text) {
-  const cols = process.stdout.columns || 80;
+function printUserLine(text, output = process.stdout) {
+  const cols = output.columns || 80;
   const time = new Date().toTimeString().slice(0, 5); // HH:MM
   const left = '› ' + sanitizeTerminalText(text);
   const pad = Math.max(1, cols - left.length - time.length);
-  console.log(chalk.magenta('› ') + sanitizeTerminalText(text) + ' '.repeat(pad) + chalk.gray(time));
+  output.write(chalk.magenta('› ') + sanitizeTerminalText(text) + ' '.repeat(pad) + chalk.gray(time) + '\n');
 }
 
 // Strip ANSI escapes and other control characters before writing untrusted

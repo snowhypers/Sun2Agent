@@ -11,6 +11,14 @@ function required(label) {
   return (value) => String(value || '').trim() ? true : `${label} is required.`;
 }
 
+const contextWindowQuestion = (value) => ({
+  type: 'input', name: 'customProviderContextWindow',
+  message: 'Model context window in tokens (optional):  ',
+  default: value ? String(value) : undefined,
+  validate: (input) => !String(input || '').trim() ||
+    (Number.isSafeInteger(Number(input)) && Number(input) > 0) || 'Enter a positive token count.'
+});
+
 async function addCustomProvider(ctx, config) {
   const answers = {};
   for (const question of [
@@ -29,6 +37,7 @@ async function addCustomProvider(ctx, config) {
       validate: required('API key')
     },
     { type: 'input', name: 'customProviderModel', message: 'Model ID:  ', validate: required('Model ID') },
+    contextWindowQuestion(),
     {
       type: 'confirm',
       name: 'customProviderTools',
@@ -54,6 +63,8 @@ async function addCustomProvider(ctx, config) {
     activeModel: model,
     supportsTools: answers.customProviderTools
   };
+  const size = Number(answers.customProviderContextWindow);
+  if (size > 0) provider.contextWindows = { [model]: size };
   return {
     activeProvider: provider.id,
     providers: [...existing, provider]
@@ -92,6 +103,10 @@ async function selectCustomModel(ctx, config, providerId) {
     model = added.customProviderModel.trim();
     if (!provider.models.includes(model)) provider.models.push(model);
   }
+  const windowAnswer = await ctx.promptBack([contextWindowQuestion(provider.contextWindows?.[model])]);
+  if (!windowAnswer) return null;
+  const size = Number(windowAnswer.customProviderContextWindow);
+  if (size > 0) provider.contextWindows = { ...provider.contextWindows, [model]: size };
   provider.activeModel = model;
   return { activeProvider: provider.id, providers: custom };
 }

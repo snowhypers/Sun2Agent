@@ -236,6 +236,75 @@ test('tavily: throws safe error on malformed response (no results array)', async
 
 const { executeWebSearch } = require('../src/core/search/searchTool');
 
+test('current news uses Tavily news date filter and exposes published date', async () => {
+  const originalPost = axios.post;
+  let payload;
+  axios.post = async (_url, body) => {
+    payload = body;
+    return { data: { results: [
+      { title: 'Old story', url: 'https://example.com/old', content: 'Old report',
+        published_date: '2024-10-05T12:00:00Z' },
+      { title: 'Current story', url: 'https://example.com/new', content: 'New report',
+        published_date: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString() }
+    ] } };
+  };
+  try {
+    const result = await executeWebSearch('AI news', 'tvly-test', undefined, 'today top 3 new in AI world');
+    assert.strictEqual(payload.topic, 'news');
+    assert.strictEqual(payload.time_range, 'week');
+    assert.strictEqual(payload.filter_by_published_date, true);
+    assert.match(result, /Published:/);
+    assert.doesNotMatch(result, /Old story/);
+  } finally {
+    axios.post = originalPost;
+  }
+});
+
+test('general research does not use the current-news filter', async () => {
+  const originalPost = axios.post;
+  let payload;
+  axios.post = async (_url, body) => {
+    payload = body;
+    return { data: { results: [] } };
+  };
+  try {
+    await executeWebSearch('reinforcement learning', 'tvly-test', undefined, 'explain reinforcement learning');
+    assert.strictEqual(payload.topic, undefined);
+    assert.strictEqual(payload.time_range, undefined);
+  } finally {
+    axios.post = originalPost;
+  }
+});
+
+test('current-news turn answers after three searches instead of looping', async () => {
+  const originalPost = axios.post;
+  let searches = 0;
+  let modelCalls = 0;
+  axios.post = async (url, body) => {
+    if (url.includes('tavily.com')) {
+      searches++;
+      return { data: { results: [{ title: 'Recent report', url: 'https://example.com/news',
+        content: 'An AI development', published_date: new Date().toISOString() }] } };
+    }
+    modelCalls++;
+    if (modelCalls <= 3) return { data: { choices: [{ message: {
+      role: 'assistant', content: '', tool_calls: [{ id: `search-${modelCalls}`, type: 'function',
+        function: { name: 'web_search', arguments: '{"query":"AI news"}' } }]
+    } }] } };
+    assert.strictEqual(body.tools, undefined);
+    return { data: { choices: [{ message: { role: 'assistant', content: 'Here are the latest reports.' } }] } };
+  };
+  try {
+    const { chatTurn } = require('../src/cli/turn');
+    const reply = await chatTurn({ apiKey: 'test', model: 'test', selectedSkills: [],
+      search: { enabled: true, apiKey: 'tvly-test' } }, [{ role: 'user', content: 'today top 3 AI news' }]);
+    assert.match(reply, /latest reports/);
+    assert.strictEqual(searches, 3);
+  } finally {
+    axios.post = originalPost;
+  }
+});
+
 test('searchTool: empty query returns safe error string without throwing', async () => {
   const result = await executeWebSearch('', 'tvly-fakekey12345678');
   assert.ok(typeof result === 'string');

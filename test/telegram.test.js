@@ -272,13 +272,15 @@ test('Telegram exposes only Tavily web_search and returns results to the model',
   const http = fakeHttp();
   const calls = [];
   let searchedQuery;
+  let originalRequest;
   const searchProvider = {
     getToolSpec: () => ({
       type: 'function',
       function: { name: 'web_search', description: 'Search', parameters: { type: 'object' } }
     }),
-    executeTool: async (query) => {
-      searchedQuery = query;
+    executeTool: async (query, _config, _signal, requestText) => {
+        searchedQuery = query;
+        originalRequest = requestText;
       return '[1] Current result\nhttps://example.com\nFresh information';
     }
   };
@@ -310,8 +312,10 @@ test('Telegram exposes only Tavily web_search and returns results to the model',
   await runtime.handleUpdate(messageUpdate('What is the latest Node.js release?'));
 
   assert.strictEqual(calls.length, 2);
+  assert.match(calls[0].messages[0].content, /Current local date:/);
   assert.deepStrictEqual(calls[0].tools.map((tool) => tool.function.name), ['web_search']);
   assert.strictEqual(searchedQuery, 'latest Node.js release');
+  assert.strictEqual(originalRequest, 'What is the latest Node.js release?');
   const toolResult = calls[1].messages.find((item) => item.role === 'tool');
   assert.match(toolResult.content, /Fresh information/);
   const statuses = http.calls
@@ -477,6 +481,35 @@ test('Telegram stops polling after one getUpdates conflict instead of retrying',
     'Polling stopped because this bot is already running in another process. Stop the other instance, then restart Sun2Agent.'
   ]);
   await runtime.stop();
+});
+
+test('Telegram reports repeated polling DNS failures once and stops during backoff', async () => {
+  let updateCalls = 0;
+  const errors = [];
+  let secondFailure;
+  const failedTwice = new Promise((resolve) => { secondFailure = resolve; });
+  const http = {
+    async post(url) {
+      const method = url.slice(url.lastIndexOf('/') + 1);
+      if (method === 'getMe') return { data: { ok: true, result: { username: 'sun_test_bot' } } };
+      if (method === 'getUpdates') {
+        updateCalls += 1;
+        if (updateCalls === 2) secondFailure();
+        throw new Error('getaddrinfo ENOTFOUND api.telegram.org');
+      }
+      throw new Error(`Unexpected Telegram method: ${method}`);
+    }
+  };
+  const runtime = new TelegramRuntime({ http, onError: (error) => errors.push(error.message) });
+
+  await runtime.start(runtimeConfig());
+  await failedTwice;
+  const stopStarted = Date.now();
+  await runtime.stop();
+
+  assert.equal(updateCalls, 2);
+  assert.deepStrictEqual(errors, ['getaddrinfo ENOTFOUND api.telegram.org']);
+  assert.ok(Date.now() - stopStarted < 500, 'stop should interrupt the retry delay');
 });
 
 test('Telegram starts quietly in the CLI while startup failures remain visible', () => {

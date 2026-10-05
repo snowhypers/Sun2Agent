@@ -51,6 +51,10 @@ function normalizeProviders(value) {
       ? provider.activeModel.trim()
       : '';
     const activeModel = models.includes(requestedModel) ? requestedModel : models[0];
+    const contextWindows = Object.fromEntries(models.flatMap((model) => {
+      const size = Number(provider.contextWindows?.[model]);
+      return Number.isSafeInteger(size) && size > 0 ? [[model, size]] : [];
+    }));
     return [{
       id,
       name,
@@ -59,7 +63,8 @@ function normalizeProviders(value) {
       apiKey,
       models,
       activeModel,
-      supportsTools: provider.supportsTools !== false
+      supportsTools: provider.supportsTools !== false,
+      ...(Object.keys(contextWindows).length ? { contextWindows } : {})
     }];
   });
 }

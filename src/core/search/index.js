@@ -24,9 +24,9 @@ function getToolSpec(config) {
 }
 
 // Search failures return text; an optional turn cancellation is propagated.
-async function executeTool(query, config, signal) {
+async function executeTool(query, config, signal, requestText) {
   const apiKey = getApiKey(config);
-  return executeWebSearch(query, apiKey, signal);
+  return executeWebSearch(query, apiKey, signal, requestText);
 }
 
 // Mask the API key for display in config confirmation messages.

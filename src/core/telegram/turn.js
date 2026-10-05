@@ -61,7 +61,11 @@ async function buildSystemPrompt(runtime, text) {
   let prompt = context.buildSystemPrompt(
     'You are Sun2Agent, a helpful AI assistant chatting with the user through Telegram. ' +
     'Answer clearly and concisely. MCP and terminal tools are unavailable in this channel. ' +
-    'A built-in read-only web_search tool may be available for current information.'
+    'A built-in read-only web_search tool may be available for current information.' +
+    ` Current local date: ${new Date().toDateString()}. ` +
+    'For today\'s news, find the latest available reports as of today, including recent prior days. ' +
+    'Search broad topics without forcing today\'s exact date. Cite source URLs and publication dates; ' +
+    'never label a prior-day story as published today. Answer with fewer items if only a few can be verified.'
   );
   prompt = skills.buildSkillsContext(prompt, runtime.config);
   return memory.buildMemoryContext(prompt, relevantMemories);
@@ -72,6 +76,7 @@ async function completeWithSearch(runtime, systemPrompt, history, signal, stream
   const searchSpec = runtime.search.getToolSpec(runtime.config);
   let tools = provider.supportsTools && searchSpec ? [searchSpec] : undefined;
   const system = { role: 'system', content: systemPrompt };
+  const requestText = [...history].reverse().find((item) => item.role === 'user')?.content;
 
   for (let step = 0; step < 6; step++) {
     let message;
@@ -114,7 +119,7 @@ async function completeWithSearch(runtime, systemPrompt, history, signal, stream
           /* malformed arguments become an empty query and a safe tool error */
         }
         const content = name === 'web_search'
-          ? await runtime.search.executeTool(args.query, runtime.config, signal)
+          ? await runtime.search.executeTool(args.query, runtime.config, signal, requestText)
           : `Tool "${name || 'unknown'}" is not available in Telegram.`;
         if (signal.aborted) return null;
         history.push({

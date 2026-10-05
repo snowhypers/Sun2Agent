@@ -17,9 +17,11 @@ const MAX_CONTENT_CHARS = 500;
 // Normalize one raw Tavily result into the compact shape we pass to the model.
 function normalizeResult(r) {
   const content = String(r.content || r.snippet || '').trim();
+  const date = r.published_date ? new Date(r.published_date) : null;
   return {
     title:   String(r.title   || '').trim(),
     url:     String(r.url     || '').trim(),
+    publishedDate: date && Number.isFinite(date.getTime()) ? date.toISOString() : null,
     content: content.length > MAX_CONTENT_CHARS
       ? content.slice(0, MAX_CONTENT_CHARS) + '…'
       : content
@@ -28,7 +30,7 @@ function normalizeResult(r) {
 
 // POST a search to Tavily and return normalized results.
 // `apiKey` must never appear in logs or error messages.
-async function tavilySearch(query, apiKey, signal) {
+async function tavilySearch(query, apiKey, signal, range) {
   if (!apiKey) {
     throw new Error(
       'Web search is enabled but no Tavily API key is configured. ' +
@@ -44,7 +46,13 @@ async function tavilySearch(query, apiKey, signal) {
         query,
         max_results:      MAX_RESULTS,
         include_answer:   false,
-        include_raw_content: false
+        include_raw_content: false,
+        ...(range ? {
+          topic: 'news',
+          time_range: range,
+          include_published_date: true,
+          filter_by_published_date: true
+        } : {})
       },
       {
         headers: {
@@ -79,7 +87,13 @@ async function tavilySearch(query, apiKey, signal) {
     throw new Error('Search failed: unexpected response from Tavily.');
   }
 
-  return raw.results.slice(0, MAX_RESULTS).map(normalizeResult);
+  const results = raw.results.slice(0, MAX_RESULTS).map(normalizeResult);
+  if (!range) return results;
+  const cutoff = range === 'day'
+    ? new Date(new Date().setHours(0, 0, 0, 0)).getTime()
+    : Date.now() - 7 * 24 * 60 * 60 * 1000;
+  return results.filter((result) => result.publishedDate &&
+    new Date(result.publishedDate).getTime() >= cutoff);
 }
 
 module.exports = { tavilySearch, MAX_RESULTS, MAX_CONTENT_CHARS };

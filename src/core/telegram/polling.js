@@ -10,7 +10,23 @@ function isPollingConflict(error) {
   );
 }
 
+function waitForRetry(ms, signal) {
+  if (signal.aborted) return Promise.resolve();
+  return new Promise((resolve) => {
+    const done = () => {
+      clearTimeout(timer);
+      signal.removeEventListener('abort', done);
+      resolve();
+    };
+    const timer = setTimeout(done, ms);
+    signal.addEventListener('abort', done, { once: true });
+    if (signal.aborted) done();
+  });
+}
+
 async function pollLoop(runtime, signal) {
+  let failures = 0;
+  let lastError = '';
   while (runtime.running && !signal.aborted) {
     let updates;
     try {
@@ -29,10 +45,15 @@ async function pollLoop(runtime, signal) {
         ));
         return;
       }
-      runtime.onError(error);
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      const errorText = String(error && error.message || error);
+      if (errorText !== lastError) runtime.onError(error);
+      lastError = errorText;
+      failures += 1;
+      await waitForRetry(Math.min(30_000, 1000 * 2 ** Math.min(failures - 1, 5)), signal);
       continue;
     }
+    failures = 0;
+    lastError = '';
     for (const update of Array.isArray(updates) ? updates : []) {
       if (Number.isInteger(update.update_id)) {
         runtime.offset = Math.max(runtime.offset, update.update_id + 1);

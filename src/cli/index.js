@@ -1,15 +1,18 @@
 const chalk = require('chalk');
 const { loadConfig, saveConfig } = require('../config/appConfig');
 const mcp = require('../core/mcp');
+const computer = require('../core/computer');
 const hitl = require('../core/hitl/mcpApproval');
 const guardrails = require('../core/guardrails');
 const observability = require('../core/observability');
 const memory = require('../core/memory');
+const selfImprovement = require('../core/self-improvement');
 const skills = require('../core/skills');
 const providers = require('../core/providers');
 const telegram = require('../core/telegram');
 const { askInput, ESC_BACK } = require('./ui/input');
-const { startBusyFooter } = require('./ui/busyFooter');
+const { notify, flushNotices } = require('./ui/utils');
+const { startTurnDisplay } = require('./ui/busyFooter');
 const { watchEscape, waitEnterOrEsc } = require('./ui/escapeWatcher');
 const { printBanner, printIntro } = require('./ui/banner');
 const { saveSession, loadSession, clearSession, archiveSession } = require('../core/context-management/session');
@@ -18,6 +21,7 @@ const { estimateContextTokens, contextLabel } = require('../core/context-managem
 const { COMMANDS, handleConfig } = require('./commands');
 const { createTokenHandler, finalFlush } = require('./streaming');
 const { chatTurn, buildTurnSystemPrompt } = require('./turn');
+const { selectToolSpecs } = require('./computerTools');
 const search = require('../core/search');
 const { resumeAfterModel500 } = require('./modelRecovery');
 const { promptBack, printUserLine, sanitizeTerminalText } = require('./prompt');
@@ -32,8 +36,22 @@ async function syncTelegram(config) {
     // Keep failures visible so a broken connection is still diagnosable.
     await telegram.sync(config);
   } catch (error) {
-    console.log(chalk.yellow(`⚠ Telegram could not start: ${error.message || 'connection failed'}\n`));
+    notify(chalk.yellow(`⚠ Telegram could not start: ${error.message || 'connection failed'}`));
   }
+}
+
+async function estimateFooter(config, history, userText) {
+  const provider = providers.getActiveProvider(config);
+  const { specs, routes } = mcp.getOpenAiTools();
+  const searchSpec = search.getToolSpec(config);
+  const allTools = searchSpec ? [...specs, searchSpec] : specs;
+  const tools = !provider.supportsTools ? [] : computer.isConnected()
+    ? selectToolSpecs(allTools, routes, new Set()) : allTools;
+  const memories = userText && memory.isEnabled() ? await memory.search(userText) : [];
+  const system = selfImprovement.addLessonToPrompt(
+    buildTurnSystemPrompt(config, memories), userText && selfImprovement.relevantLesson(userText)
+  );
+  return contextLabel(estimateContextTokens(system, cleanHistory(history), tools), config);
 }
 
 // --- Session persistence (Docker outage resume) -----------------------------
@@ -123,12 +141,8 @@ async function startChat() {
   }
 
   while (true) {
-    const toolSpecs = mcp.getOpenAiTools().specs;
-    const searchSpec = search.getToolSpec(config);
-    const contextEstimate = contextLabel(estimateContextTokens(
-      buildTurnSystemPrompt(config, []), cleanHistory(history),
-      searchSpec ? [...toolSpecs, searchSpec] : toolSpecs
-    ), providers.getActiveProvider(config));
+    flushNotices();
+    const contextEstimate = await estimateFooter(config, history);
     const input = await askInput({
       model: providers.getActiveModel(config),
       tag: mcp.getTag(),
@@ -175,9 +189,9 @@ async function startChat() {
     const text = input.trim();
     if (!text) continue;
 
-    // Echo the submitted message as a clean transcript line (the input box
-    // itself was erased on submit), with a right-aligned timestamp.
-    printUserLine(text);
+    // Commands do not reserve a busy footer, so echo them immediately.
+    const handler = COMMANDS[text];
+    if (text === '/exit' || text === '/new' || handler) printUserLine(text);
 
     // Command handling
     if (text === '/exit') {
@@ -202,7 +216,6 @@ async function startChat() {
       }
       continue;
     }
-    const handler = COMMANDS[text];
     if (handler) {
       if (text === '/mcp' || text === '/browser' || text === '/computer' || text === '/computer disconnect') {
         const before = mcp.getConnectionSignature();
@@ -233,6 +246,7 @@ async function startChat() {
     // Screen the prompt before it ever reaches the model.
     const inputVerdict = guardrails.inputGuard(text);
     if (!inputVerdict.ok) {
+      printUserLine(text);
       console.log(chalk.red('⛔ ' + inputVerdict.reason) + '\n');
       continue;
     }
@@ -242,15 +256,12 @@ async function startChat() {
     // back to an empty input box.
     // HITL approvals are scoped to this user prompt, including model retries.
     hitl.startPrompt();
+    const turnStart = history.length;
     history.push({ role: 'user', content: text });
     saveSession(cleanHistory(history));
 
-    const busyToolSpecs = mcp.getOpenAiTools().specs;
-    const busyContext = contextLabel(estimateContextTokens(
-      buildTurnSystemPrompt(config, []), cleanHistory(history),
-      searchSpec ? [...busyToolSpecs, searchSpec] : busyToolSpecs
-    ), providers.getActiveProvider(config));
-    const stopBusyFooter = startBusyFooter({
+    const busyContext = await estimateFooter(config, history, text);
+    const stopBusyFooter = startTurnDisplay(text, {
       model: providers.getActiveModel(config),
       tag: mcp.getTag(),
       skillTag: skills.getTag(config),
@@ -264,8 +275,11 @@ async function startChat() {
     const onToken = stream.onToken;
     const onToolTurn = stream.onToolTurn;
     const stopWatch = watchEscape(() => controller.abort());
+    let proposedLesson = null;
+    let turnError = null;
     try {
       const workspaceResult = await workspaceReady;
+      stopBusyFooter.updateContext?.(await estimateFooter(config, history, text));
       if (!workspaceResult.ok && !workspaceWarningShown) {
         workspaceWarningShown = true;
         console.log(chalk.yellow(`⚠ Workspace tools unavailable: ${workspaceResult.error}\n`));
@@ -282,7 +296,7 @@ async function startChat() {
         }
       );
       if (controller.signal.aborted) {
-        console.log(chalk.gray('⎋ stopped\n'));
+        turnError = chalk.gray('⎋ stopped');
       } else {
         finalFlush({
           reply,
@@ -312,16 +326,35 @@ async function startChat() {
       // outage, crash) can resume exactly from here. Empty assistant
       // placeholders are stripped so a bad turn never poisons the resume.
       saveSession(cleanHistory(history));
+      if (!controller.signal.aborted) {
+        const failure = selfImprovement.failureFromTurn(history.slice(turnStart), reply);
+        proposedLesson = selfImprovement.draftLesson(failure);
+      }
     } catch (err) {
       if (controller.signal.aborted) {
-        console.log(chalk.gray('⎋ stopped\n'));
+        turnError = chalk.gray('⎋ stopped');
       } else {
-        const msg = err.message;
-        console.log(chalk.red('Error: ' + msg + '\n'));
+        turnError = chalk.red('Error: ' + err.message);
       }
     } finally {
       stopWatch();
       stopBusyFooter();
+    }
+    if (turnError) console.log(turnError + '\n');
+    if (proposedLesson) {
+      console.log(chalk.yellow(`\nSuggested lesson: ${proposedLesson}`));
+      const choice = await promptBack([{
+        type: 'confirm', name: 'saveLesson',
+        message: 'Save this lesson for similar future tasks?', default: false
+      }]);
+      if (choice?.saveLesson) {
+        try {
+          selfImprovement.saveLesson(text, proposedLesson);
+          console.log(chalk.green('Lesson saved locally.\n'));
+        } catch (error) {
+          console.log(chalk.yellow(`Could not save lesson: ${error.message}\n`));
+        }
+      }
     }
   }
 }

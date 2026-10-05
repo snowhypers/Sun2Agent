@@ -84,6 +84,7 @@ test('providers: /config can add and activate a custom provider', async () => {
     customProviderBaseUrl: { customProviderBaseUrl: 'https://openrouter.ai/api/v1/' },
     customProviderApiKey: { customProviderApiKey: 'secret-key' },
     customProviderModel: { customProviderModel: 'vendor/model' },
+    customProviderContextWindow: { customProviderContextWindow: '64000' },
     customProviderTools: { customProviderTools: true }
   };
   const result = await configureProvider({
@@ -99,7 +100,8 @@ test('providers: /config can add and activate a custom provider', async () => {
     apiKey: 'secret-key',
     models: ['vendor/model'],
     activeModel: 'vendor/model',
-    supportsTools: true
+    supportsTools: true,
+    contextWindows: { 'vendor/model': 64000 }
   });
 });
 
@@ -116,7 +118,8 @@ test('providers: /config can add and select another model for a saved provider',
   const answers = {
     providerChoice: { providerChoice: 'custom' },
     customModel: { customModel: '__add_model__' },
-    customProviderModel: { customProviderModel: 'model-b' }
+    customProviderModel: { customProviderModel: 'model-b' },
+    customProviderContextWindow: { customProviderContextWindow: '32000' }
   };
   const result = await configureProvider({
     promptBack: async ([question]) => answers[question.name]
@@ -125,6 +128,7 @@ test('providers: /config can add and select another model for a saved provider',
   assert.strictEqual(result.activeProvider, 'custom');
   assert.deepStrictEqual(result.providers[0].models, ['model-a', 'model-b']);
   assert.strictEqual(result.providers[0].activeModel, 'model-b');
+  assert.strictEqual(result.providers[0].contextWindows['model-b'], 32000);
 });
 
 test('providers: full /config saves custom credentials without printing the key', async () => {
@@ -134,6 +138,7 @@ test('providers: full /config saves custom credentials without printing the key'
     customProviderBaseUrl: { customProviderBaseUrl: 'https://api.example.com/v1' },
     customProviderApiKey: { customProviderApiKey: 'never-print-this-key' },
     customProviderModel: { customProviderModel: 'example-model' },
+    customProviderContextWindow: { customProviderContextWindow: '' },
     customProviderTools: { customProviderTools: true },
     enableSearch: { enableSearch: false },
     enableLangSmith: { enableLangSmith: false },

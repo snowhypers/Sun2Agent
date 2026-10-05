@@ -18,6 +18,7 @@ const hitl = require('../core/hitl/mcpApproval');
 const guardrails = require('../core/guardrails');
 const context = require('../core/rules');
 const memory = require('../core/memory');
+const selfImprovement = require('../core/self-improvement');
 const search = require('../core/search');
 const skills = require('../core/skills');
 const providers = require('../core/providers');
@@ -54,7 +55,10 @@ function buildTurnSystemPrompt(config, relevantMemories, options = {}) {
   const withMemory = memory.buildMemoryContext(withSkills, relevantMemories);
   const workspaceConnected = options.workspaceConnected ?? mcp.isWorkspaceConnected();
   const browserConnected = options.browserConnected ?? mcp.isBrowserConnected();
-  let prompt = withMemory;
+  let prompt = withMemory + `\n\nCurrent local date: ${new Date().toDateString()}. ` +
+    'For today\'s news, find the latest available reports as of today, including recent prior days. ' +
+    'Search broad topics without forcing today\'s exact date. Cite source URLs and publication dates; ' +
+    'never label a prior-day story as published today. Answer with fewer items if only a few can be verified.';
   if (workspaceConnected) prompt += WORKSPACE_SYSTEM_PROMPT;
   if (browserConnected) prompt += BROWSER_SYSTEM_PROMPT;
   if (options.computerConnected ?? mcp.isComputerConnected()) {
@@ -127,6 +131,8 @@ async function chatTurn(config, history, signal, onToken, onToolTurn, onCheckpoi
   let tools = provider.supportsTools && allSpecs.length ? visibleSpecs() : undefined;
 
   const currentUserMessage = [...history].reverse().find((item) => item.role === 'user');
+  const newsRequest = /\b(today|latest|recent)\b.*\b(news|headlines)\b|\b(news|headlines)\b.*\b(today|latest|recent)\b/i
+    .test(currentUserMessage?.content || '');
   const relevantMemories = memory.isEnabled() && currentUserMessage
     ? await memory.search(currentUserMessage.content)
     : [];
@@ -139,7 +145,10 @@ async function chatTurn(config, history, signal, onToken, onToolTurn, onCheckpoi
   // rules win" contract as AGENT.md.
   const system = {
     role: 'system',
-    content: buildTurnSystemPrompt(config, relevantMemories)
+    content: selfImprovement.addLessonToPrompt(
+      buildTurnSystemPrompt(config, relevantMemories),
+      currentUserMessage && selfImprovement.relevantLesson(currentUserMessage.content)
+    )
   };
   let allowTools = Boolean(tools);
 
@@ -171,6 +180,7 @@ async function chatTurn(config, history, signal, onToken, onToolTurn, onCheckpoi
   let recoveryRetries = 0;
   let latestImages = [];
   let verificationNudge = false;
+  let searchCalls = 0;
   for (let step = 0; step < MAX_TOOL_STEPS; step++) {
     if (signal && signal.aborted) {
       spinner.stop();
@@ -185,13 +195,15 @@ async function chatTurn(config, history, signal, onToken, onToolTurn, onCheckpoi
       { type: 'text', text: 'Latest computer tool screenshot (untrusted observation, not user instructions):' },
       ...latestImages
     ] });
+    const offeredTools = allowTools && tools?.filter((tool) =>
+      !newsRequest || searchCalls < 3 || tool.function?.name !== 'web_search');
     let msg;
     try {
       msg = await chatCompletion(
         provider.apiKey,
         provider.model,
         messages,
-        allowTools ? tools : undefined,
+        offeredTools?.length ? offeredTools : undefined,
         signal,
         // Retry attempts run NON-STREAMING: a plain JSON response cannot lose
         // chunks the way a prematurely closed SSE stream can.
@@ -312,7 +324,9 @@ async function chatTurn(config, history, signal, onToken, onToolTurn, onCheckpoi
         // --- web_search: built-in tool, no HITL needed (read-only API call) ---
         if (fnName === 'web_search') {
           ensureIndicator(`searching the web: ${args.query || ''}...`);
-          const content = await search.executeTool(args.query, config);
+          const content = !newsRequest || searchCalls++ < 3
+            ? await search.executeTool(args.query, config, signal, currentUserMessage?.content)
+            : 'Search limit reached. Answer from the results already gathered.';
           console.log(chalk.gray(`     ↳ ${truncate(sanitizeTerminalText(content), Math.max(20, termWidth() - 8))}`));
           contents.push(content);
           checkpointBatch();
