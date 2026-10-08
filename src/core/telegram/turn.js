@@ -2,6 +2,7 @@
 
 const context = require('../rules');
 const memory = require('../memory');
+const { RESPONSE_STYLE } = require('../rules/responseStyle');
 const skills = require('../skills');
 const providers = require('../providers');
 const { cleanHistory } = require('../../cli/history');
@@ -64,6 +65,7 @@ async function buildSystemPrompt(runtime, text) {
   let prompt = context.buildSystemPrompt(
     'You are Sun2Agent, a helpful AI assistant chatting with the user through Telegram. ' +
     'Answer clearly and concisely. MCP and terminal tools are unavailable in this channel. ' +
+    RESPONSE_STYLE +
     'A built-in read-only web_search tool may be available for current information.' +
     ` Current local date: ${new Date().toDateString()}. ` +
     'For today\'s news, find the latest available reports as of today, including recent prior days. ' +

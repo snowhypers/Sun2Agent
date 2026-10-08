@@ -28,10 +28,12 @@ const { selectToolSpecs } = require('./computerTools');
 const { pendingComputerOutcome, unverifiedComputerMessage } = require('../core/computer/outcome');
 const { isEmptyAssistantMessage, cleanHistory } = require('./history');
 const { sanitizeTerminalText } = require('./prompt');
+const { RESPONSE_STYLE } = require('../core/rules/responseStyle');
 
 const BASE_SYSTEM_PROMPT =
   'You are Sun2Agent, a helpful AI assistant running in the user\'s terminal. ' +
-  'Work within the current project directory and use the available tools when needed.';
+  'Work within the current project directory and use the available tools when needed.' +
+  RESPONSE_STYLE;
 
 const WORKSPACE_SYSTEM_PROMPT =
   '\n\nWorkspace tool rules:\n' +
