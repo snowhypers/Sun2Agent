@@ -27,7 +27,7 @@ function renderFooter(options = {}, stdout = process.stdout) {
   const tag = options.tag || '';
   const skillTag = options.skillTag || '';
   const contextEstimate = options.contextEstimate || '';
-  const hint = options.hint || '⎋ esc back  ·  /help  ·  /new  ·  /mcp  ·  /exit';
+  const hint = options.hint || '⎋ esc back  ·  /help  ·  /new  ·  /continue  ·  /mcp  ·  /exit';
   const tagRaw = tag ? `@${tag}` : '';
   const rightRaw = model ? `→ ${model}` : '';
   const tagShown = truncateToWidth(tagRaw, Math.floor(w * 0.35));

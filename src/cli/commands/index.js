@@ -14,12 +14,18 @@ const { handleHelp, handleHelpShort } = require('./help');
 const { handleSkills } = require('./skills');
 const { handleBrowser } = require('./browser');
 const { handleComputer, disconnectComputer } = require('./computer');
+const { handleNew } = require('./new');
+const { handleContinue } = require('./continue');
+const { handleSave } = require('./save');
 
 // name -> (ctx) => Promise<void>
 const COMMANDS = {
   '/help': handleHelp,
   '/?': handleHelpShort,
   '/config': handleConfig,
+  '/new': handleNew,
+  '/continue': handleContinue,
+  '/save': handleSave,
   '/mcp': handleMcp,
   '/browser': handleBrowser,
   '/computer': handleComputer,

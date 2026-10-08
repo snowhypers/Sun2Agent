@@ -15,14 +15,12 @@ const { notify, flushNotices } = require('./ui/utils');
 const { startTurnDisplay } = require('./ui/busyFooter');
 const { watchEscape, waitEnterOrEsc } = require('./ui/escapeWatcher');
 const { printBanner, printIntro } = require('./ui/banner');
-const { saveSession, loadSession, clearSession, archiveSession } = require('../core/context-management/session');
+const { saveSession, loadSession, clearSession } = require('../core/sessions-management/new');
 const { cleanHistory } = require('./history');
-const { estimateContextTokens, contextLabel } = require('../core/context-management/contextMeter');
+const { estimateConversationTokens, tokenLabel } = require('../core/tracking/tokenMeter');
 const { COMMANDS, handleConfig } = require('./commands');
 const { createTokenHandler, finalFlush } = require('./streaming');
-const { chatTurn, buildTurnSystemPrompt } = require('./turn');
-const { selectToolSpecs } = require('./computerTools');
-const search = require('../core/search');
+const { chatTurn } = require('./turn');
 const { resumeAfterModel500 } = require('./modelRecovery');
 const { promptBack, printUserLine, sanitizeTerminalText } = require('./prompt');
 
@@ -40,18 +38,8 @@ async function syncTelegram(config) {
   }
 }
 
-async function estimateFooter(config, history, userText) {
-  const provider = providers.getActiveProvider(config);
-  const { specs, routes } = mcp.getOpenAiTools();
-  const searchSpec = search.getToolSpec(config);
-  const allTools = searchSpec ? [...specs, searchSpec] : specs;
-  const tools = !provider.supportsTools ? [] : computer.isConnected()
-    ? selectToolSpecs(allTools, routes, new Set()) : allTools;
-  const memories = userText && memory.isEnabled() ? await memory.search(userText) : [];
-  const system = selfImprovement.addLessonToPrompt(
-    buildTurnSystemPrompt(config, memories), userText && selfImprovement.relevantLesson(userText)
-  );
-  return contextLabel(estimateContextTokens(system, cleanHistory(history), tools), config);
+function estimateFooter(history) {
+  return tokenLabel(estimateConversationTokens(cleanHistory(history)));
 }
 
 // --- Session persistence (Docker outage resume) -----------------------------
@@ -142,7 +130,7 @@ async function startChat() {
 
   while (true) {
     flushNotices();
-    const contextEstimate = await estimateFooter(config, history);
+    const contextEstimate = estimateFooter(history);
     const input = await askInput({
       model: providers.getActiveModel(config),
       tag: mcp.getTag(),
@@ -186,12 +174,12 @@ async function startChat() {
       continue;
     }
 
-    const text = input.trim();
+    let text = input.trim();
     if (!text) continue;
 
     // Commands do not reserve a busy footer, so echo them immediately.
     const handler = COMMANDS[text];
-    if (text === '/exit' || text === '/new' || handler) printUserLine(text);
+    if (text === '/exit' || handler) printUserLine(text);
 
     // Command handling
     if (text === '/exit') {
@@ -202,21 +190,11 @@ async function startChat() {
       console.log(chalk.yellow('Goodbye! 👋'));
       process.exit(0);
     }
-    if (text === '/new') {
-      try {
-        const archived = archiveSession(cleanHistory(history));
-        clearSession(true);
-        history.length = 0;
-        hitl.startPrompt();
-        console.log(chalk.green(archived
-          ? 'New conversation started. Previous chat saved locally.\n'
-          : 'New conversation started.\n'));
-      } catch (error) {
-        console.log(chalk.red(`Could not save the previous chat; context was not cleared: ${error.message}\n`));
-      }
-      continue;
-    }
-    if (handler) {
+    if (text === '/new' || text === '/continue' || text === '/save') {
+      const result = await handler({ history, config, promptBack, loadConfig, saveConfig });
+      if (!result?.prompt) continue;
+      text = result.prompt;
+    } else if (handler) {
       if (text === '/mcp' || text === '/browser' || text === '/computer' || text === '/computer disconnect') {
         const before = mcp.getConnectionSignature();
         await handler({ promptBack, waitEnterOrEsc, dockerDownWarning, loadConfig, saveConfig });
@@ -260,7 +238,7 @@ async function startChat() {
     history.push({ role: 'user', content: text });
     saveSession(cleanHistory(history));
 
-    const busyContext = await estimateFooter(config, history, text);
+    const busyContext = estimateFooter(history);
     const stopBusyFooter = startTurnDisplay(text, {
       model: providers.getActiveModel(config),
       tag: mcp.getTag(),
@@ -279,7 +257,7 @@ async function startChat() {
     let turnError = null;
     try {
       const workspaceResult = await workspaceReady;
-      stopBusyFooter.updateContext?.(await estimateFooter(config, history, text));
+      stopBusyFooter.updateContext?.(estimateFooter(history));
       if (!workspaceResult.ok && !workspaceWarningShown) {
         workspaceWarningShown = true;
         console.log(chalk.yellow(`⚠ Workspace tools unavailable: ${workspaceResult.error}\n`));

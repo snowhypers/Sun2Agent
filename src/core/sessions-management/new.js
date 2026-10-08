@@ -7,7 +7,6 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { randomUUID } = require('crypto');
 
 function sessionFile() {
   return path.join(os.homedir(), '.sun2agent', 'session.json');
@@ -37,15 +36,4 @@ function clearSession(strict = false) {
   }
 }
 
-function archiveSession(history) {
-  if (!history.length) return null;
-  const dir = path.join(path.dirname(sessionFile()), 'sessions');
-  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-  const file = path.join(dir, `${new Date().toISOString().replace(/[:.]/g, '-')}-${randomUUID()}.json`);
-  fs.writeFileSync(file, JSON.stringify({ savedAt: Date.now(), messages: history }), {
-    flag: 'wx', mode: 0o600
-  });
-  return file;
-}
-
-module.exports = { sessionFile, saveSession, loadSession, clearSession, archiveSession };
+module.exports = { sessionFile, saveSession, loadSession, clearSession };

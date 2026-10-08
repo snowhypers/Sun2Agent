@@ -18,6 +18,7 @@ const hitl = require('../core/hitl/mcpApproval');
 const guardrails = require('../core/guardrails');
 const context = require('../core/rules');
 const memory = require('../core/memory');
+const { addSavedSessionContext } = require('../core/sessions-management/save');
 const selfImprovement = require('../core/self-improvement');
 const search = require('../core/search');
 const skills = require('../core/skills');
@@ -148,7 +149,7 @@ async function chatTurn(config, history, signal, onToken, onToolTurn, onCheckpoi
   const system = {
     role: 'system',
     content: selfImprovement.addLessonToPrompt(
-      buildTurnSystemPrompt(config, relevantMemories),
+      addSavedSessionContext(buildTurnSystemPrompt(config, relevantMemories), currentUserMessage?.content),
       currentUserMessage && selfImprovement.relevantLesson(currentUserMessage.content)
     )
   };

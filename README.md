@@ -182,12 +182,16 @@ npx sun2agent
 ```
 
 Each normal launch starts a fresh conversation. Use `/new` to clear the current
-conversation; the previous chat is saved locally in `~/.sun2agent/sessions/`.
-Connected tools and the selected model stay as they are. The footer estimates
-**context left** against the active model's window, counting instructions,
-conversation, tool results, and available tool schemas. For custom models, enter their context
-window in `/config`; if unknown, the footer shows estimated tokens used instead.
-The estimate is not provider-reported usage, and an endpoint may enforce a smaller limit.
+chat without archiving it, or `/continue` to resume the current task after an
+interruption. After a crash, `/continue` can restore the current session snapshot;
+`/new` deletes that snapshot. Connected tools and the selected model stay as they are.
+The footer shows estimated tokens retained in the active chat (`chat ~3.2k tokens`),
+not provider-reported usage or remaining model capacity.
+Use `/save` to preview and optionally keep a short task summary for the current
+workspace. Approved summaries are stored separately from `memory.md` in
+`~/.sun2agent/saved-sessions.json`; a relevant summary may be included as
+context for a later task in the same workspace. `/new` does not delete approved
+saved summaries.
 While a model or tool turn is running, a non-editable input frame and the same
 footer stay at the bottom of supported terminals; press Esc to stop the turn.
 

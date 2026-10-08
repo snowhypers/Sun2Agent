@@ -8,7 +8,7 @@ const { askInput, printAboveInput } = require('../src/cli/ui/input');
 const { notify, flushNotices } = require('../src/cli/ui/utils');
 const { startBusyFooter, startTurnDisplay } = require('../src/cli/ui/busyFooter');
 
-test('busy turn keeps the input frame and context footer below scrolling output', (t) => {
+test('busy turn keeps the input frame and token footer below scrolling output', (t) => {
   const originalTerm = process.env.TERM;
   process.env.TERM = 'xterm-256color';
   t.after(() => {
@@ -22,12 +22,12 @@ test('busy turn keeps the input frame and context footer below scrolling output'
   let output = '';
   stdout.on('data', (chunk) => { output += chunk.toString(); });
 
-  const stop = startBusyFooter({ model: 'test-model', contextEstimate: 'ctx ~97.6% left' }, stdout);
+  const stop = startBusyFooter({ model: 'test-model', contextEstimate: 'chat ~3.2k tokens' }, stdout);
   assert.match(output, /\x1b\[1;20r/);
   assert.match(stripVTControlCharacters(output), /Agent working… press Esc to stop/);
-  assert.match(stripVTControlCharacters(output), /ctx ~97\.6% left.*→ test-model/);
-  stop.updateContext('ctx ~82.0% left');
-  assert.match(stripVTControlCharacters(output), /ctx ~82\.0% left.*→ test-model/);
+  assert.match(stripVTControlCharacters(output), /chat ~3\.2k tokens.*→ test-model/);
+  stop.updateContext('chat ~4.1k tokens');
+  assert.match(stripVTControlCharacters(output), /chat ~4\.1k tokens.*→ test-model/);
   assert.equal(stdout.listenerCount('resize'), 1);
 
   stdout.rows = 30;

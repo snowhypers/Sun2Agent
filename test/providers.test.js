@@ -83,7 +83,6 @@ test('providers: /config can add and activate a custom provider', async () => {
     customProviderName: { customProviderName: 'Open Router' },
     customProviderBaseUrl: { customProviderBaseUrl: 'https://openrouter.ai/api/v1/' },
     customProviderModel: { customProviderModel: 'vendor/model' },
-    customProviderContextWindow: { customProviderContextWindow: '64000' },
     customProviderTools: { customProviderTools: true },
     providerApiKey: { providerApiKey: 'secret-key' }
   };
@@ -100,8 +99,7 @@ test('providers: /config can add and activate a custom provider', async () => {
     apiKey: 'secret-key',
     models: ['vendor/model'],
     activeModel: 'vendor/model',
-    supportsTools: true,
-    contextWindows: { 'vendor/model': 64000 }
+    supportsTools: true
   });
 });
 
@@ -142,7 +140,6 @@ test('providers: /config can add and select another model for a saved provider',
     providerApiKey: { providerApiKey: 'key' },
     customModel: { customModel: '__add_model__' },
     customProviderModel: { customProviderModel: 'model-b' },
-    customProviderContextWindow: { customProviderContextWindow: '32000' }
   };
   const prompts = [];
   const result = await configureProvider({
@@ -152,11 +149,10 @@ test('providers: /config can add and select another model for a saved provider',
     }
   }, config);
 
-  assert.deepStrictEqual(prompts, ['providerChoice', 'providerApiKey', 'customModel', 'customProviderModel', 'customProviderContextWindow']);
+  assert.deepStrictEqual(prompts, ['providerChoice', 'providerApiKey', 'customModel', 'customProviderModel']);
   assert.strictEqual(result.activeProvider, 'custom');
   assert.deepStrictEqual(result.providers[0].models, ['model-a', 'model-b']);
   assert.strictEqual(result.providers[0].activeModel, 'model-b');
-  assert.strictEqual(result.providers[0].contextWindows['model-b'], 32000);
 });
 
 test('providers: full /config saves custom credentials without printing the key', async () => {
@@ -165,7 +161,6 @@ test('providers: full /config saves custom credentials without printing the key'
     customProviderName: { customProviderName: 'Example API' },
     customProviderBaseUrl: { customProviderBaseUrl: 'https://api.example.com/v1' },
     customProviderModel: { customProviderModel: 'example-model' },
-    customProviderContextWindow: { customProviderContextWindow: '' },
     customProviderTools: { customProviderTools: true },
     providerApiKey: { providerApiKey: 'never-print-this-key' },
     section: ['provider', 'langsmith', 'search', 'memory', 'telegram', 'done'],

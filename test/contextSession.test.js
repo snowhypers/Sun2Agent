@@ -7,51 +7,75 @@ const os = require('node:os');
 const path = require('node:path');
 const { PassThrough } = require('node:stream');
 const { stripVTControlCharacters } = require('node:util');
-const session = require('../src/core/context-management/session');
-const { estimateContextTokens, contextLabel } = require('../src/core/context-management/contextMeter');
+const session = require('../src/core/sessions-management/new');
+const { repairInterruptedTools } = require('../src/core/sessions-management/continue');
+const { handleNew } = require('../src/cli/commands/new');
+const { handleContinue } = require('../src/cli/commands/continue');
+const { COMMANDS } = require('../src/cli/commands');
+const { estimateConversationTokens, tokenLabel } = require('../src/core/tracking/tokenMeter');
 const { askInput } = require('../src/cli/ui/input');
 
-test('context estimate includes system instructions, history and tool schemas', () => {
-  const base = estimateContextTokens('instructions');
-  const withHistory = estimateContextTokens('instructions', [{ role: 'user', content: 'hello' }]);
-  const withTools = estimateContextTokens('instructions', [{ role: 'user', content: 'hello' }], [
-    { type: 'function', function: { name: 'example', description: 'read a file' } }
-  ]);
-  assert.ok(base > 0);
-  assert.ok(withHistory > base);
-  assert.ok(withTools > withHistory);
-  assert.ok(estimateContextTokens('AGENT.md, Skills, memory', [
-    { role: 'tool', content: 'A file result' }
-  ]) > base);
-  assert.equal(contextLabel(75), 'ctx ~75 used');
-  assert.equal(contextLabel(1250), 'ctx ~1.3k used');
-  assert.equal(contextLabel(3200, { model: 'nvidia/nemotron-3-ultra-550b-a55b' }), 'ctx ~99.7% left');
-  assert.equal(contextLabel(3200, { model: 'meta/muse-glimmer-30b' }), 'ctx ~97.6% left');
-  assert.equal(contextLabel(100, { model: 'nvidia/nemotron-3-ultra-550b-a55b' }), 'ctx ~99.9% left');
-  assert.equal(contextLabel(262144, { model: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning' }), 'ctx ~0.0% left');
-  const custom = { activeProvider: 'custom', providers: [{ id: 'custom', activeModel: 'model-a',
-    contextWindows: { 'model-a': 64000 } }] };
-  assert.equal(contextLabel(3200, custom), 'ctx ~95.0% left');
-  assert.equal(contextLabel(3200, { activeProvider: 'groq', providers: [{ id: 'groq',
-    baseUrl: 'https://api.groq.com/openai/v1', activeModel: 'openai/gpt-oss-120b' }] }), 'ctx ~97.6% left');
-  assert.equal(contextLabel(3200, { activeProvider: 'custom', providers: [{ id: 'custom', activeModel: 'model-a' }] }), 'ctx ~3.2k used');
+test('conversation token estimate counts retained messages and resets with /new', () => {
+  const history = [{ role: 'user', content: 'hello' }];
+  assert.equal(estimateConversationTokens([]), 0);
+  const first = estimateConversationTokens(history);
+  assert.ok(first > 0);
+  assert.ok(estimateConversationTokens([...history, { role: 'assistant', content: 'hi' }]) > first);
+  assert.ok(estimateConversationTokens([...history, { role: 'tool', content: 'A file result' }]) > first);
+  assert.equal(tokenLabel(0), 'chat ~0 tokens');
+  assert.equal(tokenLabel(75), 'chat ~75 tokens');
+  assert.equal(tokenLabel(1250), 'chat ~1.3k tokens');
+  assert.equal(tokenLabel(3200), 'chat ~3.2k tokens');
 });
 
-test('/new archive saves chat privately and clears the resume snapshot', (t) => {
+test('/new clears the active chat and snapshot without creating an archive', (t) => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'sun2agent-session-test-'));
   t.after(() => fs.rmSync(home, { recursive: true, force: true }));
   t.mock.method(os, 'homedir', () => home);
-  const messages = [{ role: 'user', content: 'hello' }, { role: 'assistant', content: 'hi' }];
-  session.saveSession(messages);
-  const archived = session.archiveSession(messages);
-  assert.deepEqual(JSON.parse(fs.readFileSync(archived, 'utf8')).messages, messages);
-  assert.equal(fs.statSync(archived).mode & 0o777, 0o600);
-  assert.equal(fs.statSync(path.dirname(archived)).mode & 0o777, 0o700);
-  session.clearSession();
+  const history = [{ role: 'user', content: 'hello' }, { role: 'assistant', content: 'hi' }];
+  session.saveSession(history);
+  handleNew({ history });
+  assert.deepEqual(history, []);
   assert.equal(session.loadSession(), null);
-  assert.ok(fs.existsSync(archived));
-  assert.equal(session.archiveSession([]), null);
-  assert.equal(fs.readdirSync(path.dirname(archived)).length, 1);
+  assert.equal(fs.existsSync(path.join(home, '.sun2agent', 'sessions')), false);
+});
+
+test('/continue repairs a trailing interrupted tool batch without replaying tools', () => {
+  const history = [{ role: 'user', content: 'edit file' },
+    { role: 'assistant', tool_calls: [{ id: 'one' }, { id: 'two' }] },
+    { role: 'tool', tool_call_id: 'one', content: 'done' }];
+  assert.equal(repairInterruptedTools(history), 1);
+  assert.equal(history.at(-1).tool_call_id, 'two');
+  assert.match(history.at(-1).content, /Inspect current state/);
+  assert.equal(repairInterruptedTools(history), 0);
+});
+
+test('/new and /continue handlers use the current session, not an archive', (t) => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'sun2agent-command-test-'));
+  t.after(() => fs.rmSync(home, { recursive: true, force: true }));
+  t.mock.method(os, 'homedir', () => home);
+  assert.equal(COMMANDS['/new'], handleNew);
+  assert.equal(COMMANDS['/continue'], handleContinue);
+  const history = [{ role: 'user', content: 'build a page' }];
+  const result = handleContinue({ history });
+  assert.match(result.prompt, /current unfinished task/);
+  assert.equal(history.length, 1);
+  session.saveSession(history);
+  handleNew({ history });
+  assert.equal(history.length, 0);
+  assert.equal(handleContinue({ history }), undefined);
+  assert.equal(history.length, 0);
+  assert.equal(fs.existsSync(path.join(home, '.sun2agent', 'sessions')), false);
+});
+
+test('/continue can restore the current unfinished snapshot after a crash', (t) => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'sun2agent-crash-test-'));
+  t.after(() => fs.rmSync(home, { recursive: true, force: true }));
+  t.mock.method(os, 'homedir', () => home);
+  session.saveSession([{ role: 'user', content: 'unfinished task' }]);
+  const history = [];
+  assert.match(handleContinue({ history }).prompt, /current unfinished task/);
+  assert.deepEqual(history, [{ role: 'user', content: 'unfinished task' }]);
 });
 
 test('strict session clearing ignores missing snapshots but reports deletion failures', (t) => {
@@ -64,7 +88,7 @@ test('strict session clearing ignores missing snapshots but reports deletion fai
   assert.throws(() => session.clearSession(true));
 });
 
-test('input footer shows approximate context without hiding model', async (t) => {
+test('input footer shows approximate conversation tokens without hiding model', async (t) => {
   const oldIn = Object.getOwnPropertyDescriptor(process, 'stdin');
   const oldOut = Object.getOwnPropertyDescriptor(process, 'stdout');
   const stdin = new PassThrough();
@@ -83,11 +107,11 @@ test('input footer shows approximate context without hiding model', async (t) =>
     stdin.destroy();
     stdout.destroy();
   });
-  const answer = askInput({ model: 'test-model', contextEstimate: 'ctx ~97.6% left' });
+  const answer = askInput({ model: 'test-model', contextEstimate: 'chat ~3.2k tokens' });
   const footer = stripVTControlCharacters(rendered).trimEnd().split('\n').at(-1);
   stdin.emit('keypress', '\r', { name: 'return' });
   await answer;
-  assert.match(footer, /ctx ~97\.6% left/);
+  assert.match(footer, /chat ~3\.2k tokens/);
   assert.match(footer, /→ test-model/);
   assert.ok(footer.length <= stdout.columns);
 });
