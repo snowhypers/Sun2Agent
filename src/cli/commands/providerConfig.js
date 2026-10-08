@@ -31,8 +31,8 @@ async function addCustomProvider(ctx, config) {
     },
     {
       type: 'password',
-      name: 'customProviderApiKey',
-      message: 'API key:  ',
+      name: 'providerApiKey',
+      message: 'API key (Enter keeps the saved key):  ',
       mask: '*',
       validate: required('API key')
     },
@@ -58,7 +58,7 @@ async function addCustomProvider(ctx, config) {
     name,
     type: 'openai-compatible',
     baseUrl: providers.openaiCompatible.normalizeBaseUrl(answers.customProviderBaseUrl),
-    apiKey: answers.customProviderApiKey.trim(),
+    apiKey: answers.providerApiKey.trim(),
     models: [model],
     activeModel: model,
     supportsTools: answers.customProviderTools
@@ -78,6 +78,10 @@ async function selectCustomModel(ctx, config, providerId) {
   }));
   const provider = custom.find((item) => item.id === providerId);
   if (!provider) return null;
+
+  const apiKey = await promptProviderApiKey(ctx, provider.apiKey, true);
+  if (apiKey === null) return null;
+  provider.apiKey = apiKey;
 
   const selected = await ctx.promptBack([{
     type: 'list',
@@ -111,6 +115,19 @@ async function selectCustomModel(ctx, config, providerId) {
   return { activeProvider: provider.id, providers: custom };
 }
 
+async function promptProviderApiKey(ctx, currentKey, requiredKey = false) {
+  const answer = await ctx.promptBack([{
+    type: 'password',
+    name: 'providerApiKey',
+    message: 'API key (Enter keeps the saved key):  ' + chalk.gray('(esc returns to /config)'),
+    mask: '*',
+    default: currentKey || undefined,
+    validate: requiredKey ? required('API key') : undefined
+  }]);
+  if (!answer) return null;
+  return String(answer.providerApiKey || currentKey || '').trim();
+}
+
 async function configureProvider(ctx, config) {
   const custom = providers.customProviders(config);
   const selected = await ctx.promptBack([{
@@ -130,23 +147,15 @@ async function configureProvider(ctx, config) {
   if (!selected) return null;
 
   if (selected.providerChoice === ADD_PROVIDER) return addCustomProvider(ctx, config);
-  if (selected.providerChoice !== providers.NVIDIA_ID) {
-    return selectCustomModel(ctx, config, selected.providerChoice);
-  }
+  if (selected.providerChoice !== providers.NVIDIA_ID) return selectCustomModel(ctx, config, selected.providerChoice);
 
-  const key = await ctx.promptBack([{
-    type: 'password',
-    name: 'apiKey',
-    message: 'Paste your NVIDIA NIM API key:  ' + chalk.gray('(esc to cancel)'),
-    mask: '*',
-    default: config.apiKey || undefined,
-    validate: required('API key')
-  }]);
-  if (!key) return null;
+  const key = await promptProviderApiKey(ctx, config.apiKey, true);
+  if (key === null) return null;
+
   const model = await ctx.promptBack([{
     type: 'list',
     name: 'model',
-    message: 'Select a model:  ' + chalk.gray('(esc to cancel)'),
+    message: 'Select a model:  ' + chalk.gray('(esc to return to /config)'),
     choices: MODELS.map((item) => ({
       name: `${item.name}  ${chalk.cyan('[' + item.tag + ']')}`,
       value: item.id
@@ -157,7 +166,7 @@ async function configureProvider(ctx, config) {
   return {
     activeProvider: providers.NVIDIA_ID,
     providers: custom,
-    apiKey: key.apiKey,
+    apiKey: key,
     model: model.model
   };
 }

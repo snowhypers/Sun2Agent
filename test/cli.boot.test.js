@@ -82,24 +82,26 @@ function spawnCli({ home, inputs, timeoutMs = 60000 } = {}) {
     const promptMarkers = inputs.length === 1
       ? [/› /]
       : [
+          /Configuration/,
           /Select AI provider/,
-          /Paste your NVIDIA NIM API key/,
+          /API key/,
           /Select a model/,
-          /Enable web search \(Tavily\)/,
-          /Enable LangSmith observability/,
-          /Enable memory/,
-          /Connect Telegram/,
+          /Configuration/,
           /› /
         ];
     let nextInput = 0;
     let inputScheduled = false;
+    let lastPromptEnd = 0;
     const writeWhenReady = () => {
       if (inputScheduled || nextInput >= inputs.length) return;
       const marker = promptMarkers[nextInput];
-      if (!marker || !marker.test(stripAnsi(stdout))) return;
+      const visible = stripAnsi(stdout);
+      const freshOutput = visible.slice(lastPromptEnd);
+      if (!marker || !marker.test(freshOutput)) return;
       inputScheduled = true;
       setTimeout(() => {
         if (!settled) child.stdin.write(inputs[nextInput]);
+        lastPromptEnd = visible.length;
         nextInput += 1;
         inputScheduled = false;
         if (nextInput >= inputs.length) {
@@ -169,18 +171,14 @@ test('first-run: clean exit after /config → /exit', () => serial(async () => {
   const home = tmp();
   const result = await spawnCli({
     home,
-    // The first-run flow: API key → model (default) → search → LangSmith → memory → Telegram (all optional prompts default to no) → /exit.
-    // We can't deliver a real Esc key through piped stdin (inquirer's keypress
-    // handler only fires in TTY mode) — but the confirm prompts all default
-    // to "No", so a bare Enter on each one is identical to "no thanks".
+    // First-run flow: open Provider, keep NVIDIA + default model, then choose
+    // Done in the settings menu and exit the chat.
     inputs: [
-      '\n',                  // provider prompt: NVIDIA NIM
+      '\n',                  // configuration menu: Provider is first
+      '\n',                  // provider list: NVIDIA NIM is first
       'nvapi-smoke-test\n', // API key prompt (password)
       '\n',                  // model prompt: accept the default
-      '\n',                  // search: keep current setting (off)
-      '\n',                  // langsmith: keep current setting (off)
-      '\n',                  // memory: keep current setting (off)
-      '\n',                  // Telegram: no (skip token and chat ID)
+      '\u001b[B'.repeat(5) + '\n', // Done is the last menu item
       '/exit\n'              // REPL: graceful shutdown
     ]
   });
@@ -200,8 +198,10 @@ test('first-run: writes ~/.sun2agent/config.json with the typed API key', () => 
     home,
     inputs: [
       '\n',
+      '\n',
       'nvapi-smoke-test\n',
-      '\n', '\n', '\n', '\n', '\n',
+      '\n',
+      '\u001b[B'.repeat(5) + '\n',
       '/exit\n'
     ]
   });
@@ -227,8 +227,10 @@ test('first-run: config.json is created with 0600 permissions', () => serial(asy
     home,
     inputs: [
       '\n',
+      '\n',
       'nvapi-smoke-test\n',
-      '\n', '\n', '\n', '\n', '\n',
+      '\n',
+      '\u001b[B'.repeat(5) + '\n',
       '/exit\n'
     ]
   });
@@ -246,8 +248,10 @@ test('first-run: welcome banner is rendered', () => serial(async () => {
     home,
     inputs: [
       '\n',
+      '\n',
       'nvapi-smoke-test\n',
-      '\n', '\n', '\n', '\n', '\n',
+      '\n',
+      '\u001b[B'.repeat(5) + '\n',
       '/exit\n'
     ]
   });
@@ -268,8 +272,10 @@ test('second-run: skips /config when a valid config already exists', () => seria
     home,
     inputs: [
       '\n',
+      '\n',
       'nvapi-second-run\n',
-      '\n', '\n', '\n', '\n', '\n',
+      '\n',
+      '\u001b[B'.repeat(5) + '\n',
       '/exit\n'
     ]
   });

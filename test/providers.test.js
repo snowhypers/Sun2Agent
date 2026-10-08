@@ -82,10 +82,10 @@ test('providers: /config can add and activate a custom provider', async () => {
     providerChoice: { providerChoice: '__add_provider__' },
     customProviderName: { customProviderName: 'Open Router' },
     customProviderBaseUrl: { customProviderBaseUrl: 'https://openrouter.ai/api/v1/' },
-    customProviderApiKey: { customProviderApiKey: 'secret-key' },
     customProviderModel: { customProviderModel: 'vendor/model' },
     customProviderContextWindow: { customProviderContextWindow: '64000' },
-    customProviderTools: { customProviderTools: true }
+    customProviderTools: { customProviderTools: true },
+    providerApiKey: { providerApiKey: 'secret-key' }
   };
   const result = await configureProvider({
     promptBack: async ([question]) => answers[question.name]
@@ -105,6 +105,28 @@ test('providers: /config can add and activate a custom provider', async () => {
   });
 });
 
+test('providers: NVIDIA shows the editable API-key prompt before model selection', async () => {
+  const config = { ...defaultConfig(), apiKey: 'saved-nvidia-key' };
+  const prompts = [];
+  const result = await configureProvider({
+    promptBack: async ([question]) => {
+      prompts.push(question.name);
+      if (question.name === 'providerChoice') return { providerChoice: 'nvidia' };
+      if (question.name === 'providerApiKey') {
+        assert.strictEqual(question.default, 'saved-nvidia-key');
+        assert.match(question.message, /API key \(Enter keeps the saved key\)/);
+        return { providerApiKey: 'replacement-key' };
+      }
+      if (question.name === 'model') return { model: 'meta/muse-glimmer-30b' };
+      return null;
+    }
+  }, config);
+
+  assert.deepStrictEqual(prompts, ['providerChoice', 'providerApiKey', 'model']);
+  assert.strictEqual(result.model, 'meta/muse-glimmer-30b');
+  assert.strictEqual(result.apiKey, 'replacement-key');
+});
+
 test('providers: /config can add and select another model for a saved provider', async () => {
   const config = {
     ...defaultConfig(),
@@ -117,14 +139,20 @@ test('providers: /config can add and select another model for a saved provider',
   };
   const answers = {
     providerChoice: { providerChoice: 'custom' },
+    providerApiKey: { providerApiKey: 'key' },
     customModel: { customModel: '__add_model__' },
     customProviderModel: { customProviderModel: 'model-b' },
     customProviderContextWindow: { customProviderContextWindow: '32000' }
   };
+  const prompts = [];
   const result = await configureProvider({
-    promptBack: async ([question]) => answers[question.name]
+    promptBack: async ([question]) => {
+      prompts.push(question.name);
+      return answers[question.name];
+    }
   }, config);
 
+  assert.deepStrictEqual(prompts, ['providerChoice', 'providerApiKey', 'customModel', 'customProviderModel', 'customProviderContextWindow']);
   assert.strictEqual(result.activeProvider, 'custom');
   assert.deepStrictEqual(result.providers[0].models, ['model-a', 'model-b']);
   assert.strictEqual(result.providers[0].activeModel, 'model-b');
@@ -136,10 +164,11 @@ test('providers: full /config saves custom credentials without printing the key'
     providerChoice: { providerChoice: '__add_provider__' },
     customProviderName: { customProviderName: 'Example API' },
     customProviderBaseUrl: { customProviderBaseUrl: 'https://api.example.com/v1' },
-    customProviderApiKey: { customProviderApiKey: 'never-print-this-key' },
     customProviderModel: { customProviderModel: 'example-model' },
     customProviderContextWindow: { customProviderContextWindow: '' },
     customProviderTools: { customProviderTools: true },
+    providerApiKey: { providerApiKey: 'never-print-this-key' },
+    section: ['provider', 'langsmith', 'search', 'memory', 'telegram', 'done'],
     enableSearch: { enableSearch: false },
     enableLangSmith: { enableLangSmith: false },
     enableMemory: { enableMemory: false },
@@ -153,7 +182,10 @@ test('providers: full /config saves custom credentials without printing the key'
     await handleConfig({
       loadConfig: defaultConfig,
       saveConfig: (config) => { saved = config; },
-      promptBack: async ([question]) => answers[question.name]
+      promptBack: async ([question]) => {
+        if (question.name === 'section') return { section: answers.section.shift() };
+        return answers[question.name];
+      }
     });
   } finally {
     console.log = originalLog;
@@ -164,4 +196,10 @@ test('providers: full /config saves custom credentials without printing the key'
   assert.strictEqual(providers.getActiveProvider(saved).model, 'example-model');
   assert.doesNotMatch(output.join('\n'), /never-print-this-key/);
   assert.match(output.join('\n'), /Provider: Example API/);
+});
+
+test('providers: /config menu exposes settings and Done without changing initial config', async () => {
+  const { menuChoices } = require('../src/cli/commands/config');
+  const choices = menuChoices(defaultConfig()).map((choice) => choice.value);
+  assert.deepStrictEqual(choices, ['provider', 'langsmith', 'search', 'memory', 'telegram', 'done']);
 });

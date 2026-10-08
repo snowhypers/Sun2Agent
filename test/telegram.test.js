@@ -70,26 +70,17 @@ test('/config disables Telegram without erasing credentials and verifies token t
   try {
     const noPrompts = [];
     let savedNo;
-    const noAnswers = {
-      providerChoice: { providerChoice: 'nvidia' },
-      apiKey: { apiKey: base.apiKey },
-      model: { model: base.model },
-      enableSearch: { enableSearch: false },
-      enableLangSmith: { enableLangSmith: false },
-      enableMemory: { enableMemory: false },
-      connectTelegram: { connectTelegram: false }
-    };
+    const noAnswers = { section: ['telegram', 'done'], enabled: { enabled: false } };
     await handleConfig({
       loadConfig: () => base,
       saveConfig: (value) => { savedNo = value; },
       promptBack: async ([question]) => {
         noPrompts.push(question.name);
+        if (question.name === 'section') return { section: noAnswers.section.shift() };
         return noAnswers[question.name];
       }
     });
-    assert.deepStrictEqual(noPrompts, [
-      'providerChoice', 'apiKey', 'model', 'enableSearch', 'enableLangSmith', 'enableMemory', 'connectTelegram'
-    ]);
+    assert.deepStrictEqual(noPrompts, ['section', 'enabled', 'section']);
     assert.deepStrictEqual(savedNo.telegram, {
       enabled: false,
       botToken: TOKEN,
@@ -101,10 +92,8 @@ test('/config disables Telegram without erasing credentials and verifies token t
     let savedYes;
     let verified;
     const yesAnswers = {
-      ...noAnswers,
-      connectTelegram: { connectTelegram: true },
-      telegramBotToken: { telegramBotToken: TOKEN },
-      telegramChatId: { telegramChatId: CHAT_ID }
+      section: ['telegram', 'done'], enabled: { enabled: true },
+      botToken: { botToken: TOKEN }, chatId: { chatId: CHAT_ID }
     };
     await handleConfig({
       loadConfig: () => ({ ...base, telegram: { enabled: false, botToken: '', chatId: '' } }),
@@ -115,12 +104,13 @@ test('/config disables Telegram without erasing credentials and verifies token t
       },
       promptBack: async ([question]) => {
         yesPrompts.push(question.name);
-        if (question.name === 'telegramBotToken') assert.strictEqual(question.default, undefined);
-        if (question.name === 'telegramChatId') assert.strictEqual(question.default, undefined);
+        if (question.name === 'botToken') assert.strictEqual(question.default, undefined);
+        if (question.name === 'chatId') assert.strictEqual(question.default, undefined);
+        if (question.name === 'section') return { section: yesAnswers.section.shift() };
         return yesAnswers[question.name];
       }
     });
-    assert.deepStrictEqual(yesPrompts.slice(-3), ['connectTelegram', 'telegramBotToken', 'telegramChatId']);
+    assert.deepStrictEqual(yesPrompts, ['section', 'enabled', 'botToken', 'chatId', 'section']);
     assert.deepStrictEqual(verified, [TOKEN, CHAT_ID]);
     assert.deepStrictEqual(savedYes.telegram, { enabled: true, botToken: TOKEN, chatId: CHAT_ID });
   } finally {
@@ -136,15 +126,8 @@ test('/config reuses saved Telegram credentials after they were disabled', async
     telegram: { enabled: false, botToken: TOKEN, chatId: CHAT_ID }
   };
   const answers = {
-    providerChoice: { providerChoice: 'nvidia' },
-    apiKey: { apiKey: base.apiKey },
-    model: { model: base.model },
-    enableSearch: { enableSearch: false },
-    enableLangSmith: { enableLangSmith: false },
-    enableMemory: { enableMemory: false },
-    connectTelegram: { connectTelegram: true },
-    telegramBotToken: { telegramBotToken: TOKEN },
-    telegramChatId: { telegramChatId: CHAT_ID }
+    section: ['telegram', 'done'], enabled: { enabled: true },
+    botToken: { botToken: TOKEN }, chatId: { chatId: CHAT_ID }
   };
   let saved;
   let verified;
@@ -159,8 +142,9 @@ test('/config reuses saved Telegram credentials after they were disabled', async
         return { username: 'sun_test_bot' };
       },
       promptBack: async ([question]) => {
-        if (question.name === 'telegramBotToken') assert.strictEqual(question.default, TOKEN);
-        if (question.name === 'telegramChatId') assert.strictEqual(question.default, CHAT_ID);
+        if (question.name === 'botToken') assert.strictEqual(question.default, TOKEN);
+        if (question.name === 'chatId') assert.strictEqual(question.default, CHAT_ID);
+        if (question.name === 'section') return { section: answers.section.shift() };
         return answers[question.name];
       }
     });
@@ -262,10 +246,10 @@ test('Telegram uses the active custom model provider', async () => {
 
   assert.strictEqual(invocation[0], 'custom-key');
   assert.strictEqual(invocation[1], 'custom-model');
-  assert.deepStrictEqual(invocation[6], {
-    url: 'https://custom.example/v1/chat/completions',
-    provider: 'custom'
-  });
+  assert.strictEqual(invocation[6].url, 'https://custom.example/v1/chat/completions');
+  assert.strictEqual(invocation[6].provider, 'custom');
+  assert.strictEqual(invocation[6].retryOnce, true);
+  assert.strictEqual(typeof invocation[6].onRetry, 'function');
 });
 
 test('Telegram exposes only Tavily web_search and returns results to the model', async () => {

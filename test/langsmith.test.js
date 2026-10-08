@@ -285,18 +285,16 @@ test('chat.js: requires observability module', () => {
   assert.ok(src.includes('./core/observability') || src.includes('./observability'));
 });
 
-test('chat.js: /config asks about LangSmith after model selection', () => {
+test('chat.js: /config menu exposes LangSmith separately from provider/model setup', () => {
   // After the refactor, the /config command lives in src/cli/commands/config.js.
   const chatSrc = fs.readFileSync(path.join(PROJECT, 'src/cli/index.js'), 'utf-8');
   const configSrc = fs.readFileSync(path.join(PROJECT, 'src/cli/commands/config.js'), 'utf-8');
   // The dispatch (COMMANDS registry) must still be in chat.js.
   assert.ok(/COMMANDS\[text\]/.test(chatSrc), 'chat.js must dispatch via COMMANDS registry');
-  // The actual prompts now live in the command file.
-  assert.ok(/Enable LangSmith observability/.test(configSrc), 'must prompt for LangSmith');
-  // The LangSmith prompt must come after provider/model configuration.
-  const modelIdx = configSrc.indexOf('configureProvider(ctx, config)');
-  const lsIdx = configSrc.indexOf("Enable LangSmith observability");
-  assert.ok(modelIdx > -1 && lsIdx > -1 && modelIdx < lsIdx, 'LangSmith prompt must follow model prompt');
+  assert.ok(/configureProvider\(ctx, draft\)/.test(configSrc), 'provider/model settings must remain configurable');
+  assert.ok(/LangSmith observability:/.test(configSrc), 'LangSmith status must appear in the config menu');
+  assert.ok(/selection\.section === 'langsmith'/.test(configSrc), 'LangSmith must have its own menu section');
+  assert.ok(/Enable LangSmith observability/.test(configSrc), 'must prompt for LangSmith when selected');
 });
 
 test('chat.js: startup enables LangSmith when config has it on', () => {

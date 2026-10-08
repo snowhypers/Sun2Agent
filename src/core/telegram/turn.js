@@ -40,6 +40,9 @@ async function runTurn(runtime, chatId, text, replyToMessageId) {
     }
   } catch (error) {
     if (!controller.signal.aborted) {
+      // Do not leave an unanswered user message or orphan tool call in the
+      // chat context; the user can retry without accumulating failed turns.
+      history.length = priorHistoryLength;
       runtime.onError(error);
       await stream.finish('⚠ Unable to complete that response. Please try again.');
     }
@@ -77,19 +80,52 @@ async function completeWithSearch(runtime, systemPrompt, history, signal, stream
   let tools = provider.supportsTools && searchSpec ? [searchSpec] : undefined;
   const system = { role: 'system', content: systemPrompt };
   const requestText = [...history].reverse().find((item) => item.role === 'user')?.content;
+  const request = {
+    url: provider.url,
+    provider: provider.id,
+    retryOnce: true,
+    onRetry: () => {
+      void stream.showStatus('Model unavailable — retrying...').catch(runtime.onError);
+    }
+  };
+
+  const hasResponse = (message) => Boolean(message && (
+    (Array.isArray(message.tool_calls) && message.tool_calls.length) ||
+    String(message.content || '').trim()
+  ));
+
+  async function completeModel(messages, availableTools) {
+    let recovered = false;
+    let message;
+    try {
+      message = await runtime.complete(
+        provider.apiKey, provider.model, messages, availableTools, signal,
+        (token) => stream.push(token), request
+      );
+    } catch (error) {
+      if (signal.aborted || error.code !== 'MODEL_STREAM_INTERRUPTED' || error.hasPartialOutput) {
+        throw error;
+      }
+      recovered = true;
+      await stream.showStatus('Model stream interrupted — retrying...');
+      message = await runtime.complete(
+        provider.apiKey, provider.model, messages, availableTools, signal, undefined, request
+      );
+    }
+
+    if (!hasResponse(message) && !recovered && !signal.aborted) {
+      await stream.showStatus('Model returned no content — retrying...');
+      message = await runtime.complete(
+        provider.apiKey, provider.model, messages, availableTools, signal, undefined, request
+      );
+    }
+    return message;
+  }
 
   for (let step = 0; step < 6; step++) {
     let message;
     try {
-      message = await runtime.complete(
-        provider.apiKey,
-        provider.model,
-        [system, ...cleanHistory(history)],
-        tools,
-        signal,
-        (token) => stream.push(token),
-        { url: provider.url, provider: provider.id }
-      );
+      message = await completeModel([system, ...cleanHistory(history)], tools);
     } catch (error) {
       if (signal.aborted) return null;
       const detail = error.response?.data?.detail || error.response?.data?.error?.message || error.message || '';
@@ -103,7 +139,7 @@ async function completeWithSearch(runtime, systemPrompt, history, signal, stream
     }
 
     if (signal.aborted) return null;
-    if (!message || ((!message.tool_calls || !message.tool_calls.length) && !String(message.content || '').trim())) {
+    if (!hasResponse(message)) {
       throw new Error('The model returned an empty response.');
     }
 
@@ -135,18 +171,13 @@ async function completeWithSearch(runtime, systemPrompt, history, signal, stream
   }
 
   // Force a final answer after the search-call cap instead of looping.
-  return runtime.complete(
-    provider.apiKey,
-    provider.model,
+  return completeModel(
     [
       system,
       ...cleanHistory(history),
       { role: 'user', content: 'Using the search results above, provide the final answer now.' }
     ],
-    undefined,
-    signal,
-    (token) => stream.push(token),
-    { url: provider.url, provider: provider.id }
+    undefined
   );
 }
 

@@ -288,7 +288,7 @@ test('project configuration and source never define a Mem0 API key', () => {
 
 test('chat wiring includes config prompt, startup, retrieval, save, help, and /memory', () => {
   // After the refactor:
-  //   - "Enable memory?" lives in src/cli/commands/config.js (the /config flow)
+  //   - the memory menu entry and its toggle live in src/cli/commands/config.js
   //   - /memory command + handler live in src/cli/commands/{index,memory}.js
   //   - memory.enable / memory.search / memory.remember are called from
   //     src/cli/turn.js (where the chat loop runs the LLM) and
@@ -298,7 +298,8 @@ test('chat wiring includes config prompt, startup, retrieval, save, help, and /m
   const banner = fs.readFileSync(path.join(PROJECT, 'src/cli/ui/banner.js'), 'utf-8');
   const configCmd = fs.readFileSync(path.join(PROJECT, 'src/cli/commands/config.js'), 'utf-8');
   const cmds = fs.readFileSync(path.join(PROJECT, 'src/cli/commands/index.js'), 'utf-8');
-  assert.ok(configCmd.includes('Enable memory?'), '/config prompts "Enable memory?"');
+  assert.ok(configCmd.includes('Enable local memory?'), '/config can toggle local memory');
+  assert.ok(configCmd.includes('Memory: ${config.memory.enabled ?'), '/config menu shows memory status');
   assert.ok(cmds.includes("'/memory'"), '/memory is registered in COMMANDS');
   assert.ok(banner.includes("row('/memory'"), '/memory appears in /help');
   assert.ok(chatSource.includes('await memory.enable()'), 'startChat calls memory.enable() at startup');
