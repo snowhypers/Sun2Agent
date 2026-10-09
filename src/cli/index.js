@@ -15,7 +15,6 @@ const { notify, flushNotices } = require('./ui/utils');
 const { startTurnDisplay } = require('./ui/busyFooter');
 const { watchEscape, waitEnterOrEsc } = require('./ui/escapeWatcher');
 const { printBanner, printIntro } = require('./ui/banner');
-const { saveSession, loadSession, clearSession } = require('../core/sessions-management/new');
 const { cleanHistory } = require('./history');
 const { estimateConversationTokens, tokenLabel } = require('../core/tracking/tokenMeter');
 const { COMMANDS, handleConfig } = require('./commands');
@@ -41,15 +40,6 @@ async function syncTelegram(config) {
 function estimateFooter(history) {
   return tokenLabel(estimateConversationTokens(cleanHistory(history)));
 }
-
-// --- Session persistence (Docker outage resume) -----------------------------
-//
-// The conversation history is saved to ~/.sun2agent/session.json after every
-// completed exchange. The file lives in the config dir, which is bind-mounted
-// into the sandbox container — so it survives the container dying when the
-// Docker engine stops. When the host launcher relaunches the sandbox after
-// Docker comes back, it sets SUN2AGENT_RESUME=1 and the agent restores the
-// saved messages, continuing exactly where the user was interrupted.
 
 // --- Empty-assistant-message hygiene is in src/cli/history.js -----------------
 // (imported at the top of this file)
@@ -116,18 +106,6 @@ async function startChat() {
 
   const history = [];
 
-  // Relaunch after a Docker outage (the host launcher sets SUN2AGENT_RESUME=1):
-  // restore the saved conversation so the session continues where it stopped.
-  if (process.env.SUN2AGENT_RESUME === '1') {
-    const saved = loadSession();
-    if (saved && saved.length) {
-      // Defensive: sessions saved by older versions may contain empty
-      // assistant messages — never restore those into context.
-      history.push(...cleanHistory(saved));
-      console.log(chalk.green(`↩ Session restored — continuing your conversation from before the Docker interruption (${saved.length} messages).\n`));
-    }
-  }
-
   while (true) {
     flushNotices();
     const contextEstimate = estimateFooter(history);
@@ -186,7 +164,6 @@ async function startChat() {
       await telegram.stop();
       await workspaceReady;
       await mcp.disconnectAll();
-      clearSession(); // clean exit — nothing to resume next time
       console.log(chalk.yellow('Goodbye! 👋'));
       process.exit(0);
     }
@@ -236,7 +213,6 @@ async function startChat() {
     hitl.startPrompt();
     const turnStart = history.length;
     history.push({ role: 'user', content: text });
-    saveSession(cleanHistory(history));
 
     const busyContext = estimateFooter(history);
     const stopBusyFooter = startTurnDisplay(text, {
@@ -263,8 +239,7 @@ async function startChat() {
         console.log(chalk.yellow(`⚠ Workspace tools unavailable: ${workspaceResult.error}\n`));
       }
       const reply = await resumeAfterModel500(
-        () => chatTurn(config, history, controller.signal, onToken, onToolTurn,
-          (snapshot) => saveSession(cleanHistory(snapshot))),
+        () => chatTurn(config, history, controller.signal, onToken, onToolTurn),
         {
           signal: controller.signal,
           onRetry: () => {
@@ -300,10 +275,6 @@ async function startChat() {
         console.log(chalk.yellow(`\n⚠ LangSmith tracing failed: ${lsError.message}`));
         console.log(chalk.gray('  Fix the key with /config, or run with tracing disabled.\n'));
       }
-      // Persist after every completed exchange so an abrupt stop (Docker
-      // outage, crash) can resume exactly from here. Empty assistant
-      // placeholders are stripped so a bad turn never poisons the resume.
-      saveSession(cleanHistory(history));
       if (!controller.signal.aborted) {
         const failure = selfImprovement.failureFromTurn(history.slice(turnStart), reply);
         proposedLesson = selfImprovement.draftLesson(failure);

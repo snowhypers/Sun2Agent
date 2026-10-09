@@ -183,13 +183,14 @@ npx sun2agent
 
 Each normal launch starts a fresh conversation. Use `/new` to clear the current
 chat without archiving it, or `/continue` to resume the current task after an
-interruption. After a crash, `/continue` can restore the current session snapshot;
-`/new` deletes that snapshot. Connected tools and the selected model stay as they are.
+interruption while Sun2Agent is still running. A crash, restart, or Docker outage
+starts a fresh chat; no automatic conversation snapshot is stored. Connected
+tools and the selected model stay as they are during `/new`.
 The footer shows estimated tokens retained in the active chat (`chat ~3.2k tokens`),
 not provider-reported usage or remaining model capacity.
 Use `/save` to preview and optionally keep a short task summary for the current
 workspace. Approved summaries are stored separately from `memory.md` in
-`~/.sun2agent/saved-sessions.json`; a relevant summary may be included as
+`~/.sun2agent/save-sessionsMemory.json`; when Memory is enabled, a relevant summary may be included as
 context for a later task in the same workspace. `/new` does not delete approved
 saved summaries.
 While a model or tool turn is running, a non-editable input frame and the same

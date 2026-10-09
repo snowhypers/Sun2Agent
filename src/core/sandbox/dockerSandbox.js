@@ -108,11 +108,7 @@ function wrapAgentRun(options = {}) {
     ? `${WORKSPACE_VOLUME}:/workspace`
     : `${projectRoot}:/workspace`;
 
-  // resume=true is set when relaunching after Docker went down mid-session:
-  // the inner agent restores the saved conversation so the user continues
-  // from where they were interrupted.
   const envArgs = [`SUN2AGENT_SANDBOX=${SANDBOX_ENV.SUN2AGENT_SANDBOX}`];
-  if (options.resume) envArgs.push('SUN2AGENT_RESUME=1');
 
   return {
     command: 'docker',
@@ -128,7 +124,7 @@ function wrapAgentRun(options = {}) {
       image,
       'node', '/app/bin/sun2agent.js'
     ],
-    env: { ...SANDBOX_ENV, ...(options.resume ? { SUN2AGENT_RESUME: '1' } : {}) }
+    env: { ...SANDBOX_ENV }
   };
 }
 

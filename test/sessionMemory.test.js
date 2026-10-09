@@ -12,6 +12,8 @@ const { handleNew } = require('../src/cli/commands/new');
 const { COMMANDS } = require('../src/cli/commands');
 const axios = require('axios');
 const { chatTurn } = require('../src/cli/turn');
+const memory = require('../src/core/memory');
+const { buildSystemPrompt: buildTelegramSystemPrompt } = require('../src/core/telegram/turn');
 
 test('saved task memory is private, workspace-scoped, and used only for relevant queries', (t) => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'sun2agent-saved-memory-'));
@@ -19,6 +21,7 @@ test('saved task memory is private, workspace-scoped, and used only for relevant
   t.mock.method(os, 'homedir', () => home);
   saveSummary('Goal: implement Java CRUD tests. Progress: UserRepositoryTest written. Next: run Maven.', '/tmp/project-a');
   const file = sessionMemoryFile();
+  assert.equal(path.basename(file), 'save-sessionsMemory.json');
   assert.equal(fs.statSync(file).mode & 0o777, 0o600);
   assert.equal(loadSavedSessions().length, 1);
   assert.ok(relevantSavedSession('continue Java CRUD tests', '/tmp/project-a'));
@@ -30,6 +33,21 @@ test('saved task memory is private, workspace-scoped, and used only for relevant
   const history = [{ role: 'user', content: 'new task' }];
   handleNew({ history });
   assert.equal(loadSavedSessions().length, 1);
+});
+
+test('existing saved summaries remain available after the filename change', (t) => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'sun2agent-legacy-memory-'));
+  t.after(() => fs.rmSync(home, { recursive: true, force: true }));
+  t.mock.method(os, 'homedir', () => home);
+  const directory = path.join(home, '.sun2agent');
+  fs.mkdirSync(directory);
+  fs.writeFileSync(path.join(directory, 'saved-sessions.json'), JSON.stringify([{
+    workspace: '/tmp/project-a', summary: 'Continue Java tests'
+  }]));
+  assert.equal(loadSavedSessions().length, 1);
+  saveSummary('Next: run Maven.', '/tmp/project-a');
+  assert.equal(loadSavedSessions().length, 2);
+  assert.equal(fs.existsSync(sessionMemoryFile()), true);
 });
 
 test('/save previews the summary and writes only after approval', async (t) => {
@@ -62,8 +80,26 @@ test('a later relevant turn receives one saved task memory as contextual data', 
   try {
     const history = [{ role: 'user', content: 'continue the Java CRUD tests' }];
     assert.equal(await chatTurn({ apiKey: 'test', model: 'test' }, history), 'I will inspect the tests.');
+    assert.doesNotMatch(systemPrompt, /Saved task memory for this workspace/);
+    await memory.enable();
+    assert.equal(await chatTurn({ apiKey: 'test', model: 'test' }, [
+      { role: 'user', content: 'continue the Java CRUD tests' }
+    ]), 'I will inspect the tests.');
     assert.match(systemPrompt, /Saved task memory for this workspace/);
     assert.match(systemPrompt, /repository test written/);
     assert.match(systemPrompt, /Check current files and state/);
-  } finally { axios.post = originalPost; }
+  } finally { axios.post = originalPost; memory.disable(); }
+});
+
+test('Telegram recalls saved summaries only while Memory is enabled', async (t) => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'sun2agent-telegram-memory-'));
+  t.after(() => fs.rmSync(home, { recursive: true, force: true }));
+  t.mock.method(os, 'homedir', () => home);
+  saveSummary('Goal: finish Java CRUD tests. Next: run Maven.', process.cwd());
+  const runtime = { config: {} };
+  try {
+    assert.doesNotMatch(await buildTelegramSystemPrompt(runtime, 'continue Java CRUD tests'), /Saved task memory/);
+    await memory.enable();
+    assert.match(await buildTelegramSystemPrompt(runtime, 'continue Java CRUD tests'), /Saved task memory/);
+  } finally { memory.disable(); }
 });

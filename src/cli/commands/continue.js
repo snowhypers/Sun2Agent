@@ -1,12 +1,7 @@
 const chalk = require('chalk');
 const { repairInterruptedTools } = require('../../core/sessions-management/continue');
-const { loadSession } = require('../../core/sessions-management/new');
-const { cleanHistory } = require('../history');
 
 function handleContinue({ history }) {
-  // A crash or Ctrl+C can leave the current session snapshot on disk. /new
-  // deletes that snapshot, so it can never restore a deliberately cleared chat.
-  if (!history.length) history.push(...cleanHistory(loadSession()));
   if (!history.some((message) => message.role === 'user')) {
     console.log(chalk.yellow('No task in this chat to continue. Start by describing what you want to do.\n'));
     return;

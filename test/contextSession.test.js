@@ -2,12 +2,9 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
 const { PassThrough } = require('node:stream');
 const { stripVTControlCharacters } = require('node:util');
-const session = require('../src/core/sessions-management/new');
+const { startNewSession } = require('../src/core/sessions-management/new');
 const { repairInterruptedTools } = require('../src/core/sessions-management/continue');
 const { handleNew } = require('../src/cli/commands/new');
 const { handleContinue } = require('../src/cli/commands/continue');
@@ -28,16 +25,10 @@ test('conversation token estimate counts retained messages and resets with /new'
   assert.equal(tokenLabel(3200), 'chat ~3.2k tokens');
 });
 
-test('/new clears the active chat and snapshot without creating an archive', (t) => {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'sun2agent-session-test-'));
-  t.after(() => fs.rmSync(home, { recursive: true, force: true }));
-  t.mock.method(os, 'homedir', () => home);
+test('/new clears only the active in-memory chat', () => {
   const history = [{ role: 'user', content: 'hello' }, { role: 'assistant', content: 'hi' }];
-  session.saveSession(history);
-  handleNew({ history });
+  startNewSession(history);
   assert.deepEqual(history, []);
-  assert.equal(session.loadSession(), null);
-  assert.equal(fs.existsSync(path.join(home, '.sun2agent', 'sessions')), false);
 });
 
 test('/continue repairs a trailing interrupted tool batch without replaying tools', () => {
@@ -50,42 +41,23 @@ test('/continue repairs a trailing interrupted tool batch without replaying tool
   assert.equal(repairInterruptedTools(history), 0);
 });
 
-test('/new and /continue handlers use the current session, not an archive', (t) => {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'sun2agent-command-test-'));
-  t.after(() => fs.rmSync(home, { recursive: true, force: true }));
-  t.mock.method(os, 'homedir', () => home);
+test('/new and /continue handlers use only the active chat', () => {
   assert.equal(COMMANDS['/new'], handleNew);
   assert.equal(COMMANDS['/continue'], handleContinue);
   const history = [{ role: 'user', content: 'build a page' }];
   const result = handleContinue({ history });
   assert.match(result.prompt, /current unfinished task/);
   assert.equal(history.length, 1);
-  session.saveSession(history);
   handleNew({ history });
   assert.equal(history.length, 0);
   assert.equal(handleContinue({ history }), undefined);
   assert.equal(history.length, 0);
-  assert.equal(fs.existsSync(path.join(home, '.sun2agent', 'sessions')), false);
 });
 
-test('/continue can restore the current unfinished snapshot after a crash', (t) => {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'sun2agent-crash-test-'));
-  t.after(() => fs.rmSync(home, { recursive: true, force: true }));
-  t.mock.method(os, 'homedir', () => home);
-  session.saveSession([{ role: 'user', content: 'unfinished task' }]);
+test('/continue cannot recover a chat after restart without an active history', () => {
   const history = [];
-  assert.match(handleContinue({ history }).prompt, /current unfinished task/);
-  assert.deepEqual(history, [{ role: 'user', content: 'unfinished task' }]);
-});
-
-test('strict session clearing ignores missing snapshots but reports deletion failures', (t) => {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'sun2agent-clear-test-'));
-  t.after(() => fs.rmSync(home, { recursive: true, force: true }));
-  t.mock.method(os, 'homedir', () => home);
-  assert.doesNotThrow(() => session.clearSession(true));
-  fs.mkdirSync(path.dirname(session.sessionFile()), { recursive: true });
-  fs.mkdirSync(session.sessionFile());
-  assert.throws(() => session.clearSession(true));
+  assert.equal(handleContinue({ history }), undefined);
+  assert.deepEqual(history, []);
 });
 
 test('input footer shows approximate conversation tokens without hiding model', async (t) => {

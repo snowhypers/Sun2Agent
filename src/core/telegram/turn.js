@@ -2,6 +2,7 @@
 
 const context = require('../rules');
 const memory = require('../memory');
+const { addSavedSessionContext } = require('../sessions-management/save');
 const { RESPONSE_STYLE } = require('../rules/responseStyle');
 const skills = require('../skills');
 const providers = require('../providers');
@@ -73,7 +74,8 @@ async function buildSystemPrompt(runtime, text) {
     'never label a prior-day story as published today. Answer with fewer items if only a few can be verified.'
   );
   prompt = skills.buildSkillsContext(prompt, runtime.config);
-  return memory.buildMemoryContext(prompt, relevantMemories);
+  prompt = memory.buildMemoryContext(prompt, relevantMemories);
+  return memory.isEnabled() ? addSavedSessionContext(prompt, text) : prompt;
 }
 
 async function completeWithSearch(runtime, systemPrompt, history, signal, stream) {

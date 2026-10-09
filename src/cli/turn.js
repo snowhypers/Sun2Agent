@@ -149,7 +149,9 @@ async function chatTurn(config, history, signal, onToken, onToolTurn, onCheckpoi
   const system = {
     role: 'system',
     content: selfImprovement.addLessonToPrompt(
-      addSavedSessionContext(buildTurnSystemPrompt(config, relevantMemories), currentUserMessage?.content),
+      memory.isEnabled()
+        ? addSavedSessionContext(buildTurnSystemPrompt(config, relevantMemories), currentUserMessage?.content)
+        : buildTurnSystemPrompt(config, relevantMemories),
       currentUserMessage && selfImprovement.relevantLesson(currentUserMessage.content)
     )
   };

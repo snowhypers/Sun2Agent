@@ -8,12 +8,14 @@ const providers = require('../providers');
 const { chatCompletion } = require('../model/api');
 
 function sessionMemoryFile(home = os.homedir()) {
-  return path.join(home, '.sun2agent', 'saved-sessions.json');
+  return path.join(home, '.sun2agent', 'save-sessionsMemory.json');
 }
 
 function loadSavedSessions(home) {
   try {
-    const entries = JSON.parse(fs.readFileSync(sessionMemoryFile(home), 'utf8'));
+    const file = sessionMemoryFile(home);
+    const legacyFile = path.join(home || os.homedir(), '.sun2agent', 'saved-sessions.json');
+    const entries = JSON.parse(fs.readFileSync(fs.existsSync(file) ? file : legacyFile, 'utf8'));
     return Array.isArray(entries) ? entries.filter((item) => item &&
       typeof item.workspace === 'string' && typeof item.summary === 'string' &&
       item.summary.length <= 2000 && !hasSensitiveSummary(item.summary) &&

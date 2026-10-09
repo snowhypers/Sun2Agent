@@ -788,36 +788,31 @@ test('sandbox: wrapAgentRun would mount filesystem root only if forced (defense 
 });
 
 // ===========================================================================
-// PART 7 — Docker outage: wait for the engine, relaunch, resume the session
+// PART 7 — Docker outage: wait for the engine and restart with a fresh chat
 // ===========================================================================
 
-test('sandbox: wrapAgentRun sets SUN2AGENT_RESUME=1 only when resume requested', () => {
+test('sandbox: wrapAgentRun never injects a session-resume marker', () => {
   const base = { projectRoot: '/tmp/p', packageRoot: '/opt/s', configDir: '/home/me/.sun2agent' };
-
-  // Default launch: no resume marker.
   const normal = wrapAgentRun(base);
   assert.ok(!normal.args.includes('SUN2AGENT_RESUME=1'), 'normal launch must not set resume');
-
-  // Resume launch: marker passed to the container.
   const resume = wrapAgentRun({ ...base, resume: true });
-  assert.ok(resume.args.includes('SUN2AGENT_RESUME=1'), 'resume launch must set the marker');
-  assert.strictEqual(resume.env.SUN2AGENT_RESUME, '1');
-  // The sandbox marker is still present too.
+  assert.ok(!resume.args.includes('SUN2AGENT_RESUME=1'));
+  assert.equal(resume.env.SUN2AGENT_RESUME, undefined);
   assert.ok(resume.args.includes('SUN2AGENT_SANDBOX=1'));
 });
 
-test('sandbox: launcher waits for Docker and relaunches with resume (source-text)', () => {
+test('sandbox: launcher waits for Docker and relaunches fresh (source-text)', () => {
   const idxSource = fs.readFileSync(path.join(PROJECT, 'src/core/sandbox/index.js'), 'utf-8');
 
   // The relaunch helper must exist and poll until Docker is back.
-  const waitIdx = idxSource.indexOf('function waitForDockerAndResume(');
-  assert.ok(waitIdx !== -1, 'waitForDockerAndResume must exist');
+  const waitIdx = idxSource.indexOf('function waitForDockerAndRestart(');
+  assert.ok(waitIdx !== -1, 'waitForDockerAndRestart must exist');
   const waitBody = idxSource.slice(waitIdx, idxSource.indexOf('\nfunction ', waitIdx + 1));
   assert.ok(waitBody.includes('docker'), 'must poll the docker CLI');
   assert.ok(waitBody.includes('launchSandboxContainer'), 'must relaunch after Docker returns');
   assert.ok(
-    waitBody.includes('resume: true'),
-    'the relaunch must pass resume so the session continues'
+    waitBody.includes('restarted: true'),
+    'the relaunch must mark the restarted sandbox'
   );
 
   // The container exit handler must distinguish user quits from outages.
@@ -831,57 +826,10 @@ test('sandbox: launcher waits for Docker and relaunches with resume (source-text
   );
 });
 
-test('sandbox: chat.js persists and restores the session (source-text)', () => {
+test('sandbox: chat.js keeps history in memory without writing a session snapshot', () => {
   const chatSource = fs.readFileSync(path.join(PROJECT, 'src/cli/index.js'), 'utf-8');
-  const sessionSource = fs.readFileSync(path.join(PROJECT, 'src/core/sessions-management/new.js'), 'utf-8');
-
-  // Save/load/clear helpers must exist in the core conversation module.
-  assert.ok(sessionSource.includes('function saveSession('), 'saveSession must exist in session module');
-  assert.ok(sessionSource.includes('function loadSession('), 'loadSession must exist in session module');
-  assert.ok(sessionSource.includes('function clearSession('), 'clearSession must exist in session module');
-
-  // History is restored ONLY when the launcher says this is a resume.
-  assert.ok(
-    chatSource.includes("process.env.SUN2AGENT_RESUME === '1'") && chatSource.includes('loadSession()'),
-    'startChat must restore history when SUN2AGENT_RESUME=1'
-  );
-
-  // The session is saved after every completed exchange.
-  assert.ok(
-    chatSource.includes('saveSession(') && chatSource.includes('history'),
-    'history must be persisted after each exchange'
-  );
-
-  // A clean /exit clears the session — nothing stale to resume later.
-  const exitIdx = chatSource.indexOf("text === '/exit'");
-  const exitBlock = chatSource.slice(exitIdx, chatSource.indexOf('\n    }', exitIdx));
-  assert.ok(exitBlock.includes('clearSession()'), '/exit must clear the saved session');
-});
-
-test('sandbox: session file round-trips through save/load/clear', () => {
-  const env = fakeConfigEnv();
-  try {
-    // Verify the session file mechanics directly (the same shape chat.js's
-    // saveSession/loadSession/clearSession use). chat.js itself is NOT
-    // required here: it pulls in the TUI stack (inquirer/readline) whose open
-    // handles would hang the test runner.
-    const sessionFile = path.join(env.dir, '.sun2agent', 'session.json');
-    const messages = [
-      { role: 'user', content: 'hello' },
-      { role: 'assistant', content: 'hi there' }
-    ];
-    fs.mkdirSync(path.dirname(sessionFile), { recursive: true });
-    fs.writeFileSync(sessionFile, JSON.stringify({ savedAt: Date.now(), messages }));
-
-    // Re-read like loadSession would.
-    const raw = JSON.parse(fs.readFileSync(sessionFile, 'utf-8'));
-    assert.strictEqual(raw.messages.length, 2);
-    assert.strictEqual(raw.messages[0].content, 'hello');
-
-    // Clear like clearSession would.
-    fs.unlinkSync(sessionFile);
-    assert.ok(!fs.existsSync(sessionFile), 'session file must be removable');
-  } finally {
-    env.restore();
-  }
+  assert.ok(chatSource.includes('const history = []'));
+  assert.ok(!chatSource.includes('saveSession('));
+  assert.ok(!chatSource.includes('loadSession('));
+  assert.ok(!chatSource.includes('session.json'));
 });

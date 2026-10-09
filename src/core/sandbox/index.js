@@ -56,8 +56,8 @@ function wrapStdioCommand(command, args) {
 // than dropping the user into a cryptic error, the launcher:
 //   1. tells the user to start their Docker engine,
 //   2. waits (polling) until Docker is back,
-//   3. relaunches the container with SUN2AGENT_RESUME=1 so the inner agent
-//      restores the saved conversation and continues where it left off.
+//   3. relaunches the container with a fresh conversation. Only summaries
+//      explicitly approved with /save persist across launches.
 function runInSandbox() {
   const chalk = require('chalk');
   const { spawn } = require('child_process');
@@ -95,19 +95,18 @@ function runInSandbox() {
     process.exit(1);
   }
 
-  launchSandboxContainer({ image, resume: false, chalk });
+  launchSandboxContainer({ image, restarted: false, chalk });
 }
 
 // Spawn the sandbox container and wire up the exit handling that detects a
-// mid-session Docker outage. `resume` is true when this is a relaunch after
-// Docker came back — the inner agent then restores the saved session.
-function launchSandboxContainer({ image, resume, chalk }) {
+// mid-session Docker outage. A relaunch starts a fresh conversation.
+function launchSandboxContainer({ image, restarted, chalk }) {
   const { spawn } = require('child_process');
-  const { command, args } = wrapAgentRun({ image, resume });
-  if (!resume) {
+  const { command, args } = wrapAgentRun({ image });
+  if (!restarted) {
     console.log(chalk.green('🐳 Docker sandbox active — the agent runs isolated in a container.\n'));
   } else {
-    console.log(chalk.green('🐳 Docker is back — resuming your session in the sandbox.\n'));
+    console.log(chalk.green('🐳 Docker is back — restarting the sandbox with a fresh chat.\n'));
   }
   const child = spawn(command, args, { stdio: 'inherit' });
 
@@ -122,12 +121,12 @@ function launchSandboxContainer({ image, resume, chalk }) {
     if (code === 0 || signal === 'SIGINT' || code === 130) process.exit(code || 0);
 
     // Unexpected exit. If Docker itself is down, the outage killed the
-    // container — wait for the engine and relaunch with session resume.
+    // container — wait for the engine and relaunch with a fresh chat.
     if (!isDockerRunning()) {
       console.log(chalk.yellow('\n⚠ Docker engine stopped — the sandbox session was interrupted.'));
       console.log(chalk.gray('Please start your Docker engine. The agent is waiting and will'));
-      console.log(chalk.gray('continue from where it stopped as soon as Docker is running again.\n'));
-      waitForDockerAndResume({ image, chalk });
+      console.log(chalk.gray('restart with a fresh chat as soon as Docker is running again.\n'));
+      waitForDockerAndRestart({ image, chalk });
       return;
     }
 
@@ -136,9 +135,8 @@ function launchSandboxContainer({ image, resume, chalk }) {
   });
 }
 
-// Poll Docker until the engine is back, then relaunch the sandbox with
-// SUN2AGENT_RESUME=1 so the conversation continues where it stopped.
-function waitForDockerAndResume({ image, chalk }) {
+// Poll Docker until the engine is back, then relaunch with a fresh chat.
+function waitForDockerAndRestart({ image, chalk }) {
   const { spawnSync } = require('child_process');
   const POLL_MS = 2000;
   const timer = setInterval(() => {
@@ -151,7 +149,7 @@ function waitForDockerAndResume({ image, chalk }) {
     if (!running) return; // keep waiting
     clearInterval(timer);
     console.log(chalk.green('✓ Docker engine detected — restarting the sandbox...'));
-    launchSandboxContainer({ image, resume: true, chalk });
+    launchSandboxContainer({ image, restarted: true, chalk });
   }, POLL_MS);
 }
 
