@@ -3,6 +3,7 @@
 const axios = require('axios');
 const { chatCompletion } = require('../model/api');
 const search = require('../search');
+const mcp = require('../mcp');
 const { validateTelegramConfig } = require('./config');
 const { telegramRequest } = require('./client');
 const { pollLoop } = require('./polling');
@@ -11,10 +12,12 @@ const commands = require('./commands');
 const turn = require('./turn');
 
 class TelegramRuntime {
-  constructor({ http = axios, complete = chatCompletion, searchProvider = search, onError = () => {} } = {}) {
+  constructor({ http = axios, complete = chatCompletion, searchProvider = search, mcpProvider = mcp, onError = () => {} } = {}) {
     this.http = http;
     this.complete = complete;
     this.search = searchProvider;
+    this.mcp = mcpProvider;
+    this.mcpReady = Promise.resolve();
     this.onError = onError;
     this.config = null;
     this.running = false;
@@ -24,6 +27,10 @@ class TelegramRuntime {
     this.offset = 0;
     this.histories = new Map();
     this.active = new Map();
+  }
+
+  setMcpReady(promise) {
+    this.mcpReady = promise;
   }
 
   async start(config) {

@@ -32,6 +32,7 @@ const { loadSdk, buildTransport } = require('./transports');
 const filesystem = require('../filesystem');
 const browser = require('../browser');
 const computer = require('../computer');
+const telegramPolicy = require('./telegramPolicy');
 
 const DEFAULT_MCP_CONNECTION_TIMEOUT_MS = 20000;
 
@@ -211,6 +212,26 @@ async function connectAll() {
   }));
 }
 
+function getTelegramTools() {
+  const connectedRemotes = new Set(registry.getConnections()
+    .filter((connection) => !connection.builtin &&
+      ['http', 'https', 'streamable-http', 'remote', 'sse'].includes(connection.type))
+    .map((connection) => connection.name));
+  const allowedServers = new Set(getServers()
+    .filter((server) => connectedRemotes.has(server.name) && telegramPolicy.isRemoteServer(server))
+    .map((server) => server.name));
+  const { specs, routes } = registry.getOpenAiTools();
+  const safeRoutes = new Map([...routes].filter(([, route]) =>
+    allowedServers.has(route.server) && telegramPolicy.isReadOnlyTool(route)));
+  return { specs: specs.filter((spec) => safeRoutes.has(spec.function.name)), routes: safeRoutes };
+}
+
+async function callTelegramTool(name, args, signal) {
+  const { routes } = getTelegramTools();
+  if (!routes.has(name)) throw new Error(`Tool "${name}" is unavailable in Telegram.`);
+  return callTool(routes, name, args, signal, { telegramReadOnly: true });
+}
+
 // Execute a tool call routed by getOpenAiTools() and return a text result.
 // `signal` is an optional AbortSignal so a long tool call can be cancelled.
 async function callTool(routes, fullName, args, signal, options = {}) {
@@ -218,6 +239,9 @@ async function callTool(routes, fullName, args, signal, options = {}) {
   if (!route) throw new Error(`no MCP tool named "${fullName}"`);
   const conn = registry.get(route.server);
   if (!conn) throw new Error(`server "${route.server}" is not connected`);
+  if (options.telegramReadOnly && !getTelegramTools().routes.has(fullName)) {
+    throw new Error(`Tool "${fullName}" is unavailable in Telegram.`);
+  }
 
   // Guardrails: command -> network -> filesystem, over every argument the
   // model supplied. Refusing here means the tool never runs at all.
@@ -227,7 +251,7 @@ async function callTool(routes, fullName, args, signal, options = {}) {
   // Human-in-the-Loop: the call is blocked unless a human approves it. This
   // sits at the execution boundary (after guardrails, before the tool runs) —
   // outside the LLM/ReAct logic — so every proposed call is vetted here.
-  const approved = await hitl.checkApproval({
+  const approved = options.telegramReadOnly || await hitl.checkApproval({
     server: route.server,
     tool: route.tool,
     args: args || {},
@@ -301,6 +325,8 @@ module.exports = {
   getConnections: registry.getConnections,
   connectedCount: registry.connectedCount,
   getOpenAiTools: registry.getOpenAiTools,
+  getTelegramTools,
+  callTelegramTool,
   callTool,
   disconnectAll: registry.disconnectAll
 };

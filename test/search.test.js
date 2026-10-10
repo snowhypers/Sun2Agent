@@ -36,6 +36,28 @@ test('search: enabled config → getToolSpec returns web_search spec', () => {
   assert.ok(spec.function.parameters.properties.query, 'query parameter must exist');
 });
 
+test('web search is offered first and prioritized over MCP search tools', async () => {
+  const mcp = require('../src/core/mcp');
+  const originalTools = mcp.getOpenAiTools;
+  const originalPost = axios.post;
+  mcp.getOpenAiTools = () => ({ specs: [{ type: 'function', function: {
+    name: 'other__search', description: 'Other search', parameters: { type: 'object', properties: {} }
+  } }], routes: new Map() });
+  axios.post = async (_url, body) => {
+    assert.deepStrictEqual(body.tools.map((tool) => tool.function.name), ['web_search', 'other__search']);
+    assert.match(body.messages[0].content, /use web_search first/i);
+    return { data: { choices: [{ message: { role: 'assistant', content: 'Done.' } }] } };
+  };
+  try {
+    const { chatTurn } = require('../src/cli/turn');
+    await chatTurn({ apiKey: 'test', model: 'test', selectedSkills: [],
+      search: { enabled: true, apiKey: 'tvly-test' } }, [{ role: 'user', content: 'Search for Node.js updates' }]);
+  } finally {
+    mcp.getOpenAiTools = originalTools;
+    axios.post = originalPost;
+  }
+});
+
 test('search: missing config → getToolSpec returns null', () => {
   assert.strictEqual(searchModule.getToolSpec(null), null);
   assert.strictEqual(searchModule.getToolSpec({}), null);

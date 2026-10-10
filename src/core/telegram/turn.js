@@ -5,6 +5,7 @@ const memory = require('../memory');
 const { RESPONSE_STYLE } = require('../rules/responseStyle');
 const skills = require('../skills');
 const providers = require('../providers');
+const guardrails = require('../guardrails');
 const { cleanHistory } = require('../../cli/history');
 const { TelegramResponseStream } = require('./stream');
 
@@ -64,9 +65,11 @@ async function buildSystemPrompt(runtime, text) {
   const relevantMemories = memory.isEnabled() ? await memory.search(text) : [];
   let prompt = context.buildSystemPrompt(
     'You are Sun2Agent, a helpful AI assistant chatting with the user through Telegram. ' +
-    'Answer clearly and concisely. MCP and terminal tools are unavailable in this channel. ' +
+    'Answer clearly and concisely. Only connected remote read-only MCP tools are available here; ' +
+    'local tools and actions requiring approval are unavailable. ' +
     RESPONSE_STYLE +
-    'A built-in read-only web_search tool may be available for current information.' +
+    'For web search, research, news, or current-information questions, use web_search first when available. ' +
+    'Use another remote search tool only if those results are insufficient.' +
     ` Current local date: ${new Date().toDateString()}. ` +
     'For today\'s news, find the latest available reports as of today, including recent prior days. ' +
     'Search broad topics without forcing today\'s exact date. Cite source URLs and publication dates; ' +
@@ -77,9 +80,13 @@ async function buildSystemPrompt(runtime, text) {
 }
 
 async function completeWithSearch(runtime, systemPrompt, history, signal, stream) {
+  await runtime.mcpReady;
   const provider = providers.getActiveProvider(runtime.config);
   const searchSpec = runtime.search.getToolSpec(runtime.config);
-  let tools = provider.supportsTools && searchSpec ? [searchSpec] : undefined;
+  const remoteTools = runtime.mcp.getTelegramTools().specs;
+  let tools = provider.supportsTools
+    ? [searchSpec, ...remoteTools].filter(Boolean) : undefined;
+  if (!tools?.length) tools = undefined;
   const system = { role: 'system', content: systemPrompt };
   const requestText = [...history].reverse().find((item) => item.role === 'user')?.content;
   const request = {
@@ -147,7 +154,8 @@ async function completeWithSearch(runtime, systemPrompt, history, signal, stream
 
     if (tools && message.tool_calls && message.tool_calls.length) {
       history.push(message);
-      await stream.showStatus('Agent is searching ...');
+      await stream.showStatus(message.tool_calls.some((call) => call.function?.name === 'web_search')
+        ? 'Agent is searching ...' : 'Agent is using a tool ...');
       for (const call of message.tool_calls) {
         const name = call && call.function && call.function.name;
         let args = {};
@@ -156,9 +164,20 @@ async function completeWithSearch(runtime, systemPrompt, history, signal, stream
         } catch (_) {
           /* malformed arguments become an empty query and a safe tool error */
         }
-        const content = name === 'web_search'
-          ? await runtime.search.executeTool(args.query, runtime.config, signal, requestText)
-          : `Tool "${name || 'unknown'}" is not available in Telegram.`;
+        let content;
+        if (name === 'web_search') {
+          content = await runtime.search.executeTool(args.query, runtime.config, signal, requestText);
+        } else if (runtime.mcp.getTelegramTools().routes.has(name)) {
+          try {
+            const result = await runtime.mcp.callTelegramTool(name, args, signal);
+            content = guardrails.outputGuard(typeof result === 'string' ? result : result.text);
+          } catch (error) {
+            if (signal.aborted) return null;
+            content = guardrails.outputGuard(`Remote tool failed: ${error.message}`);
+          }
+        } else {
+          content = `Tool "${name || 'unknown'}" is not available in Telegram.`;
+        }
         if (signal.aborted) return null;
         history.push({
           role: 'tool',

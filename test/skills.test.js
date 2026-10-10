@@ -807,21 +807,20 @@ test('skills: Esc handler in the chat loop clears skills (and saves) when MCP is
   assert.match(src, /config = loadConfig\(\);/);
 });
 
-test('skills: Esc disconnects opt-in tools but keeps automatic workspace tools', () => {
+test('skills: Esc backs out of opt-in tools before disconnecting automatic MCPs', () => {
   const src = fs.readFileSync(path.join(PROJECT, 'src/cli/index.js'), 'utf-8');
   const escBlock = src.match(/if \(input === ESC_BACK\) \{[\s\S]*?\n    \}/);
   assert.ok(escBlock, 'expected to find the ESC_BACK block');
   const block = escBlock[0];
-  // MCP disconnect comes first…
   assert.match(block, /mcp\.hasUserConnections\(\)/);
   assert.match(block, /mcp\.disconnectUserServers\(\)/);
-  // Automatic workspace tools remain available; Skills clear after opt-in tools.
   const mcpIndex = block.indexOf('mcp.disconnectUserServers()');
   const browserIndex = block.indexOf('mcp.disconnectBrowser()');
   const skillsIndex = block.indexOf('skills.clearSelected');
   assert.ok(mcpIndex !== -1 && browserIndex !== -1 && skillsIndex !== -1);
-  assert.ok(mcpIndex < browserIndex, 'user MCP branch must be checked before browser');
-  assert.ok(browserIndex < skillsIndex, 'browser branch must be checked before skills');
+  assert.ok(browserIndex < skillsIndex && skillsIndex < mcpIndex);
+  assert.match(block, /if \(escReadyForMcp\) \{[\s\S]*mcp\.disconnectUserServers\(\)/);
+  assert.match(src, /let escReadyForMcp = false;/);
   assert.doesNotMatch(block, /disconnectWorkspace\(\)/);
 });
 

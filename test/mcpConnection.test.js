@@ -8,6 +8,12 @@ const path = require('node:path');
 
 const HANGING_SERVER = path.join(__dirname, 'fixtures', 'hangingMcpServer.js');
 
+test('CLI connects configured MCPs before offering tools to the model', () => {
+  const cli = fs.readFileSync(path.join(__dirname, '..', 'src', 'cli', 'index.js'), 'utf8');
+  assert.match(cli, /const userMcpReady = mcp\.connectFromConfig\(\)/);
+  assert.match(cli, /const workspaceResult = await workspaceReady;\s*await userMcpReady;/);
+});
+
 test('MCP connect-all times out independent servers in parallel', async () => {
   const markerDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sun2agent-mcp-parallel-'));
   const markerOne = path.join(markerDir, 'one');

@@ -211,9 +211,9 @@ test('Telegram text chat calls the model without tools and saves history', async
 
   assert.strictEqual(invocation[0], 'nvapi-test');
   assert.strictEqual(invocation[1], 'test-model');
-  assert.strictEqual(invocation[3], undefined, 'Telegram must not expose MCP tools');
+  assert.strictEqual(invocation[3], undefined, 'No remote MCP tools are connected');
   assert.strictEqual(typeof invocation[5], 'function', 'Telegram should request streamed model tokens');
-  assert.match(invocation[2][0].content, /MCP and terminal tools are unavailable/);
+  assert.match(invocation[2][0].content, /Only connected remote read-only MCP tools are available/);
   assert.deepStrictEqual(runtime.histories.get(CHAT_ID).map((item) => item.role), ['user', 'assistant']);
   const responseUpdates = http.calls
     .filter((call) => call.method === 'sendMessage' || call.method === 'editMessageText');
@@ -252,7 +252,7 @@ test('Telegram uses the active custom model provider', async () => {
   assert.strictEqual(typeof invocation[6].onRetry, 'function');
 });
 
-test('Telegram exposes only Tavily web_search and returns results to the model', async () => {
+test('Telegram exposes Tavily web_search and returns results to the model', async () => {
   const http = fakeHttp();
   const calls = [];
   let searchedQuery;
@@ -307,6 +307,39 @@ test('Telegram exposes only Tavily web_search and returns results to the model',
     .map((call) => call.data.text);
   assert.ok(statuses.includes('Agent is searching ...'));
   assert.strictEqual(statuses.at(-1), 'The current Node.js information is available.');
+});
+
+test('Telegram offers connected remote MCP tools and returns their results', async () => {
+  const http = fakeHttp();
+  const calls = [];
+  const invoked = [];
+  const mcpProvider = {
+    getTelegramTools: () => ({
+      specs: [{ type: 'function', function: {
+        name: 'remote_docs__search', description: 'Search docs',
+        parameters: { type: 'object', properties: { query: { type: 'string' } } }
+      } }],
+      routes: new Map([['remote_docs__search', { server: 'remote-docs', tool: 'search' }]])
+    }),
+    callTelegramTool: async (...args) => { invoked.push(args); return 'Official documentation result'; }
+  };
+  const runtime = new TelegramRuntime({
+    http, mcpProvider,
+    complete: async (_key, _model, messages, tools) => {
+      calls.push({ messages, tools });
+      return calls.length === 1
+        ? { role: 'assistant', content: '', tool_calls: [{ id: 'remote-1', type: 'function',
+          function: { name: 'remote_docs__search', arguments: '{"query":"Node.js"}' } }] }
+        : { role: 'assistant', content: 'Found the docs.' };
+    }
+  });
+  runtime.config = runtimeConfig();
+  await runtime.handleUpdate(messageUpdate('Find the Node.js documentation'));
+  assert.deepStrictEqual(calls[0].tools.map((tool) => tool.function.name), ['remote_docs__search']);
+  assert.strictEqual(invoked.length, 1);
+  assert.match(calls[1].messages.find((message) => message.role === 'tool').content,
+    /Official documentation result/);
+  assert.strictEqual(http.calls.at(-1).data.text, 'Found the docs.');
 });
 
 test('Telegram shows typing before streaming one progressively edited response', async () => {

@@ -22,6 +22,10 @@ async function stop() {
   return runtime.stop();
 }
 
+function setMcpReady(promise) {
+  runtime.setMcpReady(promise);
+}
+
 module.exports = {
   HELP_TEXT,
   TelegramRuntime,
@@ -29,5 +33,6 @@ module.exports = {
   verifyConnection,
   splitMessage,
   sync,
+  setMcpReady,
   stop
 };

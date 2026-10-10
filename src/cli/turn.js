@@ -127,7 +127,7 @@ async function chatTurn(config, history, signal, onToken, onToolTurn, onCheckpoi
   // Keep every MCP route guarded and executable, but send the model a smaller
   // starting catalog for computer use. It can discover extra schemas on demand.
   const searchSpec = search.getToolSpec(config);
-  const allSpecs = searchSpec ? [...specs, searchSpec] : specs;
+  const allSpecs = searchSpec ? [searchSpec, ...specs] : specs;
   const discoveredComputerTools = new Set();
   const visibleSpecs = () => computer.isConnected()
     ? selectToolSpecs(allSpecs, routes, discoveredComputerTools) : allSpecs;
@@ -151,7 +151,9 @@ async function chatTurn(config, history, signal, onToken, onToolTurn, onCheckpoi
     content: selfImprovement.addLessonToPrompt(
       addSavedSessionContext(buildTurnSystemPrompt(config, relevantMemories), currentUserMessage?.content),
       currentUserMessage && selfImprovement.relevantLesson(currentUserMessage.content)
-    )
+    ) + (searchSpec ? '\nFor web search, research, news, or current-information questions, use web_search first. ' +
+      'Use another search or scraping tool only if the web_search results are insufficient. ' +
+      'For local files, desktop apps, or connected-service tasks, use their relevant tools instead.' : '')
   };
   let allowTools = Boolean(tools);
 

@@ -104,15 +104,21 @@ async function startChat() {
   // Telegram is optional. Start it in the background so its network handshake
   // never delays the first chat box. Errors redraw safely above active input.
   // The listener remains restricted to the private chat ID saved by /config.
-  void syncTelegram(config);
-
   // Prepare the built-in filesystem tools in the background. The first input
   // box appears immediately; an ordinary chat turn waits for this connection
   // before offering tools to the model. Workspace access stays scoped to cwd.
   const workspaceReady = mcp.connectWorkspace().catch((error) => ({
     ok: false, error: error.message
   }));
+  const userMcpReady = mcp.connectFromConfig().then((results) => {
+    for (const result of results) {
+      if (!result.ok) notify(chalk.yellow(`⚠ MCP ${result.name} unavailable: ${result.error}`));
+    }
+  }).catch((error) => notify(chalk.yellow(`⚠ MCP auto-connect failed: ${error.message}`)));
+  telegram.setMcpReady(userMcpReady);
+  void syncTelegram(config);
   let workspaceWarningShown = false;
+  let escReadyForMcp = false;
 
   const history = [];
 
@@ -142,23 +148,19 @@ async function startChat() {
       contextEstimate
     });
 
-    // Esc on an empty box leaves desktop control first, then user MCPs,
-    // browser and Skills. Automatic workspace tools remain available.
+    // Back out of opt-in features first; require a second Esc for automatic MCPs.
     if (input === ESC_BACK) {
+      await userMcpReady;
       if (mcp.isComputerConnected()) {
         await mcp.disconnectComputer();
+        escReadyForMcp = mcp.hasUserConnections();
         history.length = 0;
         console.log(chalk.gray('⎋ Disconnected /computer. Other plugins remain unchanged.\n'));
         continue;
       }
-      if (mcp.hasUserConnections()) {
-        await mcp.disconnectUserServers();
-        const builtinNote = mcp.isBrowserConnected() ? ' Browser tools remain available.' : '';
-        console.log(chalk.gray(`⎋ Disconnected user MCP.${builtinNote}\n`));
-        continue;
-      }
       if (mcp.isBrowserConnected()) {
         await mcp.disconnectBrowser();
+        escReadyForMcp = mcp.hasUserConnections();
         console.log(chalk.gray('⎋ Disconnected /browser. Browser tools are unavailable.\n'));
         continue;
       }
@@ -169,10 +171,23 @@ async function startChat() {
           /* best effort — the tag below still clears for this session */
         }
         config = loadConfig();
+        escReadyForMcp = mcp.hasUserConnections();
         console.log(chalk.gray('⎋ Skills cleared. Back to simple chat.\n'));
+        continue;
+      }
+      if (mcp.hasUserConnections()) {
+        if (escReadyForMcp) {
+          await mcp.disconnectUserServers();
+          escReadyForMcp = false;
+          console.log(chalk.gray('⎋ Disconnected @allMcps.\n'));
+        } else {
+          escReadyForMcp = true;
+          console.log(chalk.gray('Press Esc again to disconnect @allMcps.\n'));
+        }
       }
       continue;
     }
+    escReadyForMcp = false;
 
     let text = input.trim();
     if (!text) continue;
@@ -185,6 +200,7 @@ async function startChat() {
     if (text === '/exit') {
       await telegram.stop();
       await workspaceReady;
+      await userMcpReady;
       await mcp.disconnectAll();
       clearSession(); // clean exit — nothing to resume next time
       console.log(chalk.yellow('Goodbye! 👋'));
@@ -196,6 +212,7 @@ async function startChat() {
       text = result.prompt;
     } else if (handler) {
       if (text === '/mcp' || text === '/browser' || text === '/computer' || text === '/computer disconnect') {
+        await userMcpReady;
         const before = mcp.getConnectionSignature();
         await handler({ promptBack, waitEnterOrEsc, dockerDownWarning, loadConfig, saveConfig });
         const after = mcp.getConnectionSignature();
@@ -257,6 +274,7 @@ async function startChat() {
     let turnError = null;
     try {
       const workspaceResult = await workspaceReady;
+      await userMcpReady;
       stopBusyFooter.updateContext?.(estimateFooter(history));
       if (!workspaceResult.ok && !workspaceWarningShown) {
         workspaceWarningShown = true;
