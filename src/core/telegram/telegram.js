@@ -95,6 +95,34 @@ class TelegramRuntime {
   async buildSystemPrompt(text) {
     return turn.buildSystemPrompt(this, text);
   }
+
+  async prepareScheduled(job) {
+    if (!validateTelegramConfig(this.config?.telegram).ok) {
+      throw new Error('Telegram is not connected for scheduled delivery.');
+    }
+    if (job.reminder) return job.task;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 120_000);
+    const stream = { push() {}, async showStatus() {} };
+    try {
+      const prompt = await this.buildSystemPrompt(job.task) +
+        '\nThis is an unattended scheduled task. Use only read-only tools; do not ask for approvals or claim to change external state.';
+      const reply = await this.completeWithSearch(prompt,
+        [{ role: 'user', content: job.task }], controller.signal, stream);
+      const answer = String(reply?.content || '').trim();
+      if (!answer) throw new Error('The scheduled task returned no answer.');
+      return answer;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  async sendScheduled(text) {
+    if (!validateTelegramConfig(this.config?.telegram).ok) {
+      throw new Error('Telegram is not connected for scheduled delivery.');
+    }
+    return this.send(this.config.telegram.chatId, text);
+  }
 }
 
 module.exports = { TelegramRuntime };

@@ -10,6 +10,8 @@ const selfImprovement = require('../core/self-improvement');
 const skills = require('../core/skills');
 const providers = require('../core/providers');
 const telegram = require('../core/telegram');
+const schedule = require('../core/schedule');
+const scheduleRunner = require('../core/schedule/runner');
 const { askInput, ESC_BACK } = require('./ui/input');
 const { notify, flushNotices } = require('./ui/utils');
 const { startTurnDisplay } = require('./ui/busyFooter');
@@ -32,9 +34,10 @@ async function syncTelegram(config) {
   try {
     // Telegram starts quietly like the other configured background services.
     // Keep failures visible so a broken connection is still diagnosable.
-    await telegram.sync(config);
+    return Boolean((await telegram.sync(config)).enabled);
   } catch (error) {
     notify(chalk.yellow(`⚠ Telegram could not start: ${error.message || 'connection failed'}`));
+    return false;
   }
 }
 
@@ -116,7 +119,17 @@ async function startChat() {
     }
   }).catch((error) => notify(chalk.yellow(`⚠ MCP auto-connect failed: ${error.message}`)));
   telegram.setMcpReady(userMcpReady);
-  void syncTelegram(config);
+  let telegramReadyForSchedule = false;
+  void syncTelegram(config).then((ready) => { telegramReadyForSchedule = ready; });
+  const schedules = scheduleRunner.start({
+    prepare: (job) => telegram.prepareScheduled(job),
+    deliver: (job, answer) => telegram.sendScheduled(job.reminder
+      ? `⏰ Reminder: ${answer}` : `⏰ Scheduled: ${job.task}\n\n${answer}`),
+    pending: (job) => telegram.sendScheduled(`⏰ Scheduled: ${job.task}\nStill working; I’ll send the result when ready.`),
+    failed: (job) => telegram.sendScheduled(`⚠ Scheduled task could not complete: ${job.task}`),
+    canRun: () => telegramReadyForSchedule && telegram.validateTelegramConfig(config.telegram).ok,
+    onError: (error) => notify(chalk.yellow(`⚠ Scheduled task failed: ${guardrails.outputGuard(error?.message || String(error))}`))
+  });
   let workspaceWarningShown = false;
   let escReadyForMcp = false;
 
@@ -198,6 +211,7 @@ async function startChat() {
 
     // Command handling
     if (text === '/exit') {
+      schedules?.stop();
       await telegram.stop();
       await workspaceReady;
       await userMcpReady;
@@ -229,7 +243,8 @@ async function startChat() {
         await handler({ promptBack, waitEnterOrEsc, dockerDownWarning, loadConfig, saveConfig });
         if (text === '/config') {
           config = loadConfig();
-          await syncTelegram(config);
+          telegramReadyForSchedule = false;
+          telegramReadyForSchedule = await syncTelegram(config);
         }
         // /skills writes selectedSkills via saveConfig; reload so the next
         // input box shows the updated skill tags immediately.
@@ -243,6 +258,19 @@ async function startChat() {
     if (!inputVerdict.ok) {
       printUserLine(text);
       console.log(chalk.red('⛔ ' + inputVerdict.reason) + '\n');
+      continue;
+    }
+
+    if (schedule.isScheduleRequest(text)) {
+      printUserLine(text);
+      try {
+        const result = schedule.create(text, config);
+        const message = result.job ? `✔ Scheduled: ${schedule.describe(result.job)}` :
+          result.error || `I need ${result.missing.join(', ')} to schedule this task.`;
+        console.log((result.job ? chalk.green : chalk.yellow)(message) + '\n');
+      } catch (error) {
+        console.log(chalk.red(`Could not save schedule: ${error.message}\n`));
+      }
       continue;
     }
 

@@ -1,6 +1,7 @@
 'use strict';
 
 const guardrails = require('../guardrails');
+const schedule = require('../schedule');
 const { telegramRequest } = require('./client');
 
 const MAX_MESSAGE_LENGTH = 4000;
@@ -67,6 +68,18 @@ async function handleUpdate(runtime, update) {
   const inputVerdict = guardrails.inputGuard(text);
   if (!inputVerdict.ok) {
     await runtime.send(chatId, `⛔ ${inputVerdict.reason}`);
+    return true;
+  }
+
+  if (schedule.isScheduleRequest(text)) {
+    try {
+      const result = schedule.create(text, runtime.config);
+      await runtime.send(chatId, result.job ? `✔ Scheduled: ${schedule.describe(result.job)}` :
+        result.error || `I need ${result.missing.join(', ')} to schedule this task.`);
+    } catch (error) {
+      runtime.onError(error);
+      await runtime.send(chatId, '⚠ Could not save the schedule.');
+    }
     return true;
   }
 

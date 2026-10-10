@@ -17,6 +17,7 @@ const { handleComputer, disconnectComputer } = require('./computer');
 const { handleNew } = require('./new');
 const { handleContinue } = require('./continue');
 const { handleSave } = require('./save');
+const { handleSchedule } = require('./schedule');
 
 // name -> (ctx) => Promise<void>
 const COMMANDS = {
@@ -26,6 +27,7 @@ const COMMANDS = {
   '/new': handleNew,
   '/continue': handleContinue,
   '/save': handleSave,
+  '/schedule': handleSchedule,
   '/mcp': handleMcp,
   '/browser': handleBrowser,
   '/computer': handleComputer,

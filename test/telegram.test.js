@@ -342,6 +342,58 @@ test('Telegram offers connected remote MCP tools and returns their results', asy
   assert.strictEqual(http.calls.at(-1).data.text, 'Found the docs.');
 });
 
+test('Telegram creates a schedule from a complete private-chat prompt', async () => {
+  const schedule = require('../src/core/schedule');
+  const originalCreate = schedule.create;
+  const http = fakeHttp();
+  let savedPrompt;
+  schedule.create = (text) => {
+    savedPrompt = text;
+    return { job: { task: 'summarize AI news', recurrence: 'daily', time: '21:00',
+      timeZone: 'Asia/Kolkata', nextRunAt: '2026-10-10T15:30:00Z' } };
+  };
+  try {
+    const runtime = new TelegramRuntime({ http,
+      complete: async () => { throw new Error('Schedule prompt must not call the model'); } });
+    runtime.config = runtimeConfig();
+    await runtime.handleUpdate(messageUpdate('Every day at 9 PM, summarize AI news'));
+    assert.match(savedPrompt, /Every day at 9 PM/);
+    assert.match(http.calls.at(-1).data.text, /✔ Scheduled: Daily at 9:00 PM/);
+  } finally {
+    schedule.create = originalCreate;
+  }
+});
+
+test('a due scheduled task runs through read-only Telegram tools and sends its answer', async () => {
+  const http = fakeHttp();
+  const runtime = new TelegramRuntime({
+    http,
+    searchProvider: { getToolSpec: () => null },
+    mcpProvider: { getTelegramTools: () => ({ specs: [], routes: new Map() }) },
+    complete: async (_key, _model, messages, tools) => {
+      assert.match(messages[0].content, /unattended scheduled task/);
+      assert.strictEqual(tools, undefined);
+      return { role: 'assistant', content: 'Three verified AI news items.' };
+    }
+  });
+  runtime.config = runtimeConfig();
+  const answer = await runtime.prepareScheduled({ task: 'summarize AI news' });
+  await runtime.sendScheduled(`⏰ Scheduled: summarize AI news\n\n${answer}`);
+  const sent = http.calls.filter((call) => call.method === 'sendMessage');
+  assert.match(sent.at(-1).data.text, /Three verified AI news items/);
+});
+
+test('a scheduled reminder sends its exact text without asking the model', async () => {
+  const http = fakeHttp();
+  const runtime = new TelegramRuntime({ http,
+    complete: async () => { throw new Error('reminders must not call the model'); } });
+  runtime.config = runtimeConfig();
+  const answer = await runtime.prepareScheduled({ task: 'today is my dace job happen', reminder: true });
+  assert.equal(answer, 'today is my dace job happen');
+  await runtime.sendScheduled(`⏰ Scheduled: ${answer}`);
+  assert.match(http.calls.at(-1).data.text, /today is my dace job happen/);
+});
+
 test('Telegram shows typing before streaming one progressively edited response', async () => {
   const http = fakeHttp();
   const runtime = new TelegramRuntime({
@@ -534,7 +586,7 @@ test('Telegram starts quietly in the CLI while startup failures remain visible',
   assert.doesNotMatch(source, /✓ Telegram connected/);
   assert.match(source, /Telegram could not start/);
   assert.match(source, /await telegram\.sync\(config\)/);
-  assert.match(source, /void syncTelegram\(config\)/);
+  assert.match(source, /void syncTelegram\(config\)\.then/);
 });
 
 test('Telegram background startup cannot revive polling after stop', async () => {

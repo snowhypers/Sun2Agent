@@ -26,6 +26,14 @@ function setMcpReady(promise) {
   runtime.setMcpReady(promise);
 }
 
+async function prepareScheduled(job) {
+  return runtime.prepareScheduled(job);
+}
+
+async function sendScheduled(text) {
+  return runtime.sendScheduled(text);
+}
+
 module.exports = {
   HELP_TEXT,
   TelegramRuntime,
@@ -34,5 +42,7 @@ module.exports = {
   splitMessage,
   sync,
   setMcpReady,
+  prepareScheduled,
+  sendScheduled,
   stop
 };

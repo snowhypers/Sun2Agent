@@ -276,7 +276,7 @@ Run `/config` and answer **Yes** to **Connect Telegram?**. Paste the bot token c
 
 Answering **No** disables the Telegram connection without deleting the saved bot token or chat ID. A later `/config` can reuse those credentials. They remain in the owner-only `~/.sun2agent/config.json` file and are never printed in the terminal.
 
-The CLI must remain running to receive Telegram messages. Beneath each user message, the bot immediately replies with `Agent is typing ...`, then progressively edits that same reply as text streams in. If Tavily web search is enabled in `/config`, Telegram can use the same read-only `web_search` capability and shows `Agent is searching ...` while it runs. Only the configured private chat is accepted; Telegram does not expose MCP or terminal tools.
+The CLI must remain running to receive Telegram messages. Beneath each user message, the bot immediately replies with `Agent is typing ...`, then progressively edits that same reply as text streams in. If Tavily web search is enabled in `/config`, Telegram can use `web_search` and shows `Agent is searching ...` while it runs. The configured private chat can also use connected remote read-only MCP tools; local MCP, browser, computer, and approval-required actions stay unavailable.
 
 | Telegram command | Action |
 |---|---|
@@ -284,7 +284,11 @@ The CLI must remain running to receive Telegram messages. Beneath each user mess
 | `/new` | Clear this Telegram chat's context |
 | `/stop` | Abort the active model response or pending web search |
 
-Stopping a turn removes its incomplete messages from Telegram history; earlier completed conversation remains available. Telegram still supports chat and optional Tavily search only, not browser, workspace, or user-added MCP tools.
+Stopping a turn removes its incomplete messages from Telegram history; earlier completed conversation remains available.
+
+### Scheduled Telegram tasks
+
+With Telegram configured, try `Every day at 9 PM, summarize today’s AI news and send it to Telegram` or `Today at 8 PM, check email`. A schedule needs a task, time, and **once** or **daily** recurrence; Sun2Agent asks when one is missing or the time conflicts with words like “morning.” The saved schedule shows the machine’s detected timezone. `/schedule` lists jobs in the CLI; select one for details or confirmed deletion. Jobs are stored in `~/.sun2agent/schedules.json` and run only while the CLI stays open. Scheduled work uses only read-only Telegram tools. Sun2Agent starts preparing the result about one minute early and retries a failed preparation up to twice. If it is still working at the scheduled time, it sends a Telegram status message, then the result when ready.
 
 ---
 
@@ -325,6 +329,7 @@ Mutating and unknown MCP calls route through guardrails and an explicit approval
 | `/agent` | Open the project's `AGENT.md` (creates a template on first use) |
 | `/memory` | Open and edit local `~/.sun2agent/memory.md` |
 | `/skills` | Add/edit `skills.md` and choose which Skills are active |
+| `/schedule` | List scheduled Telegram tasks, view details, or delete one |
 | `/delete` | Delete saved config and data |
 | `/exit` | Quit |
 
