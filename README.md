@@ -276,7 +276,7 @@ Run `/config` and answer **Yes** to **Connect Telegram?**. Paste the bot token c
 
 Answering **No** disables the Telegram connection without deleting the saved bot token or chat ID. A later `/config` can reuse those credentials. They remain in the owner-only `~/.sun2agent/config.json` file and are never printed in the terminal.
 
-The CLI must remain running to receive Telegram messages. Beneath each user message, the bot immediately replies with `Agent is typing ...`, then progressively edits that same reply as text streams in. If Tavily web search is enabled in `/config`, Telegram can use `web_search` and shows `Agent is searching ...` while it runs. The configured private chat can also use connected remote read-only MCP tools; local MCP, browser, computer, and approval-required actions stay unavailable.
+The CLI must remain running to receive Telegram messages. Beneath each user message, the bot immediately replies with `Agent is typing ...`, then progressively edits that same reply as text streams in. If Tavily web search is enabled in `/config`, Telegram can use `web_search` and shows `Agent is searching ...` while it runs. To expose a remote read-only MCP tool to the configured private chat, add its exact name to that server's `telegramTools` array in `mcp.json` (for example, `"telegramTools": ["tavily_search"]`). No MCP tools are exposed to Telegram by default; local MCP, browser, computer, and approval-required actions remain unavailable.
 
 | Telegram command | Action |
 |---|---|

@@ -112,7 +112,12 @@ function getOpenAiTools() {
   const routes = new Map(); // fullName -> { server, tool }
   for (const [server, c] of connections) {
     for (const t of c.tools) {
-      const fullName = sanitize(`${server}__${t.name}`);
+      const baseName = sanitize(`${server}__${t.name}`);
+      let fullName = baseName;
+      for (let suffix = 2; routes.has(fullName); suffix++) {
+        const ending = `_${suffix}`;
+        fullName = `${baseName.slice(0, 64 - ending.length)}${ending}`;
+      }
       routes.set(fullName, {
         server,
         tool: t.name,

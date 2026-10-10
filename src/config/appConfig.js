@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { randomUUID } = require('crypto');
 
 const CONFIG_DIR = path.join(os.homedir(), '.sun2agent');
 const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
@@ -96,7 +97,7 @@ function loadConfig() {
     if (!Array.isArray(raw.selectedSkills)) raw.selectedSkills = [];
     return raw;
   } catch (e) {
-    return defaultConfig();
+    throw new Error(`Cannot load ${CONFIG_FILE}: ${e.message}. Fix or restore this file before starting Sun2Agent.`);
   }
 }
 
@@ -104,11 +105,12 @@ function saveConfig(config) {
   ensureConfigDir();
   // The API key lives here — keep the file owner-only (0600) so other local
   // users cannot read it.
-  fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), { mode: 0o600 });
+  const temp = `${CONFIG_FILE}.${randomUUID()}.tmp`;
   try {
-    fs.chmodSync(CONFIG_FILE, 0o600); // enforce even if the file pre-existed
-  } catch (e) {
-    /* best effort */
+    fs.writeFileSync(temp, JSON.stringify(config, null, 2), { mode: 0o600, flag: 'wx' });
+    fs.renameSync(temp, CONFIG_FILE);
+  } finally {
+    if (fs.existsSync(temp)) fs.unlinkSync(temp);
   }
 }
 

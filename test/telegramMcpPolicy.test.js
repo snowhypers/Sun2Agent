@@ -30,10 +30,12 @@ test('Telegram remote MCP calls bypass HITL only for an allowed read tool', asyn
   const originalServers = config.getServers;
   const originalApproval = hitl.checkApproval;
   const modulePath = require.resolve('../src/core/mcp');
-  config.getServers = () => [
-    { name: 'remote', type: 'http', url: 'https://mcp.example.com/mcp' },
+  let servers = [
+    { name: 'remote', type: 'http', url: 'https://mcp.example.com/mcp',
+      telegramTools: ['search', 'send_message'] },
     { name: 'local', type: 'stdio', command: 'npx' }
   ];
+  config.getServers = () => servers;
   hitl.checkApproval = () => { throw new Error('HITL must not run in Telegram'); };
   const tools = [
     { name: 'search', inputSchema: { type: 'object', properties: {} } },
@@ -49,6 +51,8 @@ test('Telegram remote MCP calls bypass HITL only for an allowed read tool', asyn
     assert.match(await mcp.callTelegramTool('remote__search', {}), /Remote result/);
     await assert.rejects(() => mcp.callTelegramTool('remote__send_message', {}), /unavailable/);
     await assert.rejects(() => mcp.callTelegramTool('local__search', {}), /unavailable/);
+    servers = [{ name: 'remote', type: 'http', url: 'https://mcp.example.com/mcp' }];
+    assert.deepEqual(mcp.getTelegramTools().specs, []);
   } finally {
     registry.deleteByName('remote');
     registry.deleteByName('local');

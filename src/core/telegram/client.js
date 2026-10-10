@@ -18,7 +18,9 @@ function safeTelegramError(error, token) {
 
 async function telegramRequest(http, token, method, data = {}, signal) {
   try {
-    const response = await http.post(apiUrl(token, method), data, { signal });
+    const response = await http.post(apiUrl(token, method), data, {
+      signal, timeout: method === 'getUpdates' ? 30_000 : 15_000
+    });
     if (!response.data || response.data.ok !== true) throw new Error('Telegram rejected the request.');
     return response.data.result;
   } catch (error) {

@@ -144,6 +144,8 @@ const allowedDomains = [
 
 // Secrets masked in tool output before it reaches the terminal or the model.
 const secretPatterns = [
+  [/"((?:set-)?cookie|authorization|proxy-authorization)"(\s*:\s*)"[^"]*"/gi, '"$1"$2"***REDACTED***"'],
+  [/^([ \t]*(?:set-)?cookie|[ \t]*authorization|[ \t]*proxy-authorization)([ \t]*:[ \t]*)[^\r\n]+/gim, '$1$2***REDACTED***'],
   [/\bnvapi-[A-Za-z0-9_-]{16,}/g, 'nvapi-***REDACTED***'],
   [/\bsk-[A-Za-z0-9_-]{20,}/g, 'sk-***REDACTED***'],
   [/\bsk-ant-[A-Za-z0-9_-]{20,}/g, 'sk-ant-***REDACTED***'],

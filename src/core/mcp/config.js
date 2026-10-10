@@ -88,6 +88,7 @@ function getServers() {
       env: def.env || {},
       url: def.url,
       headers: def.headers || {},
+      telegramTools: Array.isArray(def.telegramTools) ? def.telegramTools : [],
       connectTimeoutMs: def.connectTimeoutMs
     }));
 }

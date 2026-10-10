@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#17232a">
+  <meta name="description" content="Install Sun2Agent and learn its CLI commands, models, workspace tools, MCP, browser and computer control, Telegram, schedules, and safety controls.">
+  <title>Sun2Agent docs — from first run to real tasks</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to documentation</a>
+
+  <header class="topbar">
+    <button class="menu-toggle" id="menu-toggle" type="button" aria-label="Open topics" aria-expanded="false" aria-controls="sidebar">
+      <span></span><span></span><span></span>
+    </button>
+    <a class="brand" href="#overview" aria-label="Sun2Agent documentation home"><span class="brand-sun" aria-hidden="true">☀</span><span>sun2Agent</span><span class="brand-docs">docs</span></a>
+    <div class="top-links">
+      <a href="https://github.com/snowhypers/Sun2Agent" target="_blank" rel="noopener noreferrer">GitHub <span aria-hidden="true">↗</span></a>
+      <a href="https://www.npmjs.com/package/sun2agent" target="_blank" rel="noopener noreferrer">npm <span aria-hidden="true">↗</span></a>
+    </div>
+  </header>
+
+  <div class="layout">
+    <div class="sidebar-scrim" id="sidebar-scrim" hidden></div>
+    <aside class="sidebar" id="sidebar" aria-label="Documentation topics">
+      <div class="sidebar-intro"><span class="status-dot" aria-hidden="true"></span> Documentation <small>Use the current source-code guide</small></div>
+      <nav aria-label="Topics">
+        <p class="nav-group">Get started</p>
+        <a href="#overview">Overview</a>
+        <a href="#requirements">Before you begin</a>
+        <a href="#install">Install</a>
+        <a href="#first-run">First run &amp; configuration</a>
+
+        <p class="nav-group">Work with tools</p>
+        <a href="#workspace">Workspace files</a>
+        <a href="#search">Web search</a>
+        <a href="#browser">Browser automation</a>
+        <a href="#computer">Computer control</a>
+        <a href="#mcp">MCP servers</a>
+
+        <p class="nav-group">Stay connected</p>
+        <a href="#telegram">Telegram</a>
+        <a href="#schedule">Scheduled tasks</a>
+        <a href="#context">Sessions, memory &amp; Skills</a>
+
+        <p class="nav-group">Operate safely</p>
+        <a href="#security">Approvals &amp; guardrails</a>
+        <a href="#sandbox">Docker sandbox</a>
+        <a href="#troubleshooting">Troubleshooting</a>
+        <a href="#commands">Command reference</a>
+      </nav>
+      <div class="sidebar-foot">Open source · MIT<br><a href="https://github.com/snowhypers/Sun2Agent/issues" target="_blank" rel="noopener noreferrer">Report a documentation issue ↗</a></div>
+    </aside>
+
+    <main id="content" class="content">
+      <article>
+        <section class="hero" id="overview" aria-labelledby="hero-title">
+          <div class="hero-copy">
+            <p class="kicker"><span class="prompt-mark">›</span> A field guide for the terminal agent</p>
+            <h1 id="hero-title">From prompt<br>to action.</h1>
+            <p class="hero-lede">Sun2Agent connects your chosen model to files, MCP servers, the web, a browser, and—when you opt in—your desktop or Telegram. This guide takes you from installation to a safe first task.</p>
+            <div class="hero-actions"><a class="button button-primary" href="#install">Start the guide <span aria-hidden="true">↓</span></a><a class="button button-quiet" href="#commands">See commands</a></div>
+          </div>
+          <div class="hero-terminal" aria-label="Example Sun2Agent terminal conversation">
+            <div class="terminal-title"><span class="terminal-lights" aria-hidden="true"><i></i><i></i><i></i></span><span>sun2agent — ~/my-project</span></div>
+            <div class="terminal-lines"><p><span class="terminal-prompt">›</span> Create a test for the login service</p><p class="terminal-muted">⚙ workspace__read_file(...)</p><p class="terminal-muted">⚙ workspace__write_file(...)</p><p class="terminal-approval">⚠ Allow this file change?</p><p class="terminal-success">✓ Test written. Run the suite to verify.</p></div>
+            <div class="terminal-footer">chat ~3.2k tokens <span>→ your model</span></div>
+          </div>
+        </section>
+
+        <div class="article-body">
+          <div class="callout callout-info"><strong>Source code vs npm.</strong> This guide follows the current repository. The published npm version may not include every feature shown here. For the newest code, use the <a href="#install">local checkout steps</a>.</div>
+
+          <section class="doc-section" id="requirements">
+            <div class="section-heading"><span class="section-index">01</span><div><p class="section-label">Get started</p><h2>Before you begin</h2></div></div>
+            <p>You need a terminal, Node.js, and a model provider. Add other integrations only when you need them.</p>
+            <ul class="check-list">
+              <li><strong>Node.js 20 or 22+</strong> and npm. Check with <code>node --version</code>.</li>
+              <li><strong>A model credential:</strong> an NVIDIA NIM API key, or an API key and base URL for an OpenAI-compatible Chat Completions service.</li>
+              <li><strong>Internet access</strong> for npm installation and your model endpoint.</li>
+            </ul>
+            <p>Optional extras: a Tavily key for web search, Chrome for <code>/browser</code>, Docker for the sandbox, and a Telegram bot for remote chat and scheduled delivery. <code>/computer</code> needs an interactive host desktop; on macOS, grant the permissions shown by its diagnostic report.</p>
+          </section>
+
+          <section class="doc-section" id="install">
+            <div class="section-heading"><span class="section-index">02</span><div><p class="section-label">Get started</p><h2>Install Sun2Agent</h2></div></div>
+            <p>For everyday use, install globally, then launch it from the folder you want the agent to work in.</p>
+            <div class="code-block"><div class="code-head"><span>Terminal · recommended</span><button class="copy-button" type="button" aria-label="Copy install commands">Copy</button></div><pre><code>npm install -g sun2agent
+cd /path/to/your/project
+sun2agent</code></pre></div>
+            <p>To try it without a global installation, run <code>npx sun2agent</code>. To update a global installation later, run <code>npm install -g sun2agent@latest</code>. To use the latest repository code, clone and run locally:</p>
+            <div class="code-block"><div class="code-head"><span>Terminal · latest source</span><button class="copy-button" type="button" aria-label="Copy source commands">Copy</button></div><pre><code>git clone https://github.com/snowhypers/Sun2Agent.git
+cd Sun2Agent
+npm install
+npm start</code></pre></div>
+            <div class="callout"><strong>Working directory matters.</strong> Sun2Agent treats the directory you launch from as the active workspace. Start it inside your project before asking it to edit files.</div>
+          </section>
+
+          <section class="doc-section" id="first-run">
+            <div class="section-heading"><span class="section-index">03</span><div><p class="section-label">Get started</p><h2>First run &amp; configuration</h2></div></div>
+            <p>Use <code>/config</code> to choose a provider and set optional services. Each topic is independent; select <strong>Done</strong> when you want to save.</p>
+            <ol class="steps"><li><strong>Provider and model:</strong> select built-in NVIDIA NIM or add a custom OpenAI-compatible provider.</li><li><strong>API key:</strong> paste your key into the hidden prompt. On later visits, press Enter to keep the saved key.</li><li><strong>Model:</strong> pick a listed NVIDIA model, or enter the exact model ID supplied by your custom provider.</li><li><strong>Optional services:</strong> turn LangSmith tracing, Tavily web search, memory, and Telegram on or off separately.</li><li><strong>Done:</strong> review the confirmation summary and return to chat.</li></ol>
+            <div class="code-block compact"><div class="code-head"><span>Your first task</span><button class="copy-button" type="button" aria-label="Copy first task">Copy</button></div><pre><code>› Explain this project's structure and suggest the first test to run.</code></pre></div>
+            <p>Saved credentials live in the owner-only <code>~/.sun2agent/config.json</code>. Custom providers must support the OpenAI-compatible Chat Completions API; agent tool use also requires compatible tool calling.</p>
+          </section>
+
+          <section class="doc-section" id="workspace">
+            <div class="section-heading"><span class="section-index">04</span><div><p class="section-label">Work with tools</p><h2>Workspace files</h2></div></div>
+            <p>File tools are available automatically. There is no <code>/workspace</code> step: launch from a project folder and describe the file task in plain language.</p>
+            <div class="example"><span class="example-label">Try this</span><p>“Read the package scripts, add a focused test for the parser, then tell me which test command to run.”</p></div>
+            <p>Reads can run without approval. Writing files asks for approval for routine changes in the current prompt; deletion asks again. File access stays within the active workspace and protected credential files remain blocked.</p>
+            <p>Put project-specific guidance in <code>AGENT.md</code> at the workspace root. Use <code>/agent</code> to open or create it.</p>
+          </section>
+
+          <section class="doc-section" id="search">
+            <div class="section-heading"><span class="section-index">05</span><div><p class="section-label">Work with tools</p><h2>Web search</h2></div></div>
+            <p>Web search is off by default. In <code>/config</code>, choose <strong>Web Search</strong>, enable Tavily, and save its API key. The agent can then use <code>web_search</code> for current facts and research questions.</p>
+            <div class="example"><span class="example-label">Try this</span><p>“Find the latest Node.js release from the official release notes. Include its date and source URL.”</p></div>
+            <p>For time-sensitive answers, check the publication date and linked source. A search result is evidence to inspect, not a guarantee that a claim is current.</p>
+          </section>
+
+          <section class="doc-section" id="browser">
+            <div class="section-heading"><span class="section-index">06</span><div><p class="section-label">Work with tools</p><h2>Browser automation</h2></div></div>
+            <p>Run <code>/browser</code> to start Playwright MCP with an isolated Chrome profile. The browser stays disconnected until requested.</p>
+            <div class="code-block compact"><div class="code-head"><span>Example</span><button class="copy-button" type="button" aria-label="Copy browser example">Copy</button></div><pre><code>/browser
+› Open nodejs.org and show me the latest release notes.</code></pre></div>
+            <p>The isolated profile is separate from your normal signed-in browser. Expect to sign in yourself if a site requires an account. Clicking, typing, dragging, and key presses require fresh approval; inspect the target before allowing a consequential action.</p>
+            <div class="callout"><strong>Browser vs computer:</strong> <code>/browser</code> controls an isolated web browser. It does not control your other desktop apps.</div>
+          </section>
+
+          <section class="doc-section" id="computer">
+            <div class="section-heading"><span class="section-index">07</span><div><p class="section-label">Work with tools</p><h2>Computer control</h2></div></div>
+            <p><code>/computer</code> connects native desktop-control tools on demand. Unlike <code>/browser</code>, it operates your <strong>real host desktop</strong>, so watch the actions and approve each change carefully.</p>
+            <ol class="steps"><li>Run <code>/computer</code> and confirm that you want real desktop access.</li><li>Choose image support only if your selected model accepts images.</li><li>Review the permission report. On macOS, Accessibility and Screen Recording may be needed; some actions ask for Automation permission.</li><li>Ask for a narrow task, such as “Open VS Code and show its current window.”</li></ol>
+            <p>Read-only checks need no approval. Opening or activating the same app shares one approval per prompt; clicks, typing, menu selections, and scripts still ask separately. Esc stops the active turn; Esc at an empty input disconnects <code>/computer</code>. It is unavailable inside the Docker sandbox.</p>
+            <p>The first connection can download its pinned MCP package and has a 30-second connection limit. A connected server does not guarantee every app is controllable.</p>
+          </section>
+
+          <section class="doc-section" id="mcp">
+            <div class="section-heading"><span class="section-index">08</span><div><p class="section-label">Work with tools</p><h2>Connect MCP servers</h2></div></div>
+            <p>Use <code>/mcp</code> to edit <code>~/.sun2agent/mcp.json</code>, connect one server, connect all, or disconnect. Sun2Agent supports local <code>stdio</code> servers and remote HTTP/SSE servers.</p>
+            <div class="code-block"><div class="code-head"><span>~/.sun2agent/mcp.json</span><button class="copy-button" type="button" aria-label="Copy MCP example">Copy</button></div><pre><code>{
+  "mcpServers": {
+    "research": {
+      "type": "http",
+      "url": "https://your-server.example.com/mcp",
+      "telegramTools": ["search"]
+    }
+  }
+}</code></pre></div>
+            <p>The optional <code>telegramTools</code> list names remote read-only tools you explicitly allow in Telegram; without it, no MCP tools are exposed there. Local MCP servers, browser tools, computer tools, and approval-required actions are never offered to Telegram.</p>
+            <div class="callout callout-warning"><strong>Trust boundary:</strong> a local MCP server can launch a program, and a remote server receives tool arguments. Add only servers you trust. Tool descriptions and “read-only” hints are not security guarantees.</div>
+          </section>
+
+          <section class="doc-section" id="telegram">
+            <div class="section-heading"><span class="section-index">09</span><div><p class="section-label">Stay connected</p><h2>Set up Telegram</h2></div></div>
+            <p>Telegram lets one configured private chat reach your running agent. The CLI must stay open to receive and answer messages.</p>
+            <ol class="steps"><li>In Telegram, open <strong>@BotFather</strong>, send <code>/newbot</code>, choose a name and username, and copy the bot token. Keep it private.</li><li>Open your new bot and send <code>/start</code> so there is a chat to authorize.</li><li>Find your numeric Telegram <strong>user/chat ID</strong>. You can inspect your bot’s <code>getUpdates</code> response after sending a message; in a private chat, use the matching <code>message.chat.id</code> and <code>message.from.id</code>. Do not share the token or paste the API response into a public issue.</li><li>In Sun2Agent, run <code>/config</code> → <strong>Telegram</strong>, answer Yes to <strong>Connect Telegram?</strong>, then enter the bot token and numeric chat ID. Select <strong>Done</strong>.</li><li>Keep Sun2Agent running and send your bot a question.</li></ol>
+            <div class="command-strip"><span><code>/start</code> help</span><span><code>/new</code> fresh chat</span><span><code>/stop</code> abort current reply</span></div>
+            <p>Typing status appears before the response and the reply is edited as text arrives. Telegram does not receive local file, browser, or desktop control tools. Selecting “No” in configuration disables Telegram without deleting stored credentials.</p>
+          </section>
+
+          <section class="doc-section" id="schedule">
+            <div class="section-heading"><span class="section-index">10</span><div><p class="section-label">Stay connected</p><h2>Scheduled Telegram tasks</h2></div></div>
+            <p>With Telegram configured, write a task containing three things: <strong>what to do</strong>, <strong>when</strong>, and <strong>once or daily</strong>. If a detail is missing or conflicts, Sun2Agent asks you to clarify.</p>
+            <div class="code-block compact"><div class="code-head"><span>Example</span><button class="copy-button" type="button" aria-label="Copy schedule example">Copy</button></div><pre><code>› Every day at 9 PM, summarize today's AI news and send it to Telegram.</code></pre></div>
+            <p>It saves the schedule with the machine’s detected timezone and shows the complete result. Use <code>/schedule</code> to inspect jobs or confirm deletion. Only unattended read-only tasks are supported. The CLI must remain running for jobs to fire. On a VPS, verify that its timezone matches the time you expect.</p>
+            <div class="callout"><strong>Reliability note:</strong> a failed Telegram delivery remains scheduled for retry. If Telegram accepts a message immediately before a crash, a duplicate may be possible after restart.</div>
+          </section>
+
+          <section class="doc-section" id="context">
+            <div class="section-heading"><span class="section-index">11</span><div><p class="section-label">Stay connected</p><h2>Sessions, memory &amp; Skills</h2></div></div>
+            <p>A normal launch starts a fresh conversation. The footer estimates retained chat tokens; it does not show total provider usage or remaining model capacity.</p>
+            <div class="info-grid"><div><h3>Conversation</h3><p><code>/new</code> clears the current chat. <code>/continue</code> resumes an interrupted task from the current session snapshot, if available.</p></div><div><h3>Saved task summary</h3><p><code>/save</code> drafts a short summary; nothing is saved until you approve it. Relevant summaries can help later tasks in the same workspace.</p></div><div><h3>Memory</h3><p>Enable memory in <code>/config</code>. <code>/memory</code> opens editable preferences in <code>~/.sun2agent/memory.md</code>.</p></div><div><h3>Project rules &amp; Skills</h3><p><code>AGENT.md</code> holds project instructions. <code>/skills</code> lets you edit and select reusable instruction blocks from <code>skills.md</code>.</p></div></div>
+            <p>These sources are advisory context, not a way to override guardrails or tool approvals. The agent may propose a short lesson after a clear failure; choose Save or Discard.</p>
+          </section>
+
+          <section class="doc-section" id="security">
+            <div class="section-heading"><span class="section-index">12</span><div><p class="section-label">Operate safely</p><h2>Approvals &amp; guardrails</h2></div></div>
+            <p>Sun2Agent checks inputs and tool calls with command, network, filesystem, and output guards. Sensitive output is masked before it is kept in the conversation or shown to the model. These rules reduce risk but do not make arbitrary tools safe.</p>
+            <div class="security-flow"><span>Prompt</span><b aria-hidden="true">→</b><span>Model proposes tool</span><b aria-hidden="true">→</b><span>Guards + approval</span><b aria-hidden="true">→</b><span>Tool runs</span></div>
+            <p>Read-only checks generally run without interruption. Routine changes can share one approval for that MCP server and prompt. Deletes, messages, scripts, purchases, account changes, and unknown actions require a fresh decision. Approvals do not carry into another prompt.</p>
+            <p>Your model provider receives the prompts and tool context needed to answer. Tavily, LangSmith, and Telegram receive data only when enabled or used. There is no built-in telemetry, but optional integrations have their own data policies.</p>
+          </section>
+
+          <section class="doc-section" id="sandbox">
+            <div class="section-heading"><span class="section-index">13</span><div><p class="section-label">Operate safely</p><h2>Optional Docker sandbox</h2></div></div>
+            <p>Enable Docker isolation if you want the whole agent to run in a container. Docker must be installed and running first. The agent will not silently fall back to host execution if Docker is unavailable.</p>
+            <div class="code-block compact"><div class="code-head"><span>Terminal</span><button class="copy-button" type="button" aria-label="Copy Docker commands">Copy</button></div><pre><code>sun2agent sandbox enable
+sun2agent sandbox status
+sun2agent sandbox disable</code></pre></div>
+            <p>The active project is mounted into the container as its workspace. Host desktop control with <code>/computer</code> is unavailable inside Docker; local host-integrated MCP servers may also need a different setup. Use <code>/browser</code> only if its browser dependencies are available inside the container.</p>
+          </section>
+
+          <section class="doc-section" id="troubleshooting">
+            <div class="section-heading"><span class="section-index">14</span><div><p class="section-label">Operate safely</p><h2>Troubleshooting</h2></div></div>
+            <div class="faq"><details><summary>The agent answers but does not call tools</summary><p>Check that the selected model supports OpenAI-compatible tool calling. Confirm the relevant integration is connected (<code>/browser</code>, <code>/computer</code>, or <code>/mcp</code>). Try a precise task that names the desired action.</p></details><details><summary>The model returns HTTP 429</summary><p>The provider is rate-limiting your requests. Wait for its cooldown, reduce repeated prompts or tool loops, or select another model. Sun2Agent retries some transient model errors once; it does not override a long <code>Retry-After</code>.</p></details><details><summary>Telegram reports a getUpdates conflict</summary><p>Two running processes are polling the same bot token. Stop the other Sun2Agent instance, then restart one copy.</p></details><details><summary>Browser or computer cannot connect</summary><p>For <code>/browser</code>, check Chrome and the isolated browser startup. For <code>/computer</code>, inspect the permission report and remember it needs the host desktop, not Docker. First use may download the MCP package.</p></details><details><summary>Scheduled message did not arrive</summary><p>Keep Sun2Agent running, verify Telegram is connected, check the saved job with <code>/schedule</code>, and confirm the displayed timezone. A job cannot fire while the CLI is closed.</p></details></div>
+          </section>
+
+          <section class="doc-section" id="commands">
+            <div class="section-heading"><span class="section-index">15</span><div><p class="section-label">Reference</p><h2>Command reference</h2></div></div>
+            <div class="table-wrap"><table><thead><tr><th scope="col">Command</th><th scope="col">What it does</th></tr></thead><tbody><tr><td><code>/config</code></td><td>Choose provider and model; configure optional services</td></tr><tr><td><code>/mcp</code></td><td>Manage and connect MCP servers</td></tr><tr><td><code>/browser</code></td><td>Connect isolated Playwright browser tools</td></tr><tr><td><code>/computer</code></td><td>Connect real desktop control</td></tr><tr><td><code>/computer disconnect</code></td><td>Disconnect only computer control</td></tr><tr><td><code>/agent</code></td><td>Open or create the workspace’s <code>AGENT.md</code></td></tr><tr><td><code>/skills</code></td><td>Edit and select reusable Skills</td></tr><tr><td><code>/memory</code></td><td>Open local preference memory</td></tr><tr><td><code>/new</code></td><td>Start a fresh conversation</td></tr><tr><td><code>/continue</code></td><td>Resume the current interrupted task</td></tr><tr><td><code>/save</code></td><td>Review and optionally save a task summary</td></tr><tr><td><code>/schedule</code></td><td>List, inspect, or delete scheduled Telegram jobs</td></tr><tr><td><code>/help</code></td><td>Show built-in help</td></tr><tr><td><code>/exit</code></td><td>Quit Sun2Agent</td></tr></tbody></table></div>
+            <div class="end-note"><span class="prompt-mark">›</span> Start in your project folder. Give one clear task. Review each proposed change.</div>
+          </section>
+        </div>
+      </article>
+      <footer class="page-footer"><span>☀ sun2Agent documentation</span><span><a href="https://github.com/snowhypers/Sun2Agent" target="_blank" rel="noopener noreferrer">Source on GitHub ↗</a> · <a href="#overview">Back to top ↑</a></span></footer>
+    </main>
+  </div>
+</body>
+</html>

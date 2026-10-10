@@ -40,7 +40,7 @@ function startSession() {
 }
 
 const MUTATING_WORDS = new Set([
-  'add', 'apply', 'command', 'copy', 'create', 'delete', 'deploy', 'edit',
+  'add', 'apply', 'charge', 'command', 'copy', 'create', 'delete', 'deploy', 'edit',
   'execute', 'install', 'insert', 'move', 'mutate', 'patch', 'post', 'publish',
   'put', 'remove', 'rename', 'restart', 'run', 'send', 'set', 'shell', 'start',
   'stop', 'trigger', 'uninstall', 'update', 'upload', 'upsert', 'write'
@@ -92,7 +92,7 @@ function computerNavigationScope(tool, args, annotations) {
 }
 
 const SAFE_BROWSER_TOOLS = new Set([
-  'browser_close', 'browser_console_messages', 'browser_drag',
+  'browser_close', 'browser_console_messages',
   'browser_emulate_media', 'browser_find', 'browser_hover', 'browser_navigate',
   'browser_navigate_back', 'browser_network_request', 'browser_network_requests',
   'browser_resize', 'browser_snapshot', 'browser_take_screenshot',
@@ -105,7 +105,6 @@ const SENSITIVE_BROWSER_ACTION =
 // Browser approvals are intentionally narrow and never remembered. Routine
 // navigation remains smooth; consequential actions require a fresh decision.
 function browserApproval(tool, args = {}) {
-  const values = JSON.stringify(args || {});
   if (tool === 'browser_evaluate' || tool === 'browser_run_code_unsafe') {
     return { required: true, remember: false };
   }
@@ -118,14 +117,8 @@ function browserApproval(tool, args = {}) {
   if (tool === 'browser_handle_dialog') {
     return { required: args.accept === true, remember: false };
   }
-  if (tool === 'browser_press_key') {
-    return { required: /^enter$/i.test(String(args.key || '')), remember: false };
-  }
-  if (tool === 'browser_type') {
-    return { required: args.submit === true || SENSITIVE_BROWSER_ACTION.test(values), remember: false };
-  }
-  if (tool === 'browser_fill_form' || tool === 'browser_click') {
-    return { required: SENSITIVE_BROWSER_ACTION.test(values), remember: false };
+  if (['browser_press_key', 'browser_type', 'browser_fill_form', 'browser_click', 'browser_drag'].includes(tool)) {
+    return { required: true, remember: false };
   }
   if (SAFE_BROWSER_TOOLS.has(tool)) return { required: false, remember: false };
   return null;
@@ -140,7 +133,7 @@ function approvalArgs(server, args, tool) {
   function mask(value) {
     if (Array.isArray(value)) return value.map(mask);
     if (!value || typeof value !== 'object') return value;
-    const sensitiveField = SENSITIVE_BROWSER_ACTION.test(
+    const sensitiveField = tool === 'browser_type' || tool === 'browser_fill_form' || SENSITIVE_BROWSER_ACTION.test(
       [value.name, value.element, value.label].filter(Boolean).join(' ')
     );
     return Object.fromEntries(Object.entries(value).map(([key, item]) => [
@@ -166,7 +159,6 @@ function requiresApproval(tool, annotations = {}) {
   const words = toolWords(tool);
   if (annotations.destructiveHint === true) return true;
   if (words.some((word) => MUTATING_WORDS.has(word))) return true;
-  if (annotations.readOnlyHint === true) return false;
   if (words.some((word) => READ_ONLY_WORDS.has(word))) return false;
   return true;
 }

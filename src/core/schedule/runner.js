@@ -20,7 +20,7 @@ function start({ prepare, deliver, pending, failed, file, now = () => new Date()
       current.nextRunAt = schedule.nextRun(job.time, job.timeZone, now());
       remaining.push(current);
     }
-    // Claim before delivery so a restart does not resend an already delivered message.
+    // Advance only after Telegram accepts the message.
     schedule.save(remaining, file);
     return true;
   }
@@ -28,6 +28,7 @@ function start({ prepare, deliver, pending, failed, file, now = () => new Date()
   async function run(job) {
     let ready = false;
     const result = (async () => {
+      if (job.preparedAnswer) return { answer: job.preparedAnswer };
       for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
         if (stopped) return null;
         try { return { answer: await prepare(job) }; }
@@ -47,12 +48,24 @@ function start({ prepare, deliver, pending, failed, file, now = () => new Date()
       try { await pending(job); } catch (error) { onError(error, job); }
     }
     const outcome = await result;
-    if (stopped || !canRun() || !claim(job)) return;
-    if (outcome.error) {
-      onError(outcome.error, job);
-      await failed(job);
-    } else {
-      await deliver(job, outcome.answer);
+    if (stopped || !canRun()) return;
+    try {
+      if (outcome.error) {
+        onError(outcome.error, job);
+        await failed(job);
+      } else {
+        await deliver(job, outcome.answer);
+      }
+      claim(job);
+    } catch (error) {
+      onError(error, job);
+      const jobs = schedule.load(file);
+      const current = jobs.find((item) => item.id === job.id && item.nextRunAt === job.nextRunAt);
+      if (current) {
+        if (outcome.answer) current.preparedAnswer = outcome.answer;
+        current.nextRunAt = new Date(now().getTime() + 60_000).toISOString();
+        schedule.save(jobs, file);
+      }
     }
   }
 

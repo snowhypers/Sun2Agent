@@ -1,6 +1,9 @@
 'use strict';
 
 const axios = require('axios');
+const path = require('node:path');
+const os = require('node:os');
+const { createHash } = require('node:crypto');
 const { chatCompletion } = require('../model/api');
 const search = require('../search');
 const mcp = require('../mcp');
@@ -40,6 +43,9 @@ class TelegramRuntime {
     if (!verdict.ok) return { enabled: false };
 
     this.config = config;
+    this.offset = 0;
+    this.pendingFile = path.join(os.homedir(), '.sun2agent',
+      `telegram-pending-${createHash('sha256').update(config.telegram.botToken).digest('hex').slice(0, 12)}.json`);
     const bot = await telegramRequest(this.http, config.telegram.botToken, 'getMe');
     if (generation !== this.generation) return { enabled: false };
     this.running = true;

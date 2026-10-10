@@ -217,12 +217,12 @@ function getTelegramTools() {
     .filter((connection) => !connection.builtin &&
       ['http', 'https', 'streamable-http', 'remote', 'sse'].includes(connection.type))
     .map((connection) => connection.name));
-  const allowedServers = new Set(getServers()
+  const allowedServers = new Map(getServers()
     .filter((server) => connectedRemotes.has(server.name) && telegramPolicy.isRemoteServer(server))
-    .map((server) => server.name));
+    .map((server) => [server.name, new Set(server.telegramTools)]));
   const { specs, routes } = registry.getOpenAiTools();
   const safeRoutes = new Map([...routes].filter(([, route]) =>
-    allowedServers.has(route.server) && telegramPolicy.isReadOnlyTool(route)));
+    allowedServers.get(route.server)?.has(route.tool) && telegramPolicy.isReadOnlyTool(route)));
   return { specs: specs.filter((spec) => safeRoutes.has(spec.function.name)), routes: safeRoutes };
 }
 

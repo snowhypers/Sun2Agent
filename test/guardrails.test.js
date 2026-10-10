@@ -189,6 +189,14 @@ test('outputGuard masks bearer tokens and key=value secrets', () => {
   assert.ok(!kv.includes('abcdefghijklmnop1234567890'), `got: ${kv}`);
 });
 
+test('outputGuard masks browser network session headers', () => {
+  const out = guardrails.outputGuard('Cookie: session=abc123; csrf=xyz789\n' +
+    'Set-Cookie: sid=secret123\n' +
+    '{"headers":{"cookie":"sid=secret456","content-type":"text/html"}}');
+  assert.doesNotMatch(out, /abc123|xyz789|secret123|secret456/);
+  assert.match(out, /content-type/);
+});
+
 test('outputGuard leaves ordinary text untouched', () => {
   const clean = 'Credit score is 46, risk level MEDIUM, decision REVIEW.';
   assert.strictEqual(guardrails.outputGuard(clean), clean);

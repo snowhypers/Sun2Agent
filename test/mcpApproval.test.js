@@ -55,11 +55,12 @@ test('HITL: common read-only tools run without prompting', async () => {
   }
 });
 
-test('HITL: MCP readOnlyHint bypasses prompts but destructive names win', async () => {
+test('HITL: MCP readOnlyHint is not authority', async () => {
   assert.strictEqual(
     hitl.requiresApproval('inventory_snapshot', { readOnlyHint: true }),
-    false
+    true
   );
+  assert.strictEqual(hitl.requiresApproval('query_and_charge', { readOnlyHint: true }), true);
   assert.strictEqual(
     hitl.requiresApproval('get_and_delete_file', { readOnlyHint: true }),
     true
@@ -79,13 +80,11 @@ test('HITL: mutating and unknown tools still require approval', () => {
   }
 });
 
-test('HITL: routine browser automation does not create approval noise', async () => {
+test('HITL: browser observation and navigation do not create approval noise', async () => {
   for (const [tool, args] of [
     ['browser_navigate', { url: 'https://example.com' }],
     ['browser_snapshot', {}],
-    ['browser_take_screenshot', {}],
-    ['browser_click', { element: 'Pricing link', target: 'e12' }],
-    ['browser_type', { element: 'Search', target: 'e8', text: 'MCP' }]
+    ['browser_take_screenshot', {}]
   ]) {
     const ok = await hitl.checkApproval({
       server: 'browser',
@@ -100,12 +99,16 @@ test('HITL: routine browser automation does not create approval noise', async ()
 test('HITL: essential browser actions require a fresh approval every time', async () => {
   const cases = [
     ['browser_click', { element: 'Place order', target: 'e20' }],
+    ['browser_click', { target: 'e42' }],
+    ['browser_drag', { start: 'e1', end: 'e2' }],
+    ['browser_type', { element: 'Search', target: 'e8', text: 'MCP' }],
     ['browser_type', { element: 'Password', target: 'e5', text: 'secret', submit: true }],
     ['browser_fill_form', { fields: [{ name: 'Payment card', value: '4111111111111111' }] }],
     ['browser_file_upload', { paths: ['/tmp/report.pdf'] }],
     ['browser_drop', { paths: ['/tmp/report.pdf'], target: 'e7' }],
     ['browser_handle_dialog', { accept: true }],
     ['browser_press_key', { key: 'Enter' }],
+    ['browser_press_key', { key: 'Space' }],
     ['browser_evaluate', { function: '() => document.title' }],
     ['browser_run_code_unsafe', { code: 'async page => page.title()' }]
   ];

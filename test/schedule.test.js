@@ -76,7 +76,7 @@ test('schedule computes next daily time in the saved timezone', () => {
     new Date('2026-10-10T10:00:00Z'), 'today'), /passed today/);
 });
 
-test('runner claims a due one-time job before delivery and advances daily jobs', async (t) => {
+test('runner claims a due one-time job after delivery and advances daily jobs', async (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sun2agent-schedule-run-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const file = path.join(dir, 'schedules.json');
@@ -96,6 +96,7 @@ test('runner claims a due one-time job before delivery and advances daily jobs',
     pending: async () => {}, failed: async () => {} });
   t.after(() => service.stop());
   await completed;
+  await new Promise((resolve) => setImmediate(resolve));
   assert.deepEqual(seen, ['once', 'daily']);
   const remaining = schedule.load(file);
   assert.deepEqual(remaining.map((job) => job.id), ['daily']);
@@ -134,6 +135,7 @@ test('runner prepares early but delivers only at the scheduled time', async (t) 
     pending: async () => { throw new Error('answer was ready'); }, failed: async () => {} });
   t.after(() => service.stop());
   await completed;
+  await new Promise((resolve) => setImmediate(resolve));
   assert.equal(prepared, true);
   assert.ok(deliveredAt >= due);
   assert.deepEqual(schedule.load(file), []);
@@ -157,6 +159,7 @@ test('runner retries a failed preparation and sends an on-time status while work
     failed: async () => { throw new Error('should recover'); } });
   t.after(() => service.stop());
   await completed;
+  await new Promise((resolve) => setImmediate(resolve));
   assert.equal(attempts, 2);
   assert.deepEqual(events.map(([event]) => event), ['pending', 'delivered']);
   assert.ok(events[0][1] >= due);
