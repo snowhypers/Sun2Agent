@@ -1,7 +1,7 @@
 {
   "name": "sun2agent",
-  "version": "1.7.0",
-  "description": "Open-source AI agent CLI and MCP client with browser automation, workspace tools, Telegram chat, web search, HITL approvals, and NVIDIA NIM or custom OpenAI-compatible providers.",
+  "version": "1.9.0",
+  "description": "Open-source autonomous AI coding agent CLI & native MCP client (free Claude Code alternative). Desktop & browser automation, workspace tools, 5-layer guardrails, Docker sandbox, and custom OpenAI/NVIDIA NIM providers.",
   "main": "bin/sun2agent.js",
   "bin": {
     "sun2agent": "./bin/sun2agent.js"
@@ -16,6 +16,16 @@
     "test": "node --test --test-concurrency=1 \"test/*.test.js\""
   },
   "keywords": [
+    "claude-code",
+    "claude-code-alternative",
+    "coding-agent",
+    "terminal-coding-agent",
+    "cursor-alternative",
+    "computer-use",
+    "desktop-automation",
+    "self-improvement",
+    "self-hosted",
+    "ollama",
     "ai-agent",
     "ai-agent-cli",
     "agent-harness",

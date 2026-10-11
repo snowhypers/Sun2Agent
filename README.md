@@ -2,10 +2,12 @@
 
 # ☀️ Sun2Agent
 
-### Open-Source AI Agent CLI · Native MCP Client ·  Automation
+### Open-Source AI Agent CLI · Native MCP Client · Free Claude Code Alternative
 **Your model. Your tools. AI automation in your terminal.**
 
-Sun2Agent is a free, open-source **AI agent harness** with MCP server connections, browser automation, workspace tools, web search, and Telegram chat. OpenAI-compatible models. Apply reusable **Skills (`skills.md`)**, **agent instructions (`AGENT.md`)**, and **custom memory (`memory.md`)**—with **5-layer guardrails**, **HITL approvals**, an optional **Docker sandbox** and **LangSmith tracing** with **zero built-in telemetry**.
+
+
+Sun2Agent is a free, open-source **AI agent harness** with MCP server connections, desktop & browser automation, workspace tools, scheduled tasks & reminders, web search, and Telegram chat. OpenAI-compatible models. Apply reusable **Skills (`skills.md`)**, **agent instructions (`AGENT.md`)**, **custom memory (`memory.md`)**, and **self-improvement reflection**—with **5-layer guardrails**, **HITL approvals**, an optional **Docker sandbox** and **LangSmith tracing** with **zero built-in telemetry**.
 
 [![npm version](https://img.shields.io/npm/v/sun2agent?color=cb3837&logo=npm&label=npm)](https://www.npmjs.com/package/sun2agent)
 [![npm total downloads](https://img.shields.io/npm/dt/sun2agent?color=cb3837&logo=npm&label=%20downloads)](https://www.npmjs.com/package/sun2agent)
@@ -39,11 +41,10 @@ It's for developers who want an AI agent that does more than chat: one that can 
 As an **agent harness**, Sun2Agent brings the model, project context, MCP tools, approvals, and execution loop together in one terminal CLI.
 
 **Common searches this answers:**
-`terminal AI agent` · `npm MCP client` · `AI agent CLI open source` · `secure autonomous coding agent` · `Model Context Protocol client npm` · `Claude Code alternative` · `Codex CLI alternative` · `self-hosted AI agent` · `human-in-the-loop AI agent`
-
+`terminal AI agent` · `npm MCP client` · `AI agent CLI open source` · `secure autonomous coding agent` · `Model Context Protocol client npm` · `Claude Code alternative` · `Codex CLI alternative` · `self-hosted AI agent` · `human-in-the-loop AI agent` · `computer use agent` · `desktop automation MCP`
 
 <p align="center">
-  <p>Sun2Agent architecture diagram showing context layer, tools layer, security layer, and the AI agent runtime loop
+  <em>Sun2Agent architecture diagram showing context layer, tools layer, security layer, and the AI agent runtime loop</em>
 </p>
 
 ```text
@@ -92,43 +93,30 @@ sun2agent
 
 ---
 
-<a id="why"></a>
-## Why Choose Sun2Agent?
-
-| | Typical MCP client | **Sun2Agent** |
-|---|---|---|
-| **Where it runs** | Bundled inside a heavy IDE or desktop app | Just a terminal — `npm i -g sun2agent` |
-| **Tool approval** | All-or-nothing, or none at all | Risk-based Human-in-the-Loop for mutating and unknown tools |
-| **Security model** | Trust the model | 5-layer guardrails block destructive commands, exfiltration, and credential access *before* execution |
-| **Isolation** | Usually none | Optional one-command Docker sandbox with automatic session resume |
-| **Memory & Skills** | Cloud-synced or none | Local-only `memory.md` / `skills.md`, zero telemetry |
-| **Cost** | Often subscription-gated | Open source, [MIT-licensed](https://github.com/snowhypers/Sun2Agent/blob/main/LICENSE) — pay only for your own model usage |
-| **Setup time** | Minutes to hours | Under 60 seconds with `npx sun2agent` |
-
----
-
-
 <a id="features"></a>
 ## Features
 
 | | Feature | Why it matters |
 |---|---|---|
-| 🤖 | **AI Agent CLI** | Full agent loop directly from your terminal — no browser tab, no desktop app |
-| 🔌 | **Native MCP client** | `stdio`, `http` (Streamable HTTP), and `sse` transports, local or remote |
+| 🤖 | **AI Agent CLI** | Full ReAct agent loop directly from your terminal — no browser tab, no desktop app |
+| 🎛️ | **Multiple model providers** | Built-in NVIDIA NIM plus reusable custom OpenAI-compatible providers and models |
 | ⚙️ | **Automatic tool-calling** | No tool syntax to memorize — describe the task in plain English |
-| 📁 | **Automatic workspace tools** | Ask the agent to create, read, or edit files under the launch directory; it calls filesystem tools when needed |
-| ✅ | **Maven test verification** | After writing Java tests, run `mvn test` in the workspace with fresh approval; report unverified work until it passes |
+| 🔌 | **Native MCP client** | `stdio`, `http` (Streamable HTTP), and `sse` transports, local or remote |
+| 📁 | **Automatic workspace tools** | Autonomous file reading, creation, and multi-file editing scoped to your project |
 | 🌐 | **Opt-in browser automation** | Run `/browser` to connect an isolated Playwright browser only when needed |
-| 🛡️ | **5-layer guardrails** | Input, command, network, filesystem, and output guards catch risk before it runs |
-| ✋ | **Human-in-the-Loop** | Read-only tools run directly; one approval covers routine changes per MCP server and prompt, while high-risk calls ask each time |
-| 🐳 | **Optional Docker sandbox** | The entire agent runs isolated, with automatic session resume when Docker restarts |
+| 🖥️ | **Opt-in desktop control** | Run `/computer` to inspect windows, click UI elements, and automate apps |
+| 🔎 | **Optional web search (Tavily)** | Off by default; enable in `/config` for live web data with prompt injection screening |
+| 📄 | **`AGENT.md` support** | Drop it in your project and the agent automatically follows your conventions |
+| 🎯 | **Reusable Skills** | Save instruction blocks once (`skills.md`), toggle them on per chat |
 | 🧠 | **Local preference memory** | `~/.sun2agent/memory.md`, keyword search, zero external calls |
-| 🎯 | **Reusable Skills** | Save instruction blocks once, toggle them on per chat |
-| 📄 | **`AGENT.md` support** | Drop it in your project and the agent follows your conventions |
+| 🔄 | **Self-improvement & reflection** | Learns operational lessons from errors with user consent; continuously improves prompts locally |
+| 🛡️ | **5-layer guardrails** | Input, command, network, filesystem, and output guards catch risk before it runs |
+| ✋ | **Human-in-the-Loop** | Read-only tools run directly; routine and high-risk calls require clear user confirmation |
+| 🐳 | **Optional Docker sandbox** | The entire agent runs isolated, with automatic session resume when Docker restarts |
+| ✈️ | **Optional Telegram chat** | Chat with your running agent remotely from one allowlisted private Telegram account |
+| ⏰ | **Scheduled tasks & reminders** | Set up recurring background jobs or one-time reminders with `/schedule` |
+| ✅ | **Maven test verification** | After writing Java tests, run `mvn test` in the workspace with fresh approval; report unverified work until it passes |
 | 📊 | **Optional LangSmith tracing** | Traces sanitized by the output guard before they leave your machine |
-| 🎛️ | **Multiple model providers** | Built-in NVIDIA NIM plus reusable OpenAI-compatible providers and models |
-| 🔎 | **Optional web search (Tavily)** | Off by default; enable in `/config` for current events and live data |
-| ✈️ | **Optional Telegram chat** | Chat with your running agent from one allowlisted private Telegram account |
 | ⌨️ | **Responsive terminal UI** | Input box and footer adapt to terminal width; resizing preserves typed input |
 
 ### Latest codebase updates
@@ -138,6 +126,21 @@ sun2agent
 - **Telegram search cancellation:** `/stop` cancels an active model response or pending Tavily search. The interrupted turn is removed from Telegram history so the next message can start cleanly.
 
 These updates describe the current source code. The published npm package may lag behind it; use the [development instructions](#development) to run your local checkout.
+
+---
+
+<a id="why"></a><a id="vs-alternatives"></a>
+## Why Choose Sun2Agent?
+
+| Feature | Proprietary Agents (Claude Code / Cursor) | Typical MCP Client | **Sun2Agent** |
+|---|---|---|---|
+| **Model Freedom** | Locked to single vendor (Anthropic / Claude only) | Depends on IDE | **Any Model** (NVIDIA NIM, OpenAI, Groq, Ollama, custom endpoints) |
+| **Where It Runs** | Proprietary binary or heavy desktop IDE | Bundled inside IDE or desktop app | **Lightweight Terminal CLI** — `npx sun2agent` |
+| **Tool Extensibility** | Closed or limited tool ecosystem | Basic MCP support | **Native MCP Client** (`stdio`, `http`, `sse`) + Desktop & Browser automation |
+| **Human-in-the-Loop** | All-or-nothing or auto-executes silently | Unvetted execution | **Risk-based HITL** (Read-only tools run instantly; mutating tools ask) |
+| **Security & Safety** | Basic host permissions | Trust the model blindly | **5-Layer Guardrails** (Blocks injections, destructive commands, credential leaks) |
+| **Environment Isolation** | Host system access | Host system access | **Optional 1-Command Docker Sandbox** with automatic session resume |
+| **Memory & Skills** | Cloud-synced or closed prompt files | Basic configuration | **Local `memory.md`**, reusable `skills.md`, repo-scoped `AGENT.md` |
 
 ---
 

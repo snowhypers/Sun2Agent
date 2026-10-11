@@ -4,10 +4,312 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#17232a">
-  <meta name="description" content="Install Sun2Agent and learn its CLI commands, models, workspace tools, MCP, browser and computer control, Telegram, schedules, and safety controls.">
-  <title>Sun2Agent docs — from first run to real tasks</title>
-  <link rel="stylesheet" href="styles.css">
-  <script src="app.js" defer></script>
+  
+  <!-- Primary SEO Meta Tags -->
+  <title>Sun2Agent Documentation — Open-Source AI Coding Agent CLI & Native MCP Client</title>
+  <meta name="title" content="Sun2Agent Documentation — Open-Source AI Coding Agent CLI & Native MCP Client">
+  <meta name="description" content="Official documentation for Sun2Agent: Open-source autonomous AI coding agent CLI and native Model Context Protocol (MCP) client. Free Claude Code alternative supporting any LLM with desktop control, browser automation, 5-layer guardrails, and Docker sandbox.">
+  <meta name="keywords" content="Sun2Agent, AI agent CLI, terminal AI agent, Model Context Protocol, MCP client, Claude Code alternative, Cursor alternative, desktop automation, computer-use agent, autonomous coding agent, Docker sandbox, guardrails, NVIDIA NIM, OpenAI, Ollama">
+  <meta name="author" content="Sun2Agent Contributors">
+  <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1">
+  <link rel="canonical" href="https://snowhypers.github.io/Sun2Agent/">
+
+  <!-- Open Graph / Facebook / LinkedIn -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Sun2Agent Documentation">
+  <meta property="og:url" content="https://snowhypers.github.io/Sun2Agent/">
+  <meta property="og:title" content="Sun2Agent Documentation — Open-Source AI Coding Agent CLI & Native MCP Client">
+  <meta property="og:description" content="Free open-source Claude Code alternative for your terminal. Native MCP client, desktop & browser automation, 5-layer guardrails, and Docker sandbox.">
+  <meta property="og:image" content="https://raw.githubusercontent.com/snowhypers/Sun2Agent/main/assets/sun2agent-demo.png">
+  <meta property="og:image:alt" content="Sun2Agent terminal AI agent demo showing MCP tool execution and Human-in-the-Loop approvals">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:url" content="https://snowhypers.github.io/Sun2Agent/">
+  <meta name="twitter:title" content="Sun2Agent Documentation — Open-Source AI Coding Agent CLI">
+  <meta name="twitter:description" content="Free open-source Claude Code alternative for your terminal. Native MCP client, desktop & browser automation, and 5-layer guardrails.">
+  <meta name="twitter:image" content="https://raw.githubusercontent.com/snowhypers/Sun2Agent/main/assets/sun2agent-demo.png">
+
+  <!-- JSON-LD Structured Data for Google Search -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "SoftwareApplication",
+        "@id": "https://snowhypers.github.io/Sun2Agent/#software",
+        "name": "Sun2Agent",
+        "operatingSystem": "macOS, Linux, Windows",
+        "applicationCategory": "DeveloperApplication",
+        "applicationSubCategory": "AI Coding Agent CLI & MCP Client",
+        "license": "https://opensource.org/licenses/MIT",
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD"
+        },
+        "description": "Open-source autonomous AI coding agent CLI and native Model Context Protocol (MCP) client with desktop and browser automation, workspace tools, 5-layer security guardrails, and optional Docker sandbox.",
+        "softwareVersion": "1.9.0",
+        "url": "https://snowhypers.github.io/Sun2Agent/"
+      },
+      {
+        "@type": "TechArticle",
+        "@id": "https://snowhypers.github.io/Sun2Agent/#article",
+        "headline": "Sun2Agent Documentation: From Prompt to Action",
+        "description": "Complete guide to installing, configuring, and using Sun2Agent, the open-source terminal AI coding agent and MCP client.",
+        "author": {
+          "@type": "Organization",
+          "name": "Sun2Agent"
+        },
+        "mainEntityOfPage": "https://snowhypers.github.io/Sun2Agent/",
+        "dateModified": "2026-10-12"
+      },
+      {
+        "@type": "FAQPage",
+        "@id": "https://snowhypers.github.io/Sun2Agent/#faq",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "What is Sun2Agent?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Sun2Agent is a free, open-source terminal AI coding agent harness and native Model Context Protocol (MCP) client. It functions as a lightweight, self-hosted Claude Code alternative supporting any LLM provider."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "The agent answers but does not call tools. How do I fix this?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Check that your selected model supports OpenAI-compatible function/tool calling. Confirm the relevant integration is connected (/browser, /computer, or /mcp), and try a precise prompt that describes the desired action."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "How does Sun2Agent handle security and destructive commands?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Sun2Agent includes 5-layer guardrails (input, command, network, filesystem, and output guards) plus Human-in-the-Loop approvals for mutating actions, and an optional Docker sandbox for full container isolation."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Does Sun2Agent require Docker?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "No. Docker sandboxing is completely optional. By default, Sun2Agent runs directly in your terminal on macOS, Linux, or Windows."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Can I use models other than NVIDIA NIM with Sun2Agent?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Yes. In addition to built-in NVIDIA NIM, /config allows you to add any custom OpenAI-compatible provider such as OpenAI, Groq, OpenRouter, or local models via Ollama."
+            }
+          }
+        ]
+      }
+    ]
+  }
+  </script>
+
+  <style>
+:root {
+  color-scheme: light;
+  --ink: #17232a;
+  --ink-soft: #34454c;
+  --paper: #f7f8f5;
+  --surface: #ffffff;
+  --line: #d9dfdc;
+  --muted: #62716f;
+  --yellow: #e8b93d;
+  --yellow-soft: #fff2bf;
+  --teal: #175f62;
+  --sidebar-width: 268px;
+  --topbar-height: 68px;
+  font-synthesis: none;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 92px; }
+body { margin: 0; background: var(--paper); color: var(--ink); font-family: "Avenir Next", Avenir, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; line-height: 1.67; -webkit-font-smoothing: antialiased; }
+body.nav-open { overflow: hidden; }
+button, input { font: inherit; }
+a { color: var(--teal); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+a:hover { color: #0b4246; }
+button:focus-visible, a:focus-visible, summary:focus-visible { outline: 3px solid #e1a600; outline-offset: 3px; border-radius: 3px; }
+::selection { background: var(--yellow-soft); color: var(--ink); }
+[hidden] { display: none !important; }
+
+.skip-link { position: fixed; z-index: 100; top: -60px; left: 12px; padding: 9px 13px; background: var(--yellow); color: var(--ink); font-weight: 700; text-decoration: none; }
+.skip-link:focus { top: 12px; }
+
+.topbar { position: sticky; top: 0; z-index: 30; height: var(--topbar-height); display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 0 32px; border-bottom: 1px solid #304046; background: var(--ink); color: #edf2ec; }
+.brand { display: inline-flex; align-items: baseline; gap: 8px; color: #f4f4e9; font-size: 20px; font-weight: 800; letter-spacing: -.05em; text-decoration: none; white-space: nowrap; }
+.brand:hover { color: #fff; }
+.brand-sun { color: var(--yellow); font-size: 26px; line-height: 1; }
+.brand-docs { margin-left: 7px; padding-left: 13px; border-left: 1px solid #54626a; color: #abb7b7; font-size: 13px; font-weight: 600; letter-spacing: .01em; }
+.top-links { display: flex; gap: 28px; align-items: center; }
+.top-links a { color: #dde7e1; font-size: 13px; font-weight: 600; text-decoration: none; }
+.top-links a:hover { color: var(--yellow); }
+.top-links span { color: var(--yellow); }
+.menu-toggle { display: none; width: 37px; height: 37px; padding: 8px; flex: none; border: 1px solid #6a787a; border-radius: 7px; background: transparent; cursor: pointer; }
+.menu-toggle span { display: block; height: 2px; margin: 4px 0; background: #edf2ec; }
+
+.layout { display: grid; grid-template-columns: var(--sidebar-width) minmax(0, 1fr); min-height: calc(100vh - var(--topbar-height)); }
+.sidebar { position: sticky; top: var(--topbar-height); align-self: start; height: calc(100vh - var(--topbar-height)); overflow-y: auto; display: flex; flex-direction: column; background: #1e3036; color: #dae5df; border-right: 1px solid #30454a; scrollbar-width: thin; scrollbar-color: #5d7376 #1e3036; }
+.sidebar-intro { padding: 28px 28px 19px; font-size: 14px; font-weight: 750; letter-spacing: -.01em; }
+.sidebar-intro small { display: block; margin: 4px 0 0 14px; color: #a9b9b7; font-size: 11px; font-weight: 500; letter-spacing: 0; }
+.status-dot { display: inline-block; width: 7px; height: 7px; margin-right: 7px; border-radius: 50%; background: var(--yellow); box-shadow: 0 0 0 3px rgba(232,185,61,.12); }
+.sidebar nav { padding-bottom: 28px; }
+.nav-group { margin: 20px 20px 8px; padding: 5px 12px; border-radius: 4px; background: rgba(255, 255, 255, 0.08); border-left: 3px solid rgba(255, 255, 255, 0.5); color: #eaf1ee; font-size: 11px; font-weight: 850; letter-spacing: .08em; text-transform: uppercase; }
+.sidebar nav a { position: relative; display: block; padding: 6px 22px 6px 29px; border-left: 3px solid transparent; color: #d3dfd9; font-size: 13px; font-weight: 550; text-decoration: none; line-height: 1.45; }
+.sidebar nav a:hover { background: #293e43; color: #fff; }
+.sidebar nav a.active { border-left-color: var(--yellow); background: #304347; color: #fff5d3; font-weight: 750; }
+.sidebar-foot { margin-top: auto; padding: 18px 28px 24px; border-top: 1px solid #3a4d51; color: #a9bab7; font-size: 11px; line-height: 1.7; }
+.sidebar-foot a { color: #f0d37a; }
+
+.content { min-width: 0; background: var(--paper); }
+.hero { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(300px, .95fr); align-items: center; gap: clamp(24px, 5vw, 80px); min-height: 490px; padding: clamp(48px, 7vw, 94px) clamp(28px, 6vw, 94px); background: #e9efea; border-bottom: 1px solid #d3dcd5; }
+.hero-copy { max-width: 640px; }
+.kicker { margin: 0 0 20px; color: #506564; font-size: 13px; font-weight: 700; letter-spacing: -.01em; }
+.prompt-mark { color: #bb8510; font-family: "SFMono-Regular", Consolas, monospace; font-weight: 700; }
+.kicker .prompt-mark { margin-right: 7px; }
+h1, h2, h3, p { margin-top: 0; }
+h1 { margin-bottom: 20px; color: #14272c; font-size: clamp(52px, 5.4vw, 90px); font-weight: 850; line-height: .96; letter-spacing: -.075em; }
+.hero-lede { max-width: 56ch; margin-bottom: 27px; color: var(--ink-soft); font-size: clamp(17px, 1.35vw, 19px); line-height: 1.58; }
+.hero-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.button { display: inline-flex; align-items: center; justify-content: center; gap: 17px; min-height: 42px; padding: 8px 17px; border-radius: 5px; font-size: 13px; font-weight: 750; text-decoration: none; }
+.button-primary { background: var(--ink); color: #fff8da; }
+.button-primary:hover { background: #2b4449; color: #fff; }
+.button-primary span { color: var(--yellow); }
+.button-quiet { border: 1px solid #9baea6; color: var(--ink); }
+.button-quiet:hover { border-color: var(--ink); color: var(--ink); background: #f5f8f3; }
+
+.hero-terminal { width: 100%; max-width: 520px; justify-self: end; overflow: hidden; border: 1px solid #42555a; border-radius: 9px; background: #142229; box-shadow: 10px 12px 0 #d4ddd5; color: #eef3e9; font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; }
+.terminal-title { display: flex; align-items: center; justify-content: space-between; padding: 11px 16px; border-bottom: 1px solid #39494d; color: #9ab1ad; font-size: 11px; }
+.terminal-lights { display: flex; gap: 6px; }
+.terminal-lights i { display: block; width: 7px; height: 7px; border-radius: 50%; background: #ad5d59; }
+.terminal-lights i:nth-child(2) { background: #c7a33c; }
+.terminal-lights i:nth-child(3) { background: #4a947d; }
+.terminal-lines { min-height: 220px; padding: 22px 19px 16px; font-size: 12px; line-height: 1.7; }
+.terminal-lines p { margin: 0 0 13px; overflow-wrap: anywhere; }
+.terminal-prompt { margin-right: 8px; color: var(--yellow); }
+.terminal-muted { color: #a9bcb7; }
+.terminal-approval { display: inline-block; padding: 3px 8px; border: 1px solid #9c7930; border-radius: 3px; color: #f4d474; }
+.terminal-success { color: #76cf9b; }
+.terminal-footer { display: flex; justify-content: space-between; gap: 10px; padding: 10px 18px; border-top: 1px solid #39494d; color: #90a3a4; font-size: 10px; }
+.terminal-footer span { color: #71bcc0; }
+
+.article-body { max-width: 982px; margin: 0 auto; padding: 38px clamp(25px, 6vw, 88px) 80px; }
+.article-body > .callout { margin-bottom: 19px; }
+.doc-section { padding: 44px 0 45px; border-bottom: 1px solid var(--line); scroll-margin-top: 84px; }
+.doc-section:last-child { border-bottom: 0; }
+.section-heading { display: flex; align-items: start; gap: 18px; margin-bottom: 20px; }
+.section-index { flex: none; width: 33px; padding-top: 7px; color: #8b9a95; font-family: "SFMono-Regular", Consolas, monospace; font-size: 12px; }
+.section-label { display: inline-block; margin: 0 0 5px; padding: 3px 9px; border-radius: 4px; background: #ffffff; border: 1px solid #d8e0dc; border-left: 3px solid #7a918c; color: #23373b; font-size: 11px; font-weight: 850; letter-spacing: .06em; text-transform: uppercase; box-shadow: 0 1px 2px rgba(0,0,0,0.03); }
+h2 { margin: 0; color: var(--ink); font-size: clamp(29px, 3vw, 38px); font-weight: 800; letter-spacing: -.055em; line-height: 1.18; }
+h3 { margin-bottom: 8px; font-size: 16px; line-height: 1.3; letter-spacing: -.02em; }
+.doc-section > p, .doc-section > ul, .doc-section > ol, .doc-section > .code-block, .doc-section > .example, .doc-section > .callout, .doc-section > .info-grid, .doc-section > .table-wrap, .doc-section > .faq, .doc-section > .security-flow, .doc-section > .command-strip, .doc-section > h3 { margin-left: 51px; }
+.doc-section > h3 { margin-top: 24px; color: var(--ink); font-weight: 750; }
+.doc-section p { max-width: 73ch; color: var(--ink-soft); font-size: 15px; }
+.doc-section > p { margin-bottom: 17px; }
+code, pre { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; }
+p code, li code, td code, .command-strip code { padding: 1px 5px; border: 1px solid #dce4dd; border-radius: 3px; background: #edf1eb; color: #234548; font-size: .86em; white-space: nowrap; }
+.check-list { padding-left: 0; list-style: none; }
+.check-list li { position: relative; margin: 0 0 12px; padding-left: 26px; color: var(--ink-soft); font-size: 15px; }
+.check-list li::before { content: "✓"; position: absolute; left: 0; top: 0; color: #117057; font-weight: 800; }
+.steps { padding-left: 25px; }
+.steps li { padding-left: 6px; margin: 0 0 12px; color: var(--ink-soft); font-size: 15px; }
+.steps li::marker { color: #ad7815; font-family: "SFMono-Regular", Consolas, monospace; font-weight: 700; }
+.callout { max-width: 780px; padding: 14px 17px; border-left: 3px solid #5f9891; border-radius: 0 4px 4px 0; background: #e9f2ed; color: #29484b; font-size: 14px; line-height: 1.58; }
+.callout strong { color: #193c3c; }
+.callout a { font-weight: 700; }
+.callout-warning { border-left-color: #dba933; background: #fff4d6; color: #5e4b20; }
+.callout-warning strong { color: #4a3914; }
+.example { max-width: 780px; margin-bottom: 20px; padding: 15px 18px; border: 1px solid #cad9d0; border-radius: 5px; background: #f2f6f1; }
+.example-label { display: block; margin-bottom: 5px; color: #377165; font-size: 11px; font-weight: 800; }
+.example p { margin: 0; color: var(--ink); font-weight: 600; }
+
+.code-block { max-width: 790px; overflow: hidden; margin-bottom: 17px; border: 1px solid #36474e; border-radius: 6px; background: #172830; color: #eaf1e8; }
+.code-head { display: flex; justify-content: space-between; align-items: center; min-height: 36px; padding: 5px 13px 5px 17px; border-bottom: 1px solid #34464b; color: #a9bfbd; font-family: "SFMono-Regular", Consolas, monospace; font-size: 11px; }
+.copy-button { padding: 4px 9px; border: 1px solid #718c8b; border-radius: 4px; background: transparent; color: #e7efe9; font-family: inherit; font-size: 11px; cursor: pointer; }
+.copy-button:hover { background: #30484d; }
+.code-block pre { overflow-x: auto; margin: 0; padding: 17px 18px 19px; font-size: 12.5px; line-height: 1.72; tab-size: 2; }
+.code-block code { white-space: pre; }
+.compact pre { padding-top: 13px; padding-bottom: 14px; }
+.info-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 23px; margin-bottom: 19px; }
+.info-grid > div { padding: 16px 0; border-top: 1px solid var(--line); }
+.info-grid p { margin-bottom: 0; font-size: 14px; }
+.command-strip { display: flex; flex-wrap: wrap; gap: 9px; margin-bottom: 17px; }
+.command-strip span { padding: 8px 10px; border: 1px solid #dce3dc; border-radius: 4px; background: #fff; font-size: 12px; }
+.security-flow { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin-bottom: 21px; }
+.security-flow span { padding: 7px 10px; border: 1px solid #b8cbc2; border-radius: 3px; background: #f0f5ef; color: #244746; font-size: 12px; font-weight: 700; }
+.security-flow b { color: #ac781c; font-size: 16px; }
+.faq { margin-bottom: 18px; border-top: 1px solid var(--line); }
+.faq details { border-bottom: 1px solid var(--line); }
+.faq summary { position: relative; padding: 14px 35px 14px 2px; color: var(--ink); font-size: 15px; font-weight: 750; cursor: pointer; list-style: none; }
+.faq summary::-webkit-details-marker { display: none; }
+.faq summary::after { content: "+"; position: absolute; right: 8px; top: 10px; color: var(--teal); font-size: 23px; font-weight: 400; }
+.faq details[open] summary::after { content: "−"; }
+.faq p { padding: 0 35px 13px 2px; margin-bottom: 0; }
+.table-wrap { overflow-x: auto; margin-bottom: 22px; }
+table { width: 100%; border-collapse: collapse; background: #fff; font-size: 13px; }
+th { padding: 10px 12px; border-bottom: 2px solid #aebeb5; text-align: left; color: #354f4f; }
+td { padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; color: var(--ink-soft); }
+td:first-child { width: 185px; white-space: nowrap; }
+tr:last-child td { border-bottom: 0; }
+.end-note { margin: 30px 0 0 51px; padding: 18px 0; border-top: 2px solid var(--yellow); color: var(--ink); font-weight: 700; }
+.end-note .prompt-mark { margin-right: 8px; }
+
+.page-footer { display: flex; justify-content: space-between; gap: 20px; padding: 24px clamp(25px, 6vw, 88px) 35px; border-top: 1px solid var(--line); color: #647572; font-size: 12px; }
+.page-footer a { color: var(--teal); }
+
+@media (max-width: 1160px) {
+  .hero { grid-template-columns: 1fr; padding-top: 58px; padding-bottom: 65px; }
+  .hero-terminal { max-width: 640px; justify-self: start; }
+}
+
+@media (max-width: 800px) {
+  :root { --topbar-height: 60px; }
+  .topbar { padding: 0 17px; justify-content: start; gap: 13px; }
+  .menu-toggle { display: block; }
+  .brand { font-size: 18px; }
+  .brand-docs { font-size: 12px; }
+  .top-links { margin-left: auto; gap: 14px; }
+  .top-links a { font-size: 12px; }
+  .layout { display: block; }
+  .sidebar { position: fixed; z-index: 42; left: 0; top: var(--topbar-height); width: min(85vw, 310px); height: calc(100dvh - var(--topbar-height)); transform: translateX(-105%); box-shadow: 9px 0 28px rgba(5,25,31,.24); transition: transform .18s ease; }
+  .sidebar.is-open { transform: translateX(0); }
+  .sidebar-scrim { position: fixed; z-index: 40; inset: var(--topbar-height) 0 0; background: rgba(10,28,32,.52); }
+  .hero { min-height: 0; padding: 50px 24px 54px; }
+  h1 { font-size: clamp(56px, 12vw, 78px); }
+  .article-body { padding: 26px 24px 64px; }
+  .page-footer { padding-left: 24px; padding-right: 24px; }
+}
+
+@media (max-width: 560px) {
+  .top-links a:last-child { display: none; }
+  .hero { padding: 42px 20px 42px; gap: 30px; }
+  .hero-terminal { box-shadow: 5px 7px 0 #d4ddd5; }
+  .terminal-lines { min-height: 0; }
+  .article-body { padding: 22px 19px 55px; }
+  .doc-section { padding: 35px 0 36px; }
+  .section-heading { gap: 9px; }
+  .section-index { width: 25px; font-size: 11px; }
+  .doc-section > p, .doc-section > ul, .doc-section > ol, .doc-section > .code-block, .doc-section > .example, .doc-section > .callout, .doc-section > .info-grid, .doc-section > .table-wrap, .doc-section > .faq, .doc-section > .security-flow, .doc-section > .command-strip, .doc-section > h3 { margin-left: 0; }
+  .info-grid { grid-template-columns: 1fr; }
+  .end-note { margin-left: 0; }
+  .page-footer { flex-direction: column; padding-left: 19px; padding-right: 19px; }
+  td:first-child { width: auto; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .sidebar { transition: none; }
+}
+  </style>
 </head>
 <body>
   <a class="skip-link" href="#content">Skip to documentation</a>
@@ -26,31 +328,41 @@
   <div class="layout">
     <div class="sidebar-scrim" id="sidebar-scrim" hidden></div>
     <aside class="sidebar" id="sidebar" aria-label="Documentation topics">
-      <div class="sidebar-intro"><span class="status-dot" aria-hidden="true"></span> Documentation <small>Use the current source-code guide</small></div>
+      <div class="sidebar-intro"><span class="status-dot" aria-hidden="true"></span> Documentation <small>The Terminal AI Agent &amp; MCP Client</small></div>
       <nav aria-label="Topics">
-        <p class="nav-group">Get started</p>
+        <p class="nav-group">Get Started</p>
         <a href="#overview">Overview</a>
-        <a href="#requirements">Before you begin</a>
-        <a href="#install">Install</a>
-        <a href="#first-run">First run &amp; configuration</a>
+        <a href="#requirements">Before You Begin</a>
+        <a href="#install">Install &amp; Setup Sun2Agent</a>
+        <a href="#first-run">First Run &amp; Configuration</a>
 
-        <p class="nav-group">Work with tools</p>
-        <a href="#workspace">Workspace files</a>
-        <a href="#search">Web search</a>
-        <a href="#browser">Browser automation</a>
-        <a href="#computer">Computer control</a>
-        <a href="#mcp">MCP servers</a>
+        <p class="nav-group">Core Features</p>
+        <a href="#workspace">Workspace Files</a>
+        <a href="#agent">AGENT.md Instructions</a>
+        <a href="#context">Sessions &amp; Memory</a>
+        <a href="#skills">Skills (skills.md)</a>
+        <a href="#self-improvement">Self-Improvement</a>
 
-        <p class="nav-group">Stay connected</p>
+        <p class="nav-group">Tools &amp; Integrations</p>
+        <a href="#search">Web Search</a>
+        <a href="#browser">Browser Automation</a>
+        <a href="#computer">Computer Control</a>
+        <a href="#mcp">MCP Servers</a>
         <a href="#telegram">Telegram</a>
-        <a href="#schedule">Scheduled tasks</a>
-        <a href="#context">Sessions, memory &amp; Skills</a>
 
-        <p class="nav-group">Operate safely</p>
-        <a href="#security">Approvals &amp; guardrails</a>
-        <a href="#sandbox">Docker sandbox</a>
-        <a href="#troubleshooting">Troubleshooting</a>
-        <a href="#commands">Command reference</a>
+        <p class="nav-group">Automation</p>
+        <a href="#schedule">Scheduled Tasks</a>
+
+        <p class="nav-group">Security &amp; Sandboxing</p>
+        <a href="#security">Approvals &amp; Guardrails</a>
+        <a href="#sandbox">Docker Sandbox</a>
+
+        <p class="nav-group">Monitoring &amp; Troubleshooting</p>
+        <a href="#observability">Observability &amp; LangSmith</a>
+        <a href="#troubleshooting">Troubleshooting FAQ</a>
+
+        <p class="nav-group">CLI Reference</p>
+        <a href="#commands">Command Reference</a>
       </nav>
       <div class="sidebar-foot">Open source · MIT<br><a href="https://github.com/snowhypers/Sun2Agent/issues" target="_blank" rel="noopener noreferrer">Report a documentation issue ↗</a></div>
     </aside>
@@ -59,89 +371,326 @@
       <article>
         <section class="hero" id="overview" aria-labelledby="hero-title">
           <div class="hero-copy">
-            <p class="kicker"><span class="prompt-mark">›</span> A field guide for the terminal agent</p>
+            <p class="kicker"><span class="prompt-mark">›</span> Open-Source Terminal AI Agent Harness</p>
             <h1 id="hero-title">From prompt<br>to action.</h1>
-            <p class="hero-lede">Sun2Agent connects your chosen model to files, MCP servers, the web, a browser, and—when you opt in—your desktop or Telegram. This guide takes you from installation to a safe first task.</p>
-            <div class="hero-actions"><a class="button button-primary" href="#install">Start the guide <span aria-hidden="true">↓</span></a><a class="button button-quiet" href="#commands">See commands</a></div>
+            <p class="hero-lede">Sun2Agent connects your chosen model (NVIDIA NIM or custom OpenAI-compatible endpoint) to workspace files, Model Context Protocol (MCP) servers, real-time web search, browser automation, and desktop control—with 5-layer guardrails and zero telemetry.</p>
+            <div class="hero-actions">
+              <a class="button button-primary" href="#install">Start the guide <span aria-hidden="true">↓</span></a>
+              <a class="button button-quiet" href="#commands">Command reference</a>
+            </div>
           </div>
           <div class="hero-terminal" aria-label="Example Sun2Agent terminal conversation">
             <div class="terminal-title"><span class="terminal-lights" aria-hidden="true"><i></i><i></i><i></i></span><span>sun2agent — ~/my-project</span></div>
-            <div class="terminal-lines"><p><span class="terminal-prompt">›</span> Create a test for the login service</p><p class="terminal-muted">⚙ workspace__read_file(...)</p><p class="terminal-muted">⚙ workspace__write_file(...)</p><p class="terminal-approval">⚠ Allow this file change?</p><p class="terminal-success">✓ Test written. Run the suite to verify.</p></div>
+            <div class="terminal-lines">
+              <p><span class="terminal-prompt">›</span> Create a test for the login service</p>
+              <p class="terminal-muted">⚙ workspace__read_file(...)</p>
+              <p class="terminal-muted">⚙ workspace__write_file(...)</p>
+              <p class="terminal-approval">⚠ Allow this file change?</p>
+              <p class="terminal-success">✓ Test written. Run the suite to verify.</p>
+            </div>
             <div class="terminal-footer">chat ~3.2k tokens <span>→ your model</span></div>
           </div>
         </section>
 
         <div class="article-body">
-          <div class="callout callout-info"><strong>Source code vs npm.</strong> This guide follows the current repository. The published npm version may not include every feature shown here. For the newest code, use the <a href="#install">local checkout steps</a>.</div>
-
           <section class="doc-section" id="requirements">
-            <div class="section-heading"><span class="section-index">01</span><div><p class="section-label">Get started</p><h2>Before you begin</h2></div></div>
-            <p>You need a terminal, Node.js, and a model provider. Add other integrations only when you need them.</p>
+            <div class="section-heading"><span class="section-index">01</span><div><p class="section-label">Get Started</p><h2>Before You Begin</h2></div></div>
+            <p>You need a terminal, Node.js, and an API key for your chosen AI model provider. Add optional services (Docker, Telegram, search) only when you need them.</p>
+
+            <h3>How Sun2Agent works</h3>
+            <p>Sun2Agent operates as a lightweight, 100% local ReAct (Reasoning + Acting) agent harness directly inside your terminal. It connects your local workspace context and tools to any OpenAI-compatible LLM endpoint using standard Chat Completions function calling. The agent evaluates goals, requests tools, runs them on your machine with 5-layer guardrails and Human-in-the-Loop approval, and feeds results back until your task is finished.</p>
+
+            <h3>Prerequisites</h3>
             <ul class="check-list">
-              <li><strong>Node.js 20 or 22+</strong> and npm. Check with <code>node --version</code>.</li>
-              <li><strong>A model credential:</strong> an NVIDIA NIM API key, or an API key and base URL for an OpenAI-compatible Chat Completions service.</li>
-              <li><strong>Internet access</strong> for npm installation and your model endpoint.</li>
+              <li><strong>Node.js 20 or 22+</strong> and npm. Verify with <code>node --version</code>.</li>
+              <li><strong>A model API key:</strong> built-in NVIDIA NIM, or an API key and base URL for any OpenAI-compatible provider (OpenAI, Groq, OpenRouter, local Ollama).</li>
+              <li><strong>Internet access</strong> for installing packages and communicating with your model provider endpoint.</li>
             </ul>
-            <p>Optional extras: a Tavily key for web search, Chrome for <code>/browser</code>, Docker for the sandbox, and a Telegram bot for remote chat and scheduled delivery. <code>/computer</code> needs an interactive host desktop; on macOS, grant the permissions shown by its diagnostic report.</p>
+
+            <div class="callout"><strong>Optional integrations:</strong> Tavily API key for live web search, Google Chrome for <code>/browser</code>, Docker daemon for container sandboxing, and a Telegram bot for mobile chat and scheduled reminders. Host desktop control with <code>/computer</code> requires an interactive display session.</div>
           </section>
 
           <section class="doc-section" id="install">
-            <div class="section-heading"><span class="section-index">02</span><div><p class="section-label">Get started</p><h2>Install Sun2Agent</h2></div></div>
-            <p>For everyday use, install globally, then launch it from the folder you want the agent to work in.</p>
-            <div class="code-block"><div class="code-head"><span>Terminal · recommended</span><button class="copy-button" type="button" aria-label="Copy install commands">Copy</button></div><pre><code>npm install -g sun2agent
+            <div class="section-heading"><span class="section-index">02</span><div><p class="section-label">Get Started</p><h2>Install &amp; Setup Sun2Agent</h2></div></div>
+            <p>Sun2Agent runs natively on macOS, Linux, and Windows. Choose the installation method that fits your workflow.</p>
+
+            <h3>How workspace execution works</h3>
+            <p>Sun2Agent binds its filesystem tools and execution context strictly to the folder from which you launch it. That directory becomes your active workspace root: file reads, edits, and tests are restricted inside it, preventing unintended modifications to other parts of your computer.</p>
+
+            <h3>1. Install globally (recommended for everyday use)</h3>
+            <p>Install Sun2Agent globally so the <code>sun2agent</code> command is instantly available in any terminal window or project folder:</p>
+            <div class="code-block"><div class="code-head"><span>Terminal · Global installation</span><button class="copy-button" type="button" aria-label="Copy install commands">Copy</button></div><pre><code>npm install -g sun2agent
 cd /path/to/your/project
 sun2agent</code></pre></div>
-            <p>To try it without a global installation, run <code>npx sun2agent</code>. To update a global installation later, run <code>npm install -g sun2agent@latest</code>. To use the latest repository code, clone and run locally:</p>
-            <div class="code-block"><div class="code-head"><span>Terminal · latest source</span><button class="copy-button" type="button" aria-label="Copy source commands">Copy</button></div><pre><code>git clone https://github.com/snowhypers/Sun2Agent.git
+            <p>To update an existing global installation to the latest version at any time, run <code>npm install -g sun2agent@latest</code>.</p>
+
+            <h3>2. Or try immediately with npx (zero installation)</h3>
+            <p>If you prefer to try Sun2Agent immediately without installing anything globally on your machine, launch it in any project folder using <code>npx</code>:</p>
+            <div class="code-block compact"><div class="code-head"><span>Terminal · One-shot execution (no install)</span><button class="copy-button" type="button" aria-label="Copy npx command">Copy</button></div><pre><code>cd /path/to/your/project
+npx sun2agent</code></pre></div>
+
+            <h3>3. Developer install guide (run from source &amp; contribute)</h3>
+            <p>For contributors, hackers, or developers who want to modify the source code, run tests, or build custom integrations:</p>
+            <div class="code-block"><div class="code-head"><span>Terminal · Run from source</span><button class="copy-button" type="button" aria-label="Copy source commands">Copy</button></div><pre><code>git clone https://github.com/snowhypers/Sun2Agent.git
 cd Sun2Agent
 npm install
+npm test
 npm start</code></pre></div>
-            <div class="callout"><strong>Working directory matters.</strong> Sun2Agent treats the directory you launch from as the active workspace. Start it inside your project before asking it to edit files.</div>
+            <p>To link your local development build globally across your system so typing <code>sun2agent</code> executes your cloned repository code, run <code>npm link</code> inside the cloned directory.</p>
+
+            <div class="callout"><strong>Working directory tip:</strong> Always <code>cd</code> into your project repository before starting Sun2Agent so file modifications, searches, and test runners target the correct codebase.</div>
           </section>
 
           <section class="doc-section" id="first-run">
-            <div class="section-heading"><span class="section-index">03</span><div><p class="section-label">Get started</p><h2>First run &amp; configuration</h2></div></div>
-            <p>Use <code>/config</code> to choose a provider and set optional services. Each topic is independent; select <strong>Done</strong> when you want to save.</p>
-            <ol class="steps"><li><strong>Provider and model:</strong> select built-in NVIDIA NIM or add a custom OpenAI-compatible provider.</li><li><strong>API key:</strong> paste your key into the hidden prompt. On later visits, press Enter to keep the saved key.</li><li><strong>Model:</strong> pick a listed NVIDIA model, or enter the exact model ID supplied by your custom provider.</li><li><strong>Optional services:</strong> turn LangSmith tracing, Tavily web search, memory, and Telegram on or off separately.</li><li><strong>Done:</strong> review the confirmation summary and return to chat.</li></ol>
+            <div class="section-heading"><span class="section-index">03</span><div><p class="section-label">Get Started</p><h2>First Run &amp; Configuration</h2></div></div>
+            <p>On your first launch, Sun2Agent guides you through an interactive setup menu to connect your model and preferences.</p>
+
+            <h3>How configuration works</h3>
+            <p>All configuration is stored locally in <code>~/.sun2agent/config.json</code> with owner-only file permissions (<code>0600</code>). Credentials are kept on your machine and never synced to external servers or telemetry services. You can re-open configuration at any time by typing <code>/config</code>.</p>
+
+            <h3>How to configure</h3>
+            <ol class="steps">
+              <li><strong>Provider and model:</strong> Select built-in NVIDIA NIM or add a custom OpenAI-compatible provider (e.g., OpenAI, Groq, OpenRouter, or local Ollama).</li>
+              <li><strong>API key:</strong> Paste your provider API key into the secure, hidden input. When updating later, press Enter to keep your saved key.</li>
+              <li><strong>Model ID:</strong> Pick a listed model or type the exact model identifier supported by your endpoint (e.g., <code>meta/llama-3.3-70b-instruct</code>, <code>gpt-4o</code>, <code>llama3.2</code>).</li>
+              <li><strong>Optional services:</strong> Separately toggle Tavily web search, persistent memory, LangSmith tracing, or Telegram integration.</li>
+              <li><strong>Done:</strong> Select <strong>Done</strong> to save changes and enter the interactive terminal agent loop.</li>
+            </ol>
+
             <div class="code-block compact"><div class="code-head"><span>Your first task</span><button class="copy-button" type="button" aria-label="Copy first task">Copy</button></div><pre><code>› Explain this project's structure and suggest the first test to run.</code></pre></div>
-            <p>Saved credentials live in the owner-only <code>~/.sun2agent/config.json</code>. Custom providers must support the OpenAI-compatible Chat Completions API; agent tool use also requires compatible tool calling.</p>
           </section>
 
           <section class="doc-section" id="workspace">
-            <div class="section-heading"><span class="section-index">04</span><div><p class="section-label">Work with tools</p><h2>Workspace files</h2></div></div>
-            <p>File tools are available automatically. There is no <code>/workspace</code> step: launch from a project folder and describe the file task in plain language.</p>
-            <div class="example"><span class="example-label">Try this</span><p>“Read the package scripts, add a focused test for the parser, then tell me which test command to run.”</p></div>
-            <p>Reads can run without approval. Writing files asks for approval for routine changes in the current prompt; deletion asks again. File access stays within the active workspace and protected credential files remain blocked.</p>
-            <p>Put project-specific guidance in <code>AGENT.md</code> at the workspace root. Use <code>/agent</code> to open or create it.</p>
+            <div class="section-heading"><span class="section-index">04</span><div><p class="section-label">Core Features</p><h2>Workspace Files</h2></div></div>
+            <p>File tools are available automatically. There is no setup command needed: launch Sun2Agent from your project folder and describe your goal in natural language.</p>
+
+            <div class="example"><span class="example-label">Try this</span><p>“Read src/auth/service.js, add a unit test for password hashing, and verify that the test suite passes.”</p></div>
+
+            <h3>How workspace tools work</h3>
+            <ul class="check-list">
+              <li><strong>Autonomous file management:</strong> The agent automatically calls <code>read_file</code>, <code>write_file</code>, <code>replace_file_content</code>, and <code>list_dir</code> to inspect code and apply targeted edits.</li>
+              <li><strong>Path sandboxing &amp; security:</strong> File access is strictly locked to your workspace root directory. <code>filesystemGuard</code> blocks directory traversal attacks and prevents reading sensitive files like <code>.env</code> or SSH private keys.</li>
+              <li><strong>Human-in-the-Loop policy:</strong> Read-only operations run automatically. File creations and edits request approval for routine modifications per prompt; destructive deletions always require explicit fresh confirmation.</li>
+            </ul>
+
+            <h3>How Maven test verification works</h3>
+            <p>For Java codebases, Sun2Agent provides an automated test-verification cycle:</p>
+            <ol class="steps">
+              <li><strong>Authoring tests:</strong> Ask the agent to generate JUnit or TestNG tests under <code>src/test/java</code>.</li>
+              <li><strong>Fresh approval execution:</strong> The agent requests human approval to execute <code>mvn test</code> within your workspace.</li>
+              <li><strong>Autonomous diagnosis:</strong> If assertions fail or compilation errors arise, the agent inspects the failure stack trace, applies code fixes, and asks for approval to re-test.</li>
+              <li><strong>Verification report:</strong> Unverified work or failing assertions are clearly reported until the build passes cleanly.</li>
+            </ol>
+
+            <h3>Project conventions with AGENT.md</h3>
+            <p>Store project conventions, lint rules, and architectural guidelines in an <a href="#agent"><code>AGENT.md</code></a> file at your workspace root. Type <code>/agent</code> in chat to view or create it.</p>
+          </section>
+
+          <section class="doc-section" id="agent">
+            <div class="section-heading"><span class="section-index">05</span><div><p class="section-label">Core Features</p><h2>AGENT.md Instructions</h2></div></div>
+            <p><code>AGENT.md</code> provides repository-specific guidelines, architectural rules, coding conventions, and test requirements that Sun2Agent automatically follows whenever operating in your codebase.</p>
+
+            <div class="example"><span class="example-label">Try this</span><p>Type <code>/agent</code> in chat to open or create <code>./AGENT.md</code> directly in your terminal text editor.</p></div>
+
+            <h3>How AGENT.md works</h3>
+            <ul class="check-list">
+              <li><strong>Workspace scoping:</strong> Sun2Agent automatically searches for <code>AGENT.md</code> in the directory from which you launch it. Each repository maintains its own isolated rules.</li>
+              <li><strong>System prompt injection:</strong> Instructions from <code>AGENT.md</code> are injected into the model's system prompt under <code>Repository Instructions (from AGENT.md)</code> on every turn.</li>
+              <li><strong>Cached with instant reload:</strong> Rules are cached in memory for zero-latency execution. Running <code>/agent</code> reloads the file from disk immediately so edits take effect on the very next turn.</li>
+              <li><strong>Safety priority:</strong> Instructions in <code>AGENT.md</code> are advisory; they enforce team conventions and style guides, but cannot bypass 5-layer guardrails, override approvals, or breach Docker boundaries.</li>
+            </ul>
+
+            <h3>Example AGENT.md template</h3>
+            <div class="code-block"><div class="code-head"><span>./AGENT.md</span><button class="copy-button" type="button" aria-label="Copy AGENT.md template">Copy</button></div><pre><code># Project Guidelines
+
+## Tech Stack &amp; Standards
+- Node.js 22, ESM modules, strict TypeScript
+- Formatting: 2 spaces, single quotes, no semicolons
+
+## Testing &amp; Verification
+- Run tests via `npm test` after modifying any file in src/
+- Always verify all assertions pass before reporting completion
+
+## Workflows &amp; Git
+- Do not commit directly to `main`
+- Keep changes minimal and focused strictly on the requested task</code></pre></div>
+
+            <h3>How to use AGENT.md</h3>
+            <ol class="steps">
+              <li>Type <code>/agent</code> in the Sun2Agent prompt to open <code>./AGENT.md</code> in your editor.</li>
+              <li>Add or modify conventions, style guidelines, and build commands.</li>
+              <li>Save and close the file, then press Enter in the terminal. Sun2Agent confirms: <code>✔ AGENT.md reloaded. Its instructions are now active.</code></li>
+            </ol>
+          </section>
+
+          <section class="doc-section" id="context">
+            <div class="section-heading"><span class="section-index">06</span><div><p class="section-label">Core Features</p><h2>Sessions &amp; Memory</h2></div></div>
+            <p>Manage active conversation context, restore interrupted workflows, and save persistent preferences locally.</p>
+
+            <h3>How session and memory management works</h3>
+            <div class="info-grid">
+              <div><h3>Conversation snapshots</h3><p><code>/new</code> clears the active chat. <code>/continue</code> resumes an interrupted task from the automatic local session snapshot.</p></div>
+              <div><h3>Task summaries</h3><p><code>/save</code> drafts a concise task summary; nothing is stored until you approve it in <code>~/.sun2agent/saved-sessions.json</code>.</p></div>
+              <div><h3>Persistent memory</h3><p>Enable memory in <code>/config</code>. Preferences live in <code>~/.sun2agent/memory.md</code> and are matched against user prompt keywords with zero cloud sync.</p></div>
+              <div><h3>Project conventions</h3><p><code>AGENT.md</code> holds repository instructions. The agent follows conventions and rules automatically on every turn.</p></div>
+            </div>
+
+            <h3>How the /save command works</h3>
+            <p>While Sun2Agent automatically checkpoints raw session state to allow <code>/continue</code> resumption, the <code>/save</code> command lets you summarize and persist intentional workspace memories.</p>
+            <ul class="check-list">
+              <li><strong>Automatic multi-turn summary:</strong> Analyzes recent conversation turns and drafts a structured summary detailing your goal, key technical decisions, and modified files.</li>
+              <li><strong>Zero secret leakage:</strong> Summaries pass through <code>guardrails.sanitizeOutput</code> to guarantee no API keys, tokens, or private credentials are saved.</li>
+              <li><strong>Workspace scoping:</strong> Memories are stored in <code>~/.sun2agent/saved-sessions.json</code> keyed specifically to your project's directory path.</li>
+              <li><strong>Human confirmation:</strong> Displays the draft summary and requires confirmation (<code>Save this session memory?</code>) before writing to disk.</li>
+            </ul>
+
+            <h3>Which conversations you should save to memory</h3>
+            <p>Not every trivial prompt needs to be saved. Use <code>/save</code> for high-value conversations that will help the agent understand the project in future sessions:</p>
+            <ul class="check-list">
+              <li><strong>1. Complex debugging breakthroughs:</strong> When you spend multiple turns diagnosing an obscure bug, race condition, or subtle dependency conflict, run <code>/save</code> so the agent remembers the root cause and why specific fixes were made.</li>
+              <li><strong>2. Architectural &amp; schema milestones:</strong> After completing a major feature slice—such as designing a new database schema, establishing an API contract, or refactoring an authentication flow—run <code>/save</code> so the agent retains the design rationale.</li>
+              <li><strong>3. Project convention decisions:</strong> When you and the agent agree on specific coding conventions, tool preferences, or library choices that are not yet codified in <code>AGENT.md</code>, run <code>/save</code> to persist that context.</li>
+              <li><strong>4. End-of-session checkpoints:</strong> Before exiting the terminal at the end of a work session, run <code>/save</code> to record current task progress so the next session can resume with full context.</li>
+            </ul>
+
+            <h3>How to use sessions &amp; memory</h3>
+            <ul class="check-list">
+              <li><strong>Resume an interrupted turn:</strong> Type <code>/continue</code> to pick up directly from the last snapshot without re-prompting.</li>
+              <li><strong>Start fresh:</strong> Type <code>/new</code> to wipe chat history and reset token retention.</li>
+              <li><strong>Edit your developer preferences:</strong> Type <code>/memory</code> to open and edit <code>~/.sun2agent/memory.md</code> (e.g. "prefer functional style", "use pytest").</li>
+              <li><strong>Save session highlights:</strong> Type <code>/save</code> to review and approve an exportable task summary.</li>
+            </ul>
+          </section>
+
+          <section class="doc-section" id="skills">
+            <div class="section-heading"><span class="section-index">07</span><div><p class="section-label">Core Features</p><h2>Skills (skills.md)</h2></div></div>
+            <p>Skills are reusable instruction blocks—such as code review checklists, test templates, and framework guidelines—that you can attach to any conversation on demand.</p>
+
+            <div class="example"><span class="example-label">Active skill indicator in prompt</span><p><code>› [Skill: Code Review] [Skill: Jest Testing] Review the PR diff and add unit tests.</code></p></div>
+
+            <h3>How Skills work</h3>
+            <ul class="check-list">
+              <li><strong>Central definition:</strong> Saved in <code>~/.sun2agent/skills.md</code>. Each skill is formatted with a markdown heading and actionable instructions.</li>
+              <li><strong>Dynamic prompt injection:</strong> When a skill is selected, Sun2Agent injects its guidelines into the model's system prompt for that turn, ensuring adherence to your checklist.</li>
+              <li><strong>Visual indicator:</strong> Active skills display in brackets directly above the prompt input (e.g. <code>[Skill: Code Review]</code>).</li>
+              <li><strong>Quick dismiss:</strong> Pressing <code>Esc</code> on an empty input line instantly clears all active skills for the current prompt.</li>
+            </ul>
+
+            <h3>How to use Skills</h3>
+            <ol class="steps">
+              <li>Type <code>/skills</code> to view and toggle available skills or edit <code>skills.md</code>.</li>
+              <li>Select one or more skills from your list to activate them for your next task.</li>
+              <li>Type your request naturally—the model automatically follows the active skill instructions.</li>
+              <li>Press <code>Esc</code> on an empty input box anytime to clear active skills.</li>
+            </ol>
+          </section>
+
+          <section class="doc-section" id="self-improvement">
+            <div class="section-heading"><span class="section-index">08</span><div><p class="section-label">Core Features</p><h2>Self-Improvement</h2></div></div>
+            <p>When an action encounters an error, a Java test fails, or a desktop outcome is left unverified, Sun2Agent analyzes what went wrong and proposes an advisory operational lesson.</p>
+
+            <div class="example"><span class="example-label">Example proposed lesson</span><p>“After editing Java tests, run Maven tests and report the result before claiming success.”</p></div>
+
+            <h3>How self-improvement works</h3>
+            <ul class="check-list">
+              <li><strong>Failure detection:</strong> Identifies tool errors, failed test assertions, or unverified desktop outcomes after a turn.</li>
+              <li><strong>User consent required:</strong> Prompts you with <strong>Discard</strong> as the default choice. Nothing is saved without explicit approval.</li>
+              <li><strong>Strict local storage:</strong> Approved lessons are saved in <code>~/.sun2agent/lessons.json</code> with 0600 file permissions and zero external telemetry.</li>
+              <li><strong>Safety &amp; secret screening:</strong> Every lesson passes through <code>inputGuard</code>, <code>outputGuard</code>, and secret redaction to ensure no credentials or prompt injections are stored.</li>
+              <li><strong>Keyword-relevant retrieval:</strong> Future tasks with matching keywords load up to one relevant lesson into the context prompt to prevent recurring mistakes.</li>
+            </ul>
+
+            <h3>Session Memory (/save) vs. Self-Improvement (lessons.json)</h3>
+            <p>Sun2Agent uses two complementary local learning mechanisms that serve distinct purposes:</p>
+            <ul class="check-list">
+              <li><strong>Session Memory (<code>/save</code>) captures what went right:</strong> Preserves features built, architectural choices, and project milestones keyed to the current workspace.</li>
+              <li><strong>Self-Improvement (<code>lessons.json</code>) captures what went wrong:</strong> Triggers after failed tool executions, broken builds, or unverified desktop actions, proposing defensive operational habits so the agent never repeats past mistakes.</li>
+            </ul>
+            <p>Both systems are 100% local, require explicit user approval (defaulting to <code>Discard</code> / <code>No</code>), and include secret redaction.</p>
+
+            <h3>How to use it</h3>
+            <p>When a lesson is suggested after a failed action, choose <strong>Keep</strong> to save it or <strong>Discard</strong> to skip. Approved lessons apply automatically to future relevant prompts.</p>
           </section>
 
           <section class="doc-section" id="search">
-            <div class="section-heading"><span class="section-index">05</span><div><p class="section-label">Work with tools</p><h2>Web search</h2></div></div>
-            <p>Web search is off by default. In <code>/config</code>, choose <strong>Web Search</strong>, enable Tavily, and save its API key. The agent can then use <code>web_search</code> for current facts and research questions.</p>
-            <div class="example"><span class="example-label">Try this</span><p>“Find the latest Node.js release from the official release notes. Include its date and source URL.”</p></div>
-            <p>For time-sensitive answers, check the publication date and linked source. A search result is evidence to inspect, not a guarantee that a claim is current.</p>
+            <div class="section-heading"><span class="section-index">09</span><div><p class="section-label">Tools &amp; Integrations</p><h2>Web Search</h2></div></div>
+            <p>Live web search gives the agent access to real-time facts, documentation, and release notes without manual browsing.</p>
+
+            <div class="example"><span class="example-label">Try this</span><p>“Find the latest Node.js LTS release from official release notes. Include its date and source URL.”</p></div>
+
+            <h3>How web search works</h3>
+            <ul class="check-list">
+              <li><strong>Tavily search API:</strong> Queries the live web for authoritative developer documentation and facts when tool calling is needed.</li>
+              <li><strong>Indirect prompt injection defense:</strong> Web result snippets are wrapped inside strict <code>&lt;&lt;&lt;UNTRUSTED_WEB_DATA&gt;&gt;&gt;</code> boundary delimiters.</li>
+              <li><strong>Input guardrail screening:</strong> Every search snippet passes through <code>guardrails.inputGuard</code> before entering the model context, blocking hidden instructions or jailbreak attempts.</li>
+              <li><strong>Zero authority over workspace:</strong> Untrusted web content cannot override your project instructions (<code>AGENT.md</code>), bypass guardrails, or approve actions.</li>
+            </ul>
+
+            <h3>How to use it</h3>
+            <ol class="steps">
+              <li>In Sun2Agent, type <code>/config</code> and select <strong>Web Search</strong>.</li>
+              <li>Enable Tavily and paste your API key. Select <strong>Done</strong>.</li>
+              <li>Ask current-events or documentation questions naturally in your chat.</li>
+            </ol>
           </section>
 
           <section class="doc-section" id="browser">
-            <div class="section-heading"><span class="section-index">06</span><div><p class="section-label">Work with tools</p><h2>Browser automation</h2></div></div>
-            <p>Run <code>/browser</code> to start Playwright MCP with an isolated Chrome profile. The browser stays disconnected until requested.</p>
+            <div class="section-heading"><span class="section-index">10</span><div><p class="section-label">Tools &amp; Integrations</p><h2>Browser Automation</h2></div></div>
+            <p>Automate isolated web navigation, documentation scraping, and web application testing using Playwright.</p>
+
             <div class="code-block compact"><div class="code-head"><span>Example</span><button class="copy-button" type="button" aria-label="Copy browser example">Copy</button></div><pre><code>/browser
 › Open nodejs.org and show me the latest release notes.</code></pre></div>
-            <p>The isolated profile is separate from your normal signed-in browser. Expect to sign in yourself if a site requires an account. Clicking, typing, dragging, and key presses require fresh approval; inspect the target before allowing a consequential action.</p>
-            <div class="callout"><strong>Browser vs computer:</strong> <code>/browser</code> controls an isolated web browser. It does not control your other desktop apps.</div>
+
+            <h3>How browser automation works</h3>
+            <ul class="check-list">
+              <li><strong>Isolated Chrome profile:</strong> Spawns a dedicated Playwright Chromium browser session on demand. Disconnected by default to save resources.</li>
+              <li><strong>Profile separation:</strong> Runs independently of your personal browser data and cookies; you stay protected from credential exposure.</li>
+              <li><strong>Human-in-the-Loop protection:</strong> Navigating and viewing pages proceed automatically; clicking, typing, submitting forms, and key presses request confirmation.</li>
+            </ul>
+
+            <h3>How to use it</h3>
+            <ol class="steps">
+              <li>Type <code>/browser</code> in the prompt to launch and connect the isolated browser.</li>
+              <li>Give instructions in plain English (e.g. “Navigate to example.com and extract header links”).</li>
+              <li>Press <code>Esc</code> on an empty input or type <code>/browser disconnect</code> to close the browser session.</li>
+            </ol>
+            <div class="callout"><strong>Browser vs computer:</strong> <code>/browser</code> controls an isolated web browser window. It cannot interact with your other desktop apps or host files.</div>
           </section>
 
           <section class="doc-section" id="computer">
-            <div class="section-heading"><span class="section-index">07</span><div><p class="section-label">Work with tools</p><h2>Computer control</h2></div></div>
-            <p><code>/computer</code> connects native desktop-control tools on demand. Unlike <code>/browser</code>, it operates your <strong>real host desktop</strong>, so watch the actions and approve each change carefully.</p>
-            <ol class="steps"><li>Run <code>/computer</code> and confirm that you want real desktop access.</li><li>Choose image support only if your selected model accepts images.</li><li>Review the permission report. On macOS, Accessibility and Screen Recording may be needed; some actions ask for Automation permission.</li><li>Ask for a narrow task, such as “Open VS Code and show its current window.”</li></ol>
-            <p>Read-only checks need no approval. Opening or activating the same app shares one approval per prompt; clicks, typing, menu selections, and scripts still ask separately. Esc stops the active turn; Esc at an empty input disconnects <code>/computer</code>. It is unavailable inside the Docker sandbox.</p>
-            <p>The first connection can download its pinned MCP package and has a 30-second connection limit. A connected server does not guarantee every app is controllable.</p>
+            <div class="section-heading"><span class="section-index">11</span><div><p class="section-label">Tools &amp; Integrations</p><h2>Computer Control</h2></div></div>
+            <p>Control your native desktop environment—inspect application windows, click UI elements, send keystrokes, and automate desktop workflows.</p>
+
+            <h3>How computer control works</h3>
+            <ul class="check-list">
+              <li><strong>Native OS automation:</strong> Dispatches mouse and keyboard events and inspects active windows using host accessibility APIs on macOS, Linux, and Windows.</li>
+              <li><strong>Fine-grained approval:</strong> Inspecting window titles and application state is read-only. Activating an app shares one approval per prompt; clicks, typing, and system scripts require explicit individual approval.</li>
+              <li><strong>Host isolation guard:</strong> Computer control operates on your host desktop and is intentionally disabled inside Docker sandbox containers to prevent host-escape vectors.</li>
+            </ul>
+
+            <h3>How to use it</h3>
+            <ol class="steps">
+              <li>Type <code>/computer</code> and confirm desktop access.</li>
+              <li>Choose image support if your configured model supports vision/multimodal input.</li>
+              <li>Review the permission report. On macOS, grant Accessibility and Screen Recording permissions in System Settings if prompted.</li>
+              <li>Prompt the agent with a focused desktop task, for example: “Open VS Code and bring the project window to the front.”</li>
+              <li>Press <code>Esc</code> or type <code>/computer disconnect</code> anytime to release desktop control.</li>
+            </ol>
           </section>
 
           <section class="doc-section" id="mcp">
-            <div class="section-heading"><span class="section-index">08</span><div><p class="section-label">Work with tools</p><h2>Connect MCP servers</h2></div></div>
-            <p>Use <code>/mcp</code> to edit <code>~/.sun2agent/mcp.json</code>, connect one server, connect all, or disconnect. Sun2Agent supports local <code>stdio</code> servers and remote HTTP/SSE servers.</p>
+            <div class="section-heading"><span class="section-index">12</span><div><p class="section-label">Tools &amp; Integrations</p><h2>MCP Servers</h2></div></div>
+            <p>Extend Sun2Agent with any tool ecosystem using the Model Context Protocol (MCP)—from databases to developer tools.</p>
+
+            <h3>How MCP integration works</h3>
+            <ul class="check-list">
+              <li><strong>Multi-transport support:</strong> Natively connects to local processes via <code>stdio</code>, remote servers over <code>http</code> (Streamable HTTP), and <code>sse</code> (Server-Sent Events).</li>
+              <li><strong>Dynamic schema discovery:</strong> Automatically discovers tool schemas and arguments, exposing them as function calls to your active LLM.</li>
+              <li><strong>Security boundaries:</strong> Dangerous commands or unknown tools always trigger Human-in-the-Loop confirmations before execution.</li>
+            </ul>
+
+            <h3>How to use it</h3>
+            <p>Use <code>/mcp</code> in chat to manage servers interactively, or configure them directly in <code>~/.sun2agent/mcp.json</code>:</p>
             <div class="code-block"><div class="code-head"><span>~/.sun2agent/mcp.json</span><button class="copy-button" type="button" aria-label="Copy MCP example">Copy</button></div><pre><code>{
   "mcpServers": {
     "research": {
@@ -151,64 +700,273 @@ npm start</code></pre></div>
     }
   }
 }</code></pre></div>
-            <p>The optional <code>telegramTools</code> list names remote read-only tools you explicitly allow in Telegram; without it, no MCP tools are exposed there. Local MCP servers, browser tools, computer tools, and approval-required actions are never offered to Telegram.</p>
-            <div class="callout callout-warning"><strong>Trust boundary:</strong> a local MCP server can launch a program, and a remote server receives tool arguments. Add only servers you trust. Tool descriptions and “read-only” hints are not security guarantees.</div>
+            <p>The optional <code>telegramTools</code> property allowlists specific remote read-only tools for Telegram. Local MCP servers, browser automation, and computer control tools are never exposed over Telegram.</p>
+            <div class="callout callout-warning"><strong>Trust boundary:</strong> Local MCP servers run real programs on your machine. Add only trusted servers; tool descriptions and “read-only” hints are not security guarantees.</div>
           </section>
 
           <section class="doc-section" id="telegram">
-            <div class="section-heading"><span class="section-index">09</span><div><p class="section-label">Stay connected</p><h2>Set up Telegram</h2></div></div>
-            <p>Telegram lets one configured private chat reach your running agent. The CLI must stay open to receive and answer messages.</p>
-            <ol class="steps"><li>In Telegram, open <strong>@BotFather</strong>, send <code>/newbot</code>, choose a name and username, and copy the bot token. Keep it private.</li><li>Open your new bot and send <code>/start</code> so there is a chat to authorize.</li><li>Find your numeric Telegram <strong>user/chat ID</strong>. You can inspect your bot’s <code>getUpdates</code> response after sending a message; in a private chat, use the matching <code>message.chat.id</code> and <code>message.from.id</code>. Do not share the token or paste the API response into a public issue.</li><li>In Sun2Agent, run <code>/config</code> → <strong>Telegram</strong>, answer Yes to <strong>Connect Telegram?</strong>, then enter the bot token and numeric chat ID. Select <strong>Done</strong>.</li><li>Keep Sun2Agent running and send your bot a question.</li></ol>
+            <div class="section-heading"><span class="section-index">13</span><div><p class="section-label">Tools &amp; Integrations</p><h2>Telegram</h2></div></div>
+            <p>Connect your running Sun2Agent terminal to a private Telegram bot to query projects, execute research, and receive updates on mobile or desktop.</p>
+
+            <h3>How Telegram integration works</h3>
+            <ul class="check-list">
+              <li><strong>Direct long-polling:</strong> Sun2Agent connects directly to the Telegram Bot API from your machine. No webhooks or public ports needed.</li>
+              <li><strong>Strict user authorization:</strong> Every incoming message is checked against your configured numeric Telegram user ID. Unrecognized messages are silently ignored.</li>
+              <li><strong>Live streaming replies:</strong> Message text updates dynamically as the LLM generates tokens.</li>
+              <li><strong>Host security restrictions:</strong> Local filesystem tools, browser automation, and host desktop control are restricted from Telegram execution for safety.</li>
+            </ul>
+
+            <h3>How to use it</h3>
+            <ol class="steps">
+              <li>In Telegram, open <strong>@BotFather</strong>, send <code>/newbot</code>, choose a name and username, and copy your bot token.</li>
+              <li>Open your newly created bot and send <code>/start</code>.</li>
+              <li>Find your numeric Telegram <strong>user ID</strong> (inspect your bot’s <code>getUpdates</code> response or use an ID bot).</li>
+              <li>In Sun2Agent, run <code>/config</code> → <strong>Telegram</strong>, answer Yes to <strong>Connect Telegram?</strong>, and paste your bot token and chat ID. Select <strong>Done</strong>.</li>
+              <li>Keep Sun2Agent running in your terminal and message your bot anytime.</li>
+            </ol>
             <div class="command-strip"><span><code>/start</code> help</span><span><code>/new</code> fresh chat</span><span><code>/stop</code> abort current reply</span></div>
-            <p>Typing status appears before the response and the reply is edited as text arrives. Telegram does not receive local file, browser, or desktop control tools. Selecting “No” in configuration disables Telegram without deleting stored credentials.</p>
           </section>
 
           <section class="doc-section" id="schedule">
-            <div class="section-heading"><span class="section-index">10</span><div><p class="section-label">Stay connected</p><h2>Scheduled Telegram tasks</h2></div></div>
-            <p>With Telegram configured, write a task containing three things: <strong>what to do</strong>, <strong>when</strong>, and <strong>once or daily</strong>. If a detail is missing or conflicts, Sun2Agent asks you to clarify.</p>
-            <div class="code-block compact"><div class="code-head"><span>Example</span><button class="copy-button" type="button" aria-label="Copy schedule example">Copy</button></div><pre><code>› Every day at 9 PM, summarize today's AI news and send it to Telegram.</code></pre></div>
-            <p>It saves the schedule with the machine’s detected timezone and shows the complete result. Use <code>/schedule</code> to inspect jobs or confirm deletion. Only unattended read-only tasks are supported. The CLI must remain running for jobs to fire. On a VPS, verify that its timezone matches the time you expect.</p>
-            <div class="callout"><strong>Reliability note:</strong> a failed Telegram delivery remains scheduled for retry. If Telegram accepts a message immediately before a crash, a duplicate may be possible after restart.</div>
-          </section>
+            <div class="section-heading"><span class="section-index">14</span><div><p class="section-label">Automation</p><h2>Scheduled Tasks</h2></div></div>
+            <p>Automate recurring background research, system checks, and reminders delivered directly to your Telegram chat.</p>
 
-          <section class="doc-section" id="context">
-            <div class="section-heading"><span class="section-index">11</span><div><p class="section-label">Stay connected</p><h2>Sessions, memory &amp; Skills</h2></div></div>
-            <p>A normal launch starts a fresh conversation. The footer estimates retained chat tokens; it does not show total provider usage or remaining model capacity.</p>
-            <div class="info-grid"><div><h3>Conversation</h3><p><code>/new</code> clears the current chat. <code>/continue</code> resumes an interrupted task from the current session snapshot, if available.</p></div><div><h3>Saved task summary</h3><p><code>/save</code> drafts a short summary; nothing is saved until you approve it. Relevant summaries can help later tasks in the same workspace.</p></div><div><h3>Memory</h3><p>Enable memory in <code>/config</code>. <code>/memory</code> opens editable preferences in <code>~/.sun2agent/memory.md</code>.</p></div><div><h3>Project rules &amp; Skills</h3><p><code>AGENT.md</code> holds project instructions. <code>/skills</code> lets you edit and select reusable instruction blocks from <code>skills.md</code>.</p></div></div>
-            <p>These sources are advisory context, not a way to override guardrails or tool approvals. The agent may propose a short lesson after a clear failure; choose Save or Discard.</p>
+            <div class="code-block compact"><div class="code-head"><span>Example: recurring job</span><button class="copy-button" type="button" aria-label="Copy schedule example">Copy</button></div><pre><code>› Every day at 9 PM, summarize today's AI news and send it to Telegram.</code></pre></div>
+
+            <div class="code-block compact"><div class="code-head"><span>Example: one-time reminder</span><button class="copy-button" type="button" aria-label="Copy reminder example">Copy</button></div><pre><code>› Remind me in 30 minutes to run the production test suite.</code></pre></div>
+
+            <h3>How scheduled tasks work</h3>
+            <ul class="check-list">
+              <li><strong>Natural language schedule parsing:</strong> Automatically detects intent, interval (daily, recurring, or one-time), and execution time aligned with your local machine's timezone.</li>
+              <li><strong>Unattended background execution:</strong> Runs read-only queries in the background and delivers results directly to your authorized Telegram chat.</li>
+              <li><strong>CLI dependency:</strong> Scheduled tasks require the Sun2Agent terminal process to remain running on your machine.</li>
+            </ul>
+
+            <h3>How to use it</h3>
+            <p>Specify three details in your prompt: <strong>what to do</strong>, <strong>when</strong>, and <strong>once or daily</strong>. Type <code>/schedule</code> anytime in chat to inspect, pause, or remove scheduled jobs.</p>
           </section>
 
           <section class="doc-section" id="security">
-            <div class="section-heading"><span class="section-index">12</span><div><p class="section-label">Operate safely</p><h2>Approvals &amp; guardrails</h2></div></div>
-            <p>Sun2Agent checks inputs and tool calls with command, network, filesystem, and output guards. Sensitive output is masked before it is kept in the conversation or shown to the model. These rules reduce risk but do not make arbitrary tools safe.</p>
-            <div class="security-flow"><span>Prompt</span><b aria-hidden="true">→</b><span>Model proposes tool</span><b aria-hidden="true">→</b><span>Guards + approval</span><b aria-hidden="true">→</b><span>Tool runs</span></div>
-            <p>Read-only checks generally run without interruption. Routine changes can share one approval for that MCP server and prompt. Deletes, messages, scripts, purchases, account changes, and unknown actions require a fresh decision. Approvals do not carry into another prompt.</p>
-            <p>Your model provider receives the prompts and tool context needed to answer. Tavily, LangSmith, and Telegram receive data only when enabled or used. There is no built-in telemetry, but optional integrations have their own data policies.</p>
+            <div class="section-heading"><span class="section-index">15</span><div><p class="section-label">Security &amp; Sandboxing</p><h2>Approvals &amp; Guardrails</h2></div></div>
+            <p>Every tool call passes through five synchronized security guard layers before execution—sub-millisecond regex validation with zero extra LLM overhead.</p>
+
+            <div class="security-flow"><span>Prompt</span><b aria-hidden="true">→</b><span>Model proposes tool</span><b aria-hidden="true">→</b><span>5 Guardrail Layers + HITL</span><b aria-hidden="true">→</b><span>Tool runs</span><b aria-hidden="true">→</b><span>outputGuard</span></div>
+
+            <h3>How the 5-layer guardrails work</h3>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th scope="col">Guard Layer</th><th scope="col">What it blocks &amp; protects</th></tr></thead>
+                <tbody>
+                  <tr><td><code>inputGuard</code></td><td>Prompt injection attacks, jailbreaks, and system-prompt extraction attempts.</td></tr>
+                  <tr><td><code>commandGuard</code></td><td>Destructive commands (<code>rm -rf</code>, <code>sudo</code>, <code>mkfs</code>, fork bombs, <code>curl | sh</code>, <code>git push --force</code>).</td></tr>
+                  <tr><td><code>networkGuard</code></td><td>Data exfiltration vectors (e.g. <code>cat .env | curl</code>, uploads via <code>scp</code>, <code>nc</code>, <code>curl -d</code>).</td></tr>
+                  <tr><td><code>filesystemGuard</code></td><td>Access to sensitive files (<code>.env</code>, <code>.ssh</code>, <code>.aws</code>, <code>id_rsa</code>, <code>*.pem</code>) and path traversal outside the project root.</td></tr>
+                  <tr><td><code>outputGuard</code></td><td>Masks API keys, AWS/GitHub/Slack tokens, JWTs, and private keys before tool outputs appear in chat or LLM context.</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h3>How Human-in-the-Loop approvals work</h3>
+            <ul class="check-list">
+              <li><strong>Read-only checks:</strong> Listing files, reading code, and inspecting windows proceed immediately without prompting.</li>
+              <li><strong>Routine modifications:</strong> File edits and writes share a single approval decision for that MCP server and prompt.</li>
+              <li><strong>High-risk actions:</strong> Deletions, shell commands, and external messages always require a fresh, explicit decision.</li>
+            </ul>
+
+            <h3>How to use approvals</h3>
+            <p>When an action requires confirmation, Sun2Agent displays the server name, tool, arguments, and risk level. Type <code>y</code> to approve or <code>n</code> to decline.</p>
           </section>
 
           <section class="doc-section" id="sandbox">
-            <div class="section-heading"><span class="section-index">13</span><div><p class="section-label">Operate safely</p><h2>Optional Docker sandbox</h2></div></div>
-            <p>Enable Docker isolation if you want the whole agent to run in a container. Docker must be installed and running first. The agent will not silently fall back to host execution if Docker is unavailable.</p>
+            <div class="section-heading"><span class="section-index">16</span><div><p class="section-label">Security &amp; Sandboxing</p><h2>Docker Sandbox</h2></div></div>
+            <p>Run the entire agent runtime inside an isolated Docker container to protect your host system during untrusted code execution.</p>
+
             <div class="code-block compact"><div class="code-head"><span>Terminal</span><button class="copy-button" type="button" aria-label="Copy Docker commands">Copy</button></div><pre><code>sun2agent sandbox enable
 sun2agent sandbox status
 sun2agent sandbox disable</code></pre></div>
-            <p>The active project is mounted into the container as its workspace. Host desktop control with <code>/computer</code> is unavailable inside Docker; local host-integrated MCP servers may also need a different setup. Use <code>/browser</code> only if its browser dependencies are available inside the container.</p>
+
+            <h3>How the Docker sandbox works</h3>
+            <ul class="check-list">
+              <li><strong>Containerized runtime:</strong> Mounts your project directory into an isolated container. The agent cannot modify files outside the mounted project.</li>
+              <li><strong>Automatic session resume:</strong> If Docker restarts mid-session, Sun2Agent pauses and resumes automatically without loss of context.</li>
+              <li><strong>Desktop isolation:</strong> Host desktop control (<code>/computer</code>) is intentionally disabled inside Docker to maintain strict isolation boundaries.</li>
+            </ul>
+
+            <h3>How to use it</h3>
+            <p>Ensure Docker Desktop or daemon is running, then run <code>sun2agent sandbox enable</code> before starting your session.</p>
+          </section>
+
+          <section class="doc-section" id="observability">
+            <div class="section-heading"><span class="section-index">17</span><div><p class="section-label">Monitoring &amp; Troubleshooting</p><h2>Observability &amp; LangSmith</h2></div></div>
+            <p>Track LLM calls, tool execution times, latency, token consumption, and errors with production-grade observability via LangSmith—with privacy guardrails baked in.</p>
+
+            <div class="example"><span class="example-label">Privacy guarantee</span><p>All prompts, messages, tool arguments, and results are screened through <code>outputGuard</code> before leaving your machine. API keys, tokens, and secrets are automatically redacted.</p></div>
+
+            <h3>How LangSmith observability works</h3>
+            <ul class="check-list">
+              <li><strong>Zero telemetry by default:</strong> Sun2Agent sends zero data to external monitoring servers unless you explicitly opt in via <code>/config</code>.</li>
+              <li><strong>Dual-layer tracing:</strong> Creates nested runs for both model API calls (<code>traceLLM</code>) and MCP tool executions (<code>traceTool</code>) using the official <code>RunTree</code> SDK.</li>
+              <li><strong>Automatic secret redaction:</strong> Prompts, completions, tool inputs, and tool outputs pass through <code>outputGuard</code> before dispatch to LangSmith. Bearer tokens, private keys, and API secrets are masked.</li>
+              <li><strong>Screenshots omitted:</strong> Binary screenshots from <code>/browser</code> or <code>/computer</code> are replaced with <code>[Screenshot omitted from trace]</code> placeholders to prevent data leakage.</li>
+              <li><strong>Non-blocking fire-and-forget:</strong> Tracing runs asynchronously in the background. Network lag or LangSmith service outages never freeze the terminal or interrupt your workflow.</li>
+            </ul>
+
+            <h3>How to configure and use LangSmith</h3>
+            <ol class="steps">
+              <li>Sign up at <a href="https://smith.langchain.com/" target="_blank" rel="noopener noreferrer">smith.langchain.com</a> and generate a LangSmith API key.</li>
+              <li>In Sun2Agent, type <code>/config</code> and select <strong>LangSmith observability</strong>.</li>
+              <li>Choose <strong>Yes</strong> to enable tracing, then paste your LangSmith API key into the secure prompt.</li>
+              <li>(Optional) Specify a custom project name (defaults to <code>sun2agent</code>).</li>
+              <li>Select <strong>Done</strong>. All subsequent LLM queries and tool executions in that session will stream traces to your LangSmith project dashboard.</li>
+            </ol>
+            <div class="callout"><strong>To disable tracing:</strong> Re-open <code>/config</code> → <strong>LangSmith observability</strong> and select No. Stored keys are preserved but tracing is immediately deactivated.</div>
           </section>
 
           <section class="doc-section" id="troubleshooting">
-            <div class="section-heading"><span class="section-index">14</span><div><p class="section-label">Operate safely</p><h2>Troubleshooting</h2></div></div>
-            <div class="faq"><details><summary>The agent answers but does not call tools</summary><p>Check that the selected model supports OpenAI-compatible tool calling. Confirm the relevant integration is connected (<code>/browser</code>, <code>/computer</code>, or <code>/mcp</code>). Try a precise task that names the desired action.</p></details><details><summary>The model returns HTTP 429</summary><p>The provider is rate-limiting your requests. Wait for its cooldown, reduce repeated prompts or tool loops, or select another model. Sun2Agent retries some transient model errors once; it does not override a long <code>Retry-After</code>.</p></details><details><summary>Telegram reports a getUpdates conflict</summary><p>Two running processes are polling the same bot token. Stop the other Sun2Agent instance, then restart one copy.</p></details><details><summary>Browser or computer cannot connect</summary><p>For <code>/browser</code>, check Chrome and the isolated browser startup. For <code>/computer</code>, inspect the permission report and remember it needs the host desktop, not Docker. First use may download the MCP package.</p></details><details><summary>Scheduled message did not arrive</summary><p>Keep Sun2Agent running, verify Telegram is connected, check the saved job with <code>/schedule</code>, and confirm the displayed timezone. A job cannot fire while the CLI is closed.</p></details></div>
+            <div class="section-heading"><span class="section-index">18</span><div><p class="section-label">Monitoring &amp; Troubleshooting</p><h2>Troubleshooting FAQ</h2></div></div>
+            <div class="faq">
+              <details>
+                <summary>The agent answers but does not call tools</summary>
+                <p>Check that your selected model supports OpenAI-compatible tool/function calling. Confirm the relevant integration is connected (<code>/browser</code>, <code>/computer</code>, or <code>/mcp</code>). Try a precise prompt that explicitly names the desired action.</p>
+              </details>
+              <details>
+                <summary>The model returns HTTP 429</summary>
+                <p>The provider is rate-limiting your requests. Wait for its cooldown period, reduce repeated prompts or tool loops, or switch models in <code>/config</code>. Sun2Agent retries transient model errors once; it does not override provider <code>Retry-After</code> headers.</p>
+              </details>
+              <details>
+                <summary>Telegram reports a getUpdates conflict</summary>
+                <p>Two running processes are polling the same bot token simultaneously. Stop the other Sun2Agent instance or kill lingering processes, then restart one copy.</p>
+              </details>
+              <details>
+                <summary>Browser or computer cannot connect</summary>
+                <p>For <code>/browser</code>, verify Chrome is installed. For <code>/computer</code>, check system permissions (macOS Accessibility and Screen Recording) and note that desktop control is not supported inside Docker containers.</p>
+              </details>
+              <details>
+                <summary>Scheduled message did not arrive</summary>
+                <p>Keep the Sun2Agent terminal process open, verify Telegram is connected, inspect saved jobs with <code>/schedule</code>, and check the displayed machine timezone. A job cannot trigger if the CLI is closed.</p>
+              </details>
+              <details>
+                <summary>Maven test verification reports unverified work</summary>
+                <p>If Java test assertions fail or <code>mvn test</code> errors out, Sun2Agent reports the work as unverified. Check the failure stack trace in chat, approve fixes, and let the agent re-run tests until all pass.</p>
+              </details>
+            </div>
           </section>
 
           <section class="doc-section" id="commands">
-            <div class="section-heading"><span class="section-index">15</span><div><p class="section-label">Reference</p><h2>Command reference</h2></div></div>
-            <div class="table-wrap"><table><thead><tr><th scope="col">Command</th><th scope="col">What it does</th></tr></thead><tbody><tr><td><code>/config</code></td><td>Choose provider and model; configure optional services</td></tr><tr><td><code>/mcp</code></td><td>Manage and connect MCP servers</td></tr><tr><td><code>/browser</code></td><td>Connect isolated Playwright browser tools</td></tr><tr><td><code>/computer</code></td><td>Connect real desktop control</td></tr><tr><td><code>/computer disconnect</code></td><td>Disconnect only computer control</td></tr><tr><td><code>/agent</code></td><td>Open or create the workspace’s <code>AGENT.md</code></td></tr><tr><td><code>/skills</code></td><td>Edit and select reusable Skills</td></tr><tr><td><code>/memory</code></td><td>Open local preference memory</td></tr><tr><td><code>/new</code></td><td>Start a fresh conversation</td></tr><tr><td><code>/continue</code></td><td>Resume the current interrupted task</td></tr><tr><td><code>/save</code></td><td>Review and optionally save a task summary</td></tr><tr><td><code>/schedule</code></td><td>List, inspect, or delete scheduled Telegram jobs</td></tr><tr><td><code>/help</code></td><td>Show built-in help</td></tr><tr><td><code>/exit</code></td><td>Quit Sun2Agent</td></tr></tbody></table></div>
+            <div class="section-heading"><span class="section-index">19</span><div><p class="section-label">CLI Reference</p><h2>Command Reference</h2></div></div>
+            <p>Quick lookup table for all built-in slash commands and keyboard shortcuts.</p>
+
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th scope="col">Command</th><th scope="col">What it does</th></tr></thead>
+                <tbody>
+                  <tr><td><code>/config</code></td><td>Choose provider and model; configure optional services (search, memory, Telegram)</td></tr>
+                  <tr><td><code>/mcp</code></td><td>Manage, connect, or disconnect Model Context Protocol servers</td></tr>
+                  <tr><td><code>/browser</code></td><td>Connect isolated Playwright browser automation tools</td></tr>
+                  <tr><td><code>/computer</code></td><td>Connect real desktop control (mouse, keyboard, window inspection)</td></tr>
+                  <tr><td><code>/computer disconnect</code></td><td>Disconnect desktop control</td></tr>
+                  <tr><td><code>/agent</code></td><td>Open or create the workspace's <code>AGENT.md</code> conventions file</td></tr>
+                  <tr><td><code>/skills</code></td><td>Edit and select reusable Skills from <code>skills.md</code></td></tr>
+                  <tr><td><code>/memory</code></td><td>Open local preference memory in <code>~/.sun2agent/memory.md</code></td></tr>
+                  <tr><td><code>/new</code></td><td>Start a fresh conversation and reset chat tokens</td></tr>
+                  <tr><td><code>/continue</code></td><td>Resume an interrupted task from the latest session snapshot</td></tr>
+                  <tr><td><code>/save</code></td><td>Review and optionally save a task summary to disk</td></tr>
+                  <tr><td><code>/schedule</code></td><td>List, inspect, or delete scheduled Telegram jobs</td></tr>
+                  <tr><td><code>/help</code></td><td>Display built-in CLI help and tips</td></tr>
+                  <tr><td><code>/exit</code></td><td>Quit Sun2Agent safely</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h3>Keybindings &amp; Shortcuts</h3>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th scope="col">Key</th><th scope="col">Action</th></tr></thead>
+                <tbody>
+                  <tr><td><code>Ctrl+C</code></td><td>Abort active model generation or pending search turn</td></tr>
+                  <tr><td><code>Esc</code> *(during turn)*</td><td>Stop the current tool or model turn</td></tr>
+                  <tr><td><code>Esc</code> *(empty box)*</td><td>Disconnect active MCP/browser or clear selected Skills</td></tr>
+                </tbody>
+              </table>
+            </div>
+
             <div class="end-note"><span class="prompt-mark">›</span> Start in your project folder. Give one clear task. Review each proposed change.</div>
           </section>
         </div>
       </article>
-      <footer class="page-footer"><span>☀ sun2Agent documentation</span><span><a href="https://github.com/snowhypers/Sun2Agent" target="_blank" rel="noopener noreferrer">Source on GitHub ↗</a> · <a href="#overview">Back to top ↑</a></span></footer>
+
+      <footer class="page-footer">
+        <span>☀ sun2Agent documentation — Open-source MIT</span>
+        <span><a href="https://github.com/snowhypers/Sun2Agent" target="_blank" rel="noopener noreferrer">Source on GitHub ↗</a> · <a href="#overview">Back to top ↑</a></span>
+      </footer>
     </main>
   </div>
+
+  <script>
+  (function() {
+    const sidebar = document.getElementById('sidebar');
+    const menuButton = document.getElementById('menu-toggle');
+    const scrim = document.getElementById('sidebar-scrim');
+    const mobile = window.matchMedia('(max-width: 800px)');
+    const links = [...sidebar.querySelectorAll('nav a[href^="#"]')];
+
+    function setMenu(open) {
+      const show = mobile.matches && open;
+      sidebar.classList.toggle('is-open', show);
+      sidebar.inert = mobile.matches && !show;
+      menuButton.setAttribute('aria-expanded', String(show));
+      menuButton.setAttribute('aria-label', show ? 'Close topics' : 'Open topics');
+      scrim.hidden = !show;
+      document.body.classList.toggle('nav-open', show);
+    }
+
+    menuButton.addEventListener('click', () => setMenu(!sidebar.classList.contains('is-open')));
+    scrim.addEventListener('click', () => setMenu(false));
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && sidebar.classList.contains('is-open')) {
+        setMenu(false);
+        menuButton.focus();
+      }
+    });
+    mobile.addEventListener('change', () => setMenu(false));
+    links.forEach((link) => link.addEventListener('click', () => setMenu(false)));
+    setMenu(false);
+
+    function markActive(id) {
+      links.forEach((link) => {
+        const active = link.hash === `#${id}`;
+        link.classList.toggle('active', active);
+        if (active) link.setAttribute('aria-current', 'location');
+        else link.removeAttribute('aria-current');
+      });
+    }
+
+    const sections = links.map((link) => document.getElementById(link.hash.slice(1))).filter(Boolean);
+    if ('IntersectionObserver' in window) {
+      const observer = new IntersectionObserver((entries) => {
+        const visible = entries.filter((entry) => entry.isIntersecting)
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+        if (visible[0]) markActive(visible[0].target.id);
+      }, { rootMargin: '-90px 0px -70% 0px' });
+      sections.forEach((section) => observer.observe(section));
+    }
+    markActive(location.hash.slice(1) || 'overview');
+    window.addEventListener('hashchange', () => markActive(location.hash.slice(1) || 'overview'));
+
+    document.querySelectorAll('.copy-button').forEach((button) => {
+      button.addEventListener('click', async () => {
+        const value = button.closest('.code-block').querySelector('code').textContent;
+        try {
+          await navigator.clipboard.writeText(value);
+          button.textContent = 'Copied';
+          setTimeout(() => { button.textContent = 'Copy'; }, 1600);
+        } catch (_) {
+          button.textContent = 'Select text';
+          button.closest('.code-block').querySelector('code').parentElement.focus();
+        }
+      });
+    });
+  })();
+  </script>
 </body>
 </html>
