@@ -243,6 +243,17 @@ async function callTool(routes, fullName, args, signal, options = {}) {
     throw new Error(`Tool "${fullName}" is unavailable in Telegram.`);
   }
 
+  if (route.server === filesystem.NAME &&
+      [args?.path, ...(Array.isArray(args?.paths) ? args.paths : [])].some((value) =>
+        typeof value === 'string' && /^\s*(?:\[?https?:\/\/|\[[^\]]+\]\(https?:\/\/)/i.test(value))) {
+    throw new Error('A web URL is not a local workspace path. Use a connected web tool or answer from search results.');
+  }
+  if (route.server === filesystem.NAME && route.tool === 'edit_file' &&
+      (!Array.isArray(args?.edits) || !args.edits.length || args.edits.some((edit) =>
+        typeof edit?.oldText !== 'string' || typeof edit?.newText !== 'string'))) {
+    throw new Error('edit_file requires edits with both oldText and newText strings. Correct the arguments before retrying.');
+  }
+
   // Guardrails: command -> network -> filesystem, over every argument the
   // model supplied. Refusing here means the tool never runs at all.
   const verdict = guardrails.validateToolCall(route.tool, args);
@@ -280,6 +291,19 @@ async function callTool(routes, fullName, args, signal, options = {}) {
     // only text content (spec-strict). Real-world servers often do exactly
     // that, so be lenient like most other MCP clients.
     const S = await loadSdk();
+    if (route.server === computer.NAME && route.tool === 'click_element' &&
+        Number.isInteger(args?.window_id)) {
+      // Approval may foreground Terminal, so refocus only after HITL returns.
+      const focus = await conn.client.request(
+        { method: 'tools/call', params: { name: 'activate_window', arguments: { window_id: args.window_id } } },
+        S.CallToolResultSchema,
+        signal ? { signal } : undefined
+      );
+      const focusText = focus.content?.find((part) => part.type === 'text')?.text || '';
+      let activated = false;
+      try { activated = JSON.parse(focusText).activated === true; } catch (_) { /* invalid focus result */ }
+      if (focus.isError || !activated) throw new Error('Target window could not be activated; click was not attempted');
+    }
     const result = await conn.client.request(
       { method: 'tools/call', params: { name: route.tool, arguments: args || {} } },
       S.CallToolResultSchema,

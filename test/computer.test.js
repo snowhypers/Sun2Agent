@@ -77,6 +77,20 @@ test('computer: local window wait polls without extra model turns', async () => 
   assert.equal(calls, 2);
 });
 
+test('computer: a transient MCP window timeout does not abort the local wait', async () => {
+  let calls = 0;
+  registry.set('computer', { ...connection(true), client: {
+    close: async () => {}, request: async () => {
+      if (++calls === 1) throw new Error('MCP error -32001: Request timed out');
+      return { content: [{ type: 'text', text: JSON.stringify({ windows: [{ id: 42 }] }) }] };
+    }
+  } });
+  const result = await computer.callLocalTool('sun2agent_wait_for_window',
+    { bundle_id: 'com.example.App', timeout_ms: 1000 });
+  assert.match(result, /Window ready.*42/);
+  assert.equal(calls, 2);
+});
+
 test('computer: tool search reveals matches without executing them', async () => {
   registry.set('computer', { ...connection(true), tools: [
     { name: 'run_script', description: 'Run a script' },
@@ -102,7 +116,7 @@ test('computer: fresh approval for every desktop change despite readOnlyHint', a
   assert.equal(prompts, 3);
 });
 
-test('computer: one app-navigation approval is scoped to prompt and target app', async () => {
+test('computer: safe app navigation stays quiet across apps and prompts', async () => {
   let prompts = 0;
   const check = (tool, bundle_id, annotations) => hitl.checkApproval({
     server: 'computer', tool, args: { bundle_id }, annotations, enabled: true,
@@ -114,10 +128,26 @@ test('computer: one app-navigation approval is scoped to prompt and target app',
     args: { bundle_id: 'com.microsoft.VSCode', timeout_ms: 10000 }, enabled: true,
     _prompt: async () => { throw new Error('same app should stay approved'); } });
   await check('activate_app', 'com.apple.finder');
-  assert.equal(prompts, 2, 'another app needs its own approval');
+  assert.equal(prompts, 0, 'safe navigation needs no approval');
   hitl.startPrompt();
   await check('activate_app', 'com.microsoft.VSCode');
-  assert.equal(prompts, 3, 'the next prompt needs another approval');
+  assert.equal(prompts, 0, 'the next prompt stays quiet');
+});
+
+test('computer: safe app and window navigation does not prompt, photo click does', async () => {
+  for (const [tool, args] of [
+    ['open_application', { bundle_id: 'com.apple.PhotoBooth' }],
+    ['activate_app', { bundle_id: 'com.apple.PhotoBooth' }],
+    ['activate_window', { window_id: 42 }]
+  ]) {
+    assert.equal(await hitl.checkApproval({ server: 'computer', tool, args,
+      _prompt: async () => { throw new Error(`${tool} should not prompt`); } }), true);
+  }
+  let prompts = 0;
+  await hitl.checkApproval({ server: 'computer', tool: 'click_element',
+    args: { label: 'take photo', window_id: 42 },
+    _prompt: async () => { prompts++; return true; } });
+  assert.equal(prompts, 1);
 });
 
 test('computer: unknown targets and consequential desktop actions stay fresh', async () => {

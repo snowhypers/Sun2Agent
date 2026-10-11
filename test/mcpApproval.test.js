@@ -26,7 +26,7 @@ test('HITL: disabled config bypasses approval without touching stdin', async () 
 test('HITL: denies on non-interactive stdin because no user can choose', async () => {
   const ok = await hitl.checkApproval({
     server: 'filesystem',
-    tool: 'write_file',
+    tool: 'delete_file',
     args: { path: '/tmp/out.txt', content: 'x'.repeat(5000) }
   });
   assert.strictEqual(ok, false);
@@ -43,7 +43,12 @@ test('HITL: common read-only tools run without prompting', async () => {
     'tavily_extract',
     'tavily_crawl',
     'tavily_map',
-    'tavily_research'
+    'tavily_research',
+    'firecrawl_scrape',
+    'server_status',
+    'health',
+    'ping',
+    'version'
   ]) {
     const ok = await hitl.checkApproval({
       server: 'readonly',
@@ -53,6 +58,29 @@ test('HITL: common read-only tools run without prompting', async () => {
     });
     assert.strictEqual(ok, true, tool);
   }
+});
+
+test('HITL: routine changes on a user MCP run without prompts, high risk still asks', async () => {
+  for (const tool of ['create_event', 'edit_note', 'update_document']) {
+    assert.strictEqual(await hitl.checkApproval({ server: 'remote', tool,
+      _prompt: async () => { throw new Error(`${tool} should not prompt`); } }), true);
+  }
+  let prompts = 0;
+  await hitl.checkApproval({ server: 'remote', tool: 'send_message',
+    _prompt: async () => { prompts++; return true; } });
+  assert.strictEqual(prompts, 1);
+});
+
+test('HITL: routine workspace edits do not prompt; deletion still does', async () => {
+  for (const tool of ['write_file', 'edit_file', 'create_directory']) {
+    const ok = await hitl.checkApproval({ server: 'workspace', tool,
+      _prompt: async () => { throw new Error(`${tool} should not prompt`); } });
+    assert.strictEqual(ok, true);
+  }
+  let prompts = 0;
+  await hitl.checkApproval({ server: 'workspace', tool: 'delete_file',
+    _prompt: async () => { prompts++; return true; } });
+  assert.strictEqual(prompts, 1);
 });
 
 test('HITL: MCP readOnlyHint is not authority', async () => {
@@ -96,6 +124,17 @@ test('HITL: browser observation and navigation do not create approval noise', as
   }
 });
 
+test('HITL: user-added Playwright reads stay quiet but clicks still ask', async () => {
+  for (const tool of ['browser_navigate', 'browser_snapshot', 'browser_wait_for']) {
+    assert.strictEqual(await hitl.checkApproval({ server: 'microsoft_playwright-mcp', tool,
+      _prompt: async () => { throw new Error(`${tool} should not prompt`); } }), true);
+  }
+  let prompts = 0;
+  await hitl.checkApproval({ server: 'microsoft_playwright-mcp', tool: 'browser_click',
+    _prompt: async () => { prompts++; return true; } });
+  assert.strictEqual(prompts, 1);
+});
+
 test('HITL: essential browser actions require a fresh approval every time', async () => {
   const cases = [
     ['browser_click', { element: 'Place order', target: 'e20' }],
@@ -122,7 +161,7 @@ test('HITL: essential browser actions require a fresh approval every time', asyn
   }
 });
 
-test('HITL: one approval covers routine changes on one server in a prompt', async () => {
+test('HITL: routine changes on one server need no approval', async () => {
   let calls = 0;
   const fakePrompt = async () => {
     calls++;
@@ -135,10 +174,10 @@ test('HITL: one approval covers routine changes on one server in a prompt', asyn
   const third = await hitl.checkApproval({ server: 'fs', tool: 'edit_file', args: {}, _prompt: fakePrompt });
   assert.strictEqual(second, true);
   assert.strictEqual(third, true);
-  assert.strictEqual(calls, 1);
+  assert.strictEqual(calls, 0);
 });
 
-test('HITL: the next user prompt requires a new routine approval', async () => {
+test('HITL: routine changes stay quiet across user prompts', async () => {
   let calls = 0;
   const fakePrompt = async () => {
     calls++;
@@ -147,7 +186,7 @@ test('HITL: the next user prompt requires a new routine approval', async () => {
   await hitl.checkApproval({ server: 'fs', tool: 'write_file', args: {}, _prompt: fakePrompt });
   hitl.startPrompt();
   await hitl.checkApproval({ server: 'fs', tool: 'write_file', args: {}, _prompt: fakePrompt });
-  assert.strictEqual(calls, 2);
+  assert.strictEqual(calls, 0);
 });
 
 test('HITL: Maven test execution requires fresh approval every time', async () => {
@@ -158,15 +197,15 @@ test('HITL: Maven test execution requires fresh approval every time', async () =
   assert.strictEqual(prompts, 2);
 });
 
-test('HITL: a prompt-approved tool updates the live indicator before running', async () => {
+test('HITL: a routine tool updates the live indicator before running', async () => {
   const spinner = { isSpinning: true, text: '' };
   hitl.setSpinner(spinner);
   await hitl.checkApproval({ server: 'fs', tool: 'write_file', args: {}, _prompt: async () => true });
   await hitl.checkApproval({ server: 'fs', tool: 'write_file', args: {}, _prompt: async () => {
     throw new Error('should not re-prompt');
   } });
-  assert.match(spinner.text, /approved for this prompt/);
-  assert.match(spinner.text, /running tool: write_file/);
+  assert.match(spinner.text, /routine tool/);
+  assert.match(spinner.text, /running: write_file/);
 });
 
 test('HITL: another server requires its own approval in the same prompt', async () => {
@@ -175,13 +214,13 @@ test('HITL: another server requires its own approval in the same prompt', async 
     calls++;
     return true;
   };
-  await hitl.checkApproval({ server: 'fs', tool: 'write_file', args: {}, _prompt: fakePrompt });
+  await hitl.checkApproval({ server: 'fs', tool: 'send_message', args: {}, _prompt: fakePrompt });
   assert.strictEqual(calls, 1);
-  await hitl.checkApproval({ server: 'other', tool: 'write_file', args: {}, _prompt: fakePrompt });
+  await hitl.checkApproval({ server: 'other', tool: 'send_message', args: {}, _prompt: fakePrompt });
   assert.strictEqual(calls, 2);
 });
 
-test('HITL: distinct sequential routine calls need only one approval', async () => {
+test('HITL: distinct sequential routine calls need no approval', async () => {
   let calls = 0;
   const fakePrompt = async () => {
     calls++;
@@ -191,7 +230,7 @@ test('HITL: distinct sequential routine calls need only one approval', async () 
   const b = await hitl.checkApproval({ server: 'fs', tool: 'write_file', args: {}, _prompt: fakePrompt });
   assert.strictEqual(a, true);
   assert.strictEqual(b, true);
-  assert.strictEqual(calls, 1);
+  assert.strictEqual(calls, 0);
 });
 
 test('HITL: deletes, sends, execution, unknown tools and destructive hints always ask', async () => {
@@ -215,15 +254,15 @@ test('HITL: a denied call blocks that call, but next call asks again', async () 
     calls++;
     return false;
   };
-  const first = await hitl.checkApproval({ server: 'fs', tool: 'write_file', args: {}, _prompt: fakePrompt });
+  const first = await hitl.checkApproval({ server: 'fs', tool: 'delete_file', args: {}, _prompt: fakePrompt });
   assert.strictEqual(first, false);
   // With _prompt override, each call invokes the prompt (no pending cache).
   // In real interactive mode, a pending promise would be reused within the same batch.
-  const second = await hitl.checkApproval({ server: 'fs', tool: 'write_file', args: {}, _prompt: fakePrompt });
+  const second = await hitl.checkApproval({ server: 'fs', tool: 'delete_file', args: {}, _prompt: fakePrompt });
   assert.strictEqual(second, false);
   assert.strictEqual(calls, 2);
   // Denied calls are NOT remembered for the session - next call asks again.
-  const third = await hitl.checkApproval({ server: 'fs', tool: 'write_file', args: {}, _prompt: fakePrompt });
+  const third = await hitl.checkApproval({ server: 'fs', tool: 'delete_file', args: {}, _prompt: fakePrompt });
   assert.strictEqual(third, false);
   assert.strictEqual(calls, 3);
 });

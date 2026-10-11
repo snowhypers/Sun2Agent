@@ -87,11 +87,19 @@ async function callLocalTool(name, args = {}, signal) {
   do {
     if (signal?.aborted) throw new Error('Window wait cancelled');
     const requestTimeout = Math.max(1, Math.min(3000, deadline - Date.now()));
-    const result = await conn.client.request(
-      { method: 'tools/call', params: { name: 'list_windows', arguments: { bundle_id: bundleId } } },
-      S.CallToolResultSchema,
-      { timeout: requestTimeout, maxTotalTimeout: requestTimeout, ...(signal ? { signal } : {}) }
-    );
+    let result;
+    try {
+      result = await conn.client.request(
+        { method: 'tools/call', params: { name: 'list_windows', arguments: { bundle_id: bundleId } } },
+        S.CallToolResultSchema,
+        { timeout: requestTimeout, maxTotalTimeout: requestTimeout, ...(signal ? { signal } : {}) }
+      );
+    } catch (error) {
+      if (signal?.aborted || !/(?:timed? out|-32001)/i.test(String(error?.message))) throw error;
+      const remaining = deadline - Date.now();
+      if (remaining > 0) await delay(Math.min(300, remaining), undefined, { signal });
+      continue;
+    }
     const raw = result.content?.find((part) => part.type === 'text')?.text || '';
     if (result.isError) throw new Error(raw || 'Window inspection failed');
     let windows;

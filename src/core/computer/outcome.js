@@ -2,11 +2,6 @@
 // Rebuild this small ledger from history so model-error recovery never replays an action.
 const { isComputerReadOnly } = require('../hitl/mcpApproval');
 
-const STATE_CHECKS = new Set([
-  'find_element', 'get_ui_tree', 'get_frontmost_app', 'get_window',
-  'list_windows', 'snapshot', 'screenshot', 'sun2agent_wait_for_window'
-]);
-
 function pendingComputerOutcome(history) {
   let start = 0;
   for (let i = 0; i < history.length; i++) {
@@ -15,6 +10,7 @@ function pendingComputerOutcome(history) {
   }
   const calls = new Map();
   const pending = [];
+  const lastTree = new Map();
   for (const message of history.slice(start)) {
     if (message.role === 'assistant') {
       for (const call of message.tool_calls || []) calls.set(call.id, call.function);
@@ -27,7 +23,19 @@ function pendingComputerOutcome(history) {
     const text = String(message.content || '');
     const failed = /^(?:Tool error:|MCP call .* NOT executed|interrupted|Tool not completed)/i.test(text);
     if (isComputerReadOnly(tool)) {
-      if (pending.length && !failed && STATE_CHECKS.has(tool)) pending.at(-1).checked = true;
+      if (pending.length && !failed && tool === 'get_ui_tree') {
+        let args = {};
+        try { args = JSON.parse(call.arguments || '{}'); } catch (_) { /* no match */ }
+        if (pending.at(-1).windowId === args.window_id && Number.isInteger(args.window_id) &&
+            lastTree.has(args.window_id) && lastTree.get(args.window_id) !== text) {
+          pending.at(-1).checked = true;
+        }
+      }
+      if (tool === 'get_ui_tree' && !failed) {
+        let args = {};
+        try { args = JSON.parse(call.arguments || '{}'); } catch (_) { /* no match */ }
+        if (Number.isInteger(args.window_id)) lastTree.set(args.window_id, text);
+      }
       if (tool === 'sun2agent_wait_for_window' && !failed) {
         let args = {};
         try { args = JSON.parse(call.arguments || '{}'); } catch (_) { /* no match */ }
@@ -39,7 +47,9 @@ function pendingComputerOutcome(history) {
     }
     let args = {};
     try { args = JSON.parse(call.arguments || '{}'); } catch (_) { /* no target */ }
-    pending.push({ tool, bundleId: args.bundle_id, checked: false, failed });
+    if (tool === 'activate_window' && !failed && /"activated"\s*:\s*true/.test(text)) continue;
+    pending.push({ tool, bundleId: args.bundle_id, checked: false, failed,
+      ...(Number.isInteger(args.window_id) ? { windowId: args.window_id } : {}) });
   }
   return pending[0] || null;
 }
@@ -47,6 +57,7 @@ function pendingComputerOutcome(history) {
 function unverifiedComputerMessage(outcome) {
   if (!outcome) return '';
   if (outcome.failed) return `Task incomplete: computer tool ${outcome.tool} failed or was not allowed. The requested result was not verified.`;
+  if (outcome.checked) return '';
   return `Task outcome not verified. Computer tool ${outcome.tool} ran, but its result does not prove the requested change happened. Inspect the app before retrying; the action was not repeated.`;
 }
 

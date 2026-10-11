@@ -48,6 +48,20 @@ test('workspace: bundled MCP creates and reads files in any launch folder', asyn
   assert.ok(connected.tools.some((tool) => tool.name === 'delete_directory'));
   assert.ok(connected.tools.some((tool) => tool.name === 'run_maven_tests'));
 
+  const invalidEdit = mcp.getOpenAiTools().routes;
+  const originalApproval = hitl.checkApproval;
+  hitl.checkApproval = async () => { throw new Error('invalid edits must not ask for approval'); };
+  try {
+    await assert.rejects(
+      mcp.callTool(invalidEdit, 'workspace__edit_file', {
+        path: 'hello.js', edits: [{ oldText: 'before' }]
+      }),
+      /oldText and newText/
+    );
+  } finally {
+    hitl.checkApproval = originalApproval;
+  }
+
   const realApproval = hitl.checkApproval;
   hitl.checkApproval = async () => true;
   try {
@@ -64,6 +78,12 @@ test('workspace: bundled MCP creates and reads files in any launch folder', asyn
 
     assert.strictEqual(output.trim(), 'Hello from Sun2Agent');
     assert.strictEqual(fs.readFileSync(file, 'utf8'), 'Hello from Sun2Agent');
+    await assert.rejects(
+      mcp.callTool(routes, 'workspace__read_text_file', {
+        path: '[Docker docs](https://docs.docker.com/reference/)'
+      }),
+      /web URL is not a local workspace path/i
+    );
 
     const testFile = path.join(actualWorkspaceRoot, 'src/test/java/UserTest.java');
     await mcp.callTool(routes, 'workspace__create_directory', {
