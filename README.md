@@ -638,7 +638,7 @@ npm uninstall -g sun2agent
 ## Contributing & Project Status
 
 **Status:** Public, open source, actively maintained
-**Maintainer:** Pradip ([snowhypers](https://github.com/snowhypers)) — [Sun2Agent](https://github.com/snowhypers/Sun2Agent)
+**Maintainer:** Pradip — [Sun2Agent](https://github.com/snowhypers/Sun2Agent)
 **Pull requests:** Not being accepted yet. Sun2Agent is currently a solo-built project, and the focus right now is on stability, core features, growing the user base, and fixing real bugs before opening up the codebase to outside changes.
 
 You don't need to touch a line of code to help — right now the most useful contributions are:
