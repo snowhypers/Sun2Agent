@@ -1,10 +1,24 @@
 const axios = require('axios');
 const { requestWithRetry } = require('./modelRetry');
 const observability = require('../observability');
+const { sanitizeOutput } = require('../guardrails/outputGuard');
 
 const NIM_URL = 'https://integrate.api.nvidia.com/v1/chat/completions';
-const DEFAULT_MODEL_TIMEOUT_MS = 60000;
+const DEFAULT_MODEL_TIMEOUT_MS = 90000;
 const DEFAULT_NVIDIA_TIMEOUT_MS = DEFAULT_MODEL_TIMEOUT_MS;
+const MAX_REQUEST_BYTES = 48 * 1024;
+
+function fitToolSchemas(tools, maxBytes = MAX_REQUEST_BYTES) {
+  const selected = [];
+  let bytes = 0;
+  for (const tool of tools || []) {
+    const size = Buffer.byteLength(JSON.stringify(tool));
+    if (bytes + size > maxBytes) continue;
+    selected.push(tool);
+    bytes += size;
+  }
+  return selected;
+}
 
 function modelTimeoutMs() {
   const configured = Number(
@@ -18,6 +32,35 @@ function modelTimeoutMs() {
 function timeoutSeconds(timeoutMs) {
   const seconds = timeoutMs / 1000;
   return Number.isInteger(seconds) ? String(seconds) : seconds.toFixed(1);
+}
+
+function settleOnAbort(promise, signal) {
+  if (!signal) return promise;
+  if (signal.aborted) return Promise.reject(signal.reason || new Error('Model request cancelled'));
+  return new Promise((resolve, reject) => {
+    const abort = () => reject(signal.reason || new Error('Model request cancelled'));
+    signal.addEventListener('abort', abort, { once: true });
+    promise.then(resolve, reject).finally(() => signal.removeEventListener('abort', abort));
+  });
+}
+
+async function providerErrorInfo(data) {
+  let body = data;
+  if (data && typeof data[Symbol.asyncIterator] === 'function') {
+    let text = '';
+    try {
+      for await (const chunk of data) {
+        text += chunk.toString();
+        if (text.length > 4096) break;
+      }
+      body = JSON.parse(text);
+    } catch (_) { body = null; }
+    finally { data.destroy?.(); }
+  }
+  const issue = body?.error || body?.detail || body;
+  const safe = (value) => typeof value === 'string' && /^[a-z][a-z0-9_]{0,63}$/i.test(value) &&
+    sanitizeOutput(value) === value ? value : '';
+  return { code: safe(issue?.code || issue?.type), param: safe(issue?.param) };
 }
 
 // Low-level call. Returns the full assistant message object so callers can see
@@ -40,6 +83,17 @@ async function chatCompletion(apiKey, model, messages, tools, signal, onToken, r
     body.tool_choice = 'auto';
   }
   if (request.body && typeof request.body === 'object') Object.assign(body, request.body);
+  if (Array.isArray(body.tools)) {
+    const { tools: requestedTools, tool_choice: requestedChoice, ...base } = body;
+    const toolBudget = Math.max(0, MAX_REQUEST_BYTES - Buffer.byteLength(JSON.stringify(base)));
+    body.tools = fitToolSchemas(requestedTools, toolBudget);
+    if (!body.tools.length) delete body.tools;
+    else body.tool_choice = requestedChoice || 'auto';
+  }
+  if (!body.tools?.length) {
+    delete body.tools;
+    delete body.tool_choice;
+  }
   const requestBytes = Buffer.byteLength(JSON.stringify(body));
 
   // Wrap the actual LLM call with LangSmith tracing when enabled.
@@ -48,7 +102,7 @@ async function chatCompletion(apiKey, model, messages, tools, signal, onToken, r
     const timeout = modelTimeoutMs();
     let response;
     try {
-      response = await requestWithRetry(() => axios.post(request.url || NIM_URL, body, {
+      response = await settleOnAbort(requestWithRetry(() => axios.post(request.url || NIM_URL, body, {
         headers: {
           Authorization: `Bearer ${apiKey}`,
           'Content-Type': 'application/json'
@@ -56,7 +110,7 @@ async function chatCompletion(apiKey, model, messages, tools, signal, onToken, r
         signal,
         timeout,
         responseType: body.stream ? 'stream' : 'json'
-      }), { enabled: request.retryOnce === true, signal, onRetry: request.onRetry });
+      }), { enabled: request.retryOnce === true, signal, onRetry: request.onRetry }), signal);
     } catch (error) {
       const timedOut = !signal?.aborted && (
         error?.code === 'ECONNABORTED' ||
@@ -73,14 +127,18 @@ async function chatCompletion(apiKey, model, messages, tools, signal, onToken, r
       }
       const status = error?.response?.status;
       if (status) {
-        // Do not print provider response bodies: they can echo private prompts
-        // or tool data. Counts and a provider request ID are safe diagnostics.
+        // Only expose machine-readable error fields; provider messages can echo prompts.
         const headers = error.response.headers || {};
         const rawId = headers['x-request-id'] || headers['x-correlation-id'] || headers['nv-request-id'];
         const requestId = typeof rawId === 'string' && /^[A-Za-z0-9._:-]{1,128}$/.test(rawId)
           ? `; request ID ${rawId}` : '';
+        error.providerError = await providerErrorInfo(error.response.data);
+        const { code, param } = error.providerError;
+        const reason = [status === 413 ? 'request body too large' : '', code,
+          param && `parameter ${param}`].filter(Boolean).join(', ');
         error.message = `Model request failed (HTTP ${status}; ${messages.length} messages, ` +
-          `${body.tools?.length || 0} tools, ${Math.ceil(requestBytes / 1024)} KiB request${requestId}).`;
+          `${body.tools?.length || 0} tools, ${Math.ceil(requestBytes / 1024)} KiB request${requestId}` +
+          `${reason ? `; provider: ${reason}` : ''}).`;
         error.response.data?.destroy?.();
       }
       throw error;
@@ -147,4 +205,4 @@ async function askAI(apiKey, model, messages) {
   return msg.content;
 }
 
-module.exports = { askAI, chatCompletion, DEFAULT_MODEL_TIMEOUT_MS, DEFAULT_NVIDIA_TIMEOUT_MS };
+module.exports = { askAI, chatCompletion, fitToolSchemas, DEFAULT_MODEL_TIMEOUT_MS, DEFAULT_NVIDIA_TIMEOUT_MS };

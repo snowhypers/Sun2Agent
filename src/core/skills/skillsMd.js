@@ -15,6 +15,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { getDataDir } = require('../deployment/dataDir');
 
 const SKILLS_FILENAME = 'skills.md';
 
@@ -42,15 +43,17 @@ function normalizeId(name) {
     .slice(0, 80);
 }
 
-function getSkillsPath(homeDir = os.homedir()) {
-  return path.join(homeDir, '.sun2agent', SKILLS_FILENAME);
+function getSkillsPath(homeDir) {
+  if (homeDir) return path.join(homeDir, '.sun2agent', SKILLS_FILENAME);
+  if (process.env.SUN2AGENT_DATA_DIR) return path.join(process.env.SUN2AGENT_DATA_DIR, SKILLS_FILENAME);
+  return path.join(os.homedir(), '.sun2agent', SKILLS_FILENAME);
 }
 
 // Create ~/.sun2agent/skills.md with the starter template if it does
 // not exist. Mode 0600 to match the rest of the home-dir files. The
 // starter is intentionally safe to overwrite — a real skill file
 // already on disk is never replaced.
-function ensureSkillsFile(homeDir = os.homedir()) {
+function ensureSkillsFile(homeDir) {
   const file = getSkillsPath(homeDir);
   fs.mkdirSync(path.dirname(file), { recursive: true });
   if (!fs.existsSync(file)) {
@@ -111,7 +114,7 @@ function parseSkills(text) {
 // missing, unreadable, or malformed — never throws. The file is
 // auto-created with the starter template so the first call always
 // returns a sane value.
-function loadSkills(homeDir = os.homedir()) {
+function loadSkills(homeDir) {
   const file = ensureSkillsFile(homeDir);
   try {
     return parseSkills(fs.readFileSync(file, 'utf-8'));
@@ -124,7 +127,7 @@ function loadSkills(homeDir = os.homedir()) {
 // exactly — same VISUAL/EDITOR/platform fallback, same stdio: 'inherit'.
 // The block is intentionally duplicated rather than refactored so the
 // memory module's tests stay untouched.
-function openSkillsFile(homeDir = os.homedir()) {
+function openSkillsFile(homeDir) {
   const file = ensureSkillsFile(homeDir);
   const editor = process.env.VISUAL || process.env.EDITOR;
   let command;

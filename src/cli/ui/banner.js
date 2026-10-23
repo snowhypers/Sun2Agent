@@ -115,6 +115,7 @@ function printHelp() {
   row('/continue', 'Continue the current task after a stop or failure');
   row('/save', 'Review and save a short task memory for this workspace');
   row('/schedule', 'List scheduled Telegram tasks and delete them');
+  row('/coding', 'Toggle the focused coding workflow; Esc returns to normal chat');
   row('/browser', 'Connect isolated Playwright browser tools');
   row('/computer', 'Connect desktop control; Esc on empty input disconnects');
   row('/mcp', 'Manage MCP servers (add/edit, connect one, disconnect)');

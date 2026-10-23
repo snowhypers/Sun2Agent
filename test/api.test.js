@@ -68,10 +68,12 @@ test('api: identifies a provider-aborted stream separately from user cancellatio
   }
 });
 
-test('api: applies the default 60-second NVIDIA timeout', async () => {
+test('api: applies the default 90-second timeout', async () => {
   const originalPost = axios.post;
   const originalTimeout = process.env.SUN2AGENT_NVIDIA_TIMEOUT_MS;
+  const originalGenericTimeout = process.env.SUN2AGENT_MODEL_TIMEOUT_MS;
   delete process.env.SUN2AGENT_NVIDIA_TIMEOUT_MS;
+  delete process.env.SUN2AGENT_MODEL_TIMEOUT_MS;
   let requestOptions;
   axios.post = async (_url, _body, options) => {
     requestOptions = options;
@@ -79,12 +81,27 @@ test('api: applies the default 60-second NVIDIA timeout', async () => {
   };
   try {
     await chatCompletion('key', 'model', []);
-    assert.strictEqual(DEFAULT_NVIDIA_TIMEOUT_MS, 60000);
-    assert.strictEqual(requestOptions.timeout, 60000);
+    assert.strictEqual(DEFAULT_NVIDIA_TIMEOUT_MS, 90000);
+    assert.strictEqual(requestOptions.timeout, 90000);
   } finally {
     axios.post = originalPost;
     if (originalTimeout === undefined) delete process.env.SUN2AGENT_NVIDIA_TIMEOUT_MS;
     else process.env.SUN2AGENT_NVIDIA_TIMEOUT_MS = originalTimeout;
+    if (originalGenericTimeout === undefined) delete process.env.SUN2AGENT_MODEL_TIMEOUT_MS;
+    else process.env.SUN2AGENT_MODEL_TIMEOUT_MS = originalGenericTimeout;
+  }
+});
+
+test('api: cancellation settles promptly even if the HTTP adapter ignores abort', async () => {
+  const originalPost = axios.post;
+  const controller = new AbortController();
+  axios.post = () => new Promise(() => {});
+  try {
+    const request = chatCompletion('key', 'model', [], undefined, controller.signal);
+    controller.abort();
+    await assert.rejects(request, /abort|cancel/i);
+  } finally {
+    axios.post = originalPost;
   }
 });
 
@@ -165,7 +182,8 @@ test('api: HTTP errors expose safe request metadata, not response text or keys',
   const originalPost = axios.post;
   const responseBody = Readable.from(['private prompt: secret-value']);
   let destroyed = false;
-  responseBody.destroy = () => { destroyed = true; return responseBody; };
+  const originalDestroy = responseBody.destroy.bind(responseBody);
+  responseBody.destroy = () => { destroyed = true; return originalDestroy(); };
   axios.post = async () => {
     const error = new Error('Request failed with status code 500');
     error.response = { status: 500, headers: { 'x-request-id': 'req-123' }, data: responseBody };
@@ -181,5 +199,46 @@ test('api: HTTP errors expose safe request metadata, not response text or keys',
       }
     );
     assert.strictEqual(destroyed, true);
+  } finally { axios.post = originalPost; }
+});
+
+test('api: reports structured provider reason without echoing provider text', async () => {
+  const originalPost = axios.post;
+  axios.post = async () => {
+    const error = new Error('bad request');
+    error.response = { status: 400, headers: { 'x-request-id': 'req-400' }, data: Readable.from([
+      JSON.stringify({ error: { code: 'invalid_request_error', param: 'max_tokens',
+        message: 'private prompt and secret-value' } })
+    ]) };
+    throw error;
+  };
+  try {
+    await assert.rejects(chatCompletion('secret-api-key', 'model', [
+      { role: 'user', content: 'private prompt' }
+    ], undefined, undefined, () => {}), (error) => {
+      assert.match(error.message, /provider: invalid_request_error, parameter max_tokens/);
+      assert.match(error.message, /request ID req-400/);
+      assert.doesNotMatch(error.message, /secret-api-key|private prompt|secret-value/);
+      assert.deepStrictEqual(error.providerError, { code: 'invalid_request_error', param: 'max_tokens' });
+      return true;
+    });
+  } finally { axios.post = originalPost; }
+});
+
+test('api: labels HTTP 413 as an oversized request while retaining the provider code', async () => {
+  const originalPost = axios.post;
+  axios.post = async () => {
+    const error = new Error('payload too large');
+    error.response = {
+      status: 413, headers: { 'x-request-id': 'req-413' },
+      data: { error: { code: 'rate_limit_exceeded' } }
+    };
+    throw error;
+  };
+  try {
+    await assert.rejects(chatCompletion('key', 'model', [{ role: 'user', content: 'hi' }], Array(53).fill({})), (error) => {
+      assert.match(error.message, /HTTP 413; 1 messages, 53 tools, \d+ KiB request; request ID req-413; provider: request body too large, rate_limit_exceeded/);
+      return true;
+    });
   } finally { axios.post = originalPost; }
 });

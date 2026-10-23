@@ -6,7 +6,7 @@ const { RESPONSE_STYLE } = require('../rules/responseStyle');
 const skills = require('../skills');
 const providers = require('../providers');
 const guardrails = require('../guardrails');
-const { cleanHistory } = require('../../cli/history');
+const { requestHistory } = require('../../cli/runtime/history');
 const { TelegramResponseStream } = require('./stream');
 
 async function runTurn(runtime, chatId, text, replyToMessageId) {
@@ -40,6 +40,8 @@ async function runTurn(runtime, chatId, text, replyToMessageId) {
         { role: 'assistant', content }
       ]);
     }
+    const bounded = requestHistory(history);
+    history.splice(0, history.length, ...bounded);
   } catch (error) {
     if (!controller.signal.aborted) {
       // Do not leave an unanswered user message or orphan tool call in the
@@ -65,8 +67,8 @@ async function buildSystemPrompt(runtime, text) {
   const relevantMemories = memory.isEnabled() ? await memory.search(text) : [];
   let prompt = context.buildSystemPrompt(
     'You are Sun2Agent, a helpful AI assistant chatting with the user through Telegram. ' +
-    'Answer clearly and concisely. Only connected remote read-only MCP tools are available here; ' +
-    'local tools and actions requiring approval are unavailable. ' +
+    'Answer clearly and concisely. Only explicitly allowlisted remote MCP tools are available here; ' +
+    'they may have side effects, so use them only when requested. Local tools are unavailable. ' +
     RESPONSE_STYLE +
     'For web search, research, news, or current-information questions, use web_search first when available. ' +
     'Use another remote search tool only if those results are insufficient.' +
@@ -79,11 +81,11 @@ async function buildSystemPrompt(runtime, text) {
   return memory.buildMemoryContext(prompt, relevantMemories);
 }
 
-async function completeWithSearch(runtime, systemPrompt, history, signal, stream) {
+async function completeWithSearch(runtime, systemPrompt, history, signal, stream, options = {}) {
   await runtime.mcpReady;
   const provider = providers.getActiveProvider(runtime.config);
   const searchSpec = runtime.search.getToolSpec(runtime.config);
-  const remoteTools = runtime.mcp.getTelegramTools().specs;
+  const remoteTools = options.scheduled ? [] : runtime.mcp.getTelegramTools().specs;
   let tools = provider.supportsTools
     ? [searchSpec, ...remoteTools].filter(Boolean) : undefined;
   if (!tools?.length) tools = undefined;
@@ -93,8 +95,12 @@ async function completeWithSearch(runtime, systemPrompt, history, signal, stream
     url: provider.url,
     provider: provider.id,
     retryOnce: true,
-    onRetry: () => {
-      void stream.showStatus('Model unavailable — retrying...').catch(runtime.onError);
+    onRetry: (ms, attempt, rateLimited) => {
+      const label = rateLimited
+        ? `Provider rate limit — retry ${attempt}/2`
+        : 'Model unavailable — retrying once';
+      void stream.showStatus(`${label} in ${Math.ceil(ms / 1000)}s...`)
+        .catch(runtime.onError);
     }
   };
 
@@ -131,20 +137,21 @@ async function completeWithSearch(runtime, systemPrompt, history, signal, stream
     return message;
   }
 
+  let toolFallbackError = null;
   for (let step = 0; step < 6; step++) {
     let message;
     try {
-      message = await completeModel([system, ...cleanHistory(history)], tools);
+      message = await completeModel([system, ...requestHistory(history)], tools);
     } catch (error) {
       if (signal.aborted) return null;
-      const detail = error.response?.data?.detail || error.response?.data?.error?.message || error.message || '';
-      // Match the terminal behavior for models that reject tool schemas.
-      if (tools && /tool|function/i.test(String(detail))) {
+      if (tools && !toolFallbackError && error.response?.status === 400 &&
+          ['tools', 'tool_choice'].includes(error.providerError?.param)) {
+        toolFallbackError = error;
         tools = undefined;
         await stream.showStatus('Agent is typing ...');
         continue;
       }
-      throw error;
+      throw toolFallbackError || error;
     }
 
     if (signal.aborted) return null;
@@ -167,7 +174,7 @@ async function completeWithSearch(runtime, systemPrompt, history, signal, stream
         let content;
         if (name === 'web_search') {
           content = await runtime.search.executeTool(args.query, runtime.config, signal, requestText);
-        } else if (runtime.mcp.getTelegramTools().routes.has(name)) {
+        } else if (!options.scheduled && runtime.mcp.getTelegramTools().routes.has(name)) {
           try {
             const result = await runtime.mcp.callTelegramTool(name, args, signal);
             content = guardrails.outputGuard(typeof result === 'string' ? result : result.text);
@@ -195,7 +202,7 @@ async function completeWithSearch(runtime, systemPrompt, history, signal, stream
   return completeModel(
     [
       system,
-      ...cleanHistory(history),
+      ...requestHistory(history),
       { role: 'user', content: 'Using the search results above, provide the final answer now.' }
     ],
     undefined

@@ -6,10 +6,10 @@
 
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
+const { getDataDir } = require('../deployment/dataDir');
 
 function sessionFile() {
-  return path.join(os.homedir(), '.sun2agent', 'session.json');
+  return path.join(getDataDir(), 'session.json');
 }
 
 function saveSession(history) {

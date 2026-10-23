@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "docs": {
+      "type": "http",
+      "url": "https://mcp.example.com/mcp",
+      "headers": {
+        "Authorization": "Bearer ${DOCS_MCP_TOKEN}"
+      },
+      "telegramTools": []
+    }
+  }
+}

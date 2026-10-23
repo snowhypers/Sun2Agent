@@ -83,6 +83,38 @@ test('HITL: routine workspace edits do not prompt; deletion still does', async (
   assert.strictEqual(prompts, 1);
 });
 
+test('HITL: coding mode asks for install, test-file writes, and one test phase only', async () => {
+  const promptCalls = [];
+  const prompt = async (call) => { promptCalls.push(call); return false; };
+  assert.equal(await hitl.checkApproval({ server: 'workspace', tool: 'write_file', codingMode: true,
+    args: { path: 'src/index.js' }, _prompt: prompt }), true);
+  assert.equal(await hitl.checkApproval({ server: 'workspace', tool: 'write_file', codingMode: true,
+    args: { path: 'tests/index.test.js' }, _prompt: prompt }), false);
+  assert.equal(await hitl.checkApproval({ server: 'workspace', tool: 'edit_file', codingMode: true,
+    args: { path: 'spec/another.spec.js' }, _prompt: prompt }), false);
+  assert.equal(await hitl.checkApproval({ server: 'workspace', tool: 'install_project_dependencies', codingMode: true,
+    args: { path: '.' }, _prompt: prompt }), false);
+  assert.equal(await hitl.checkApproval({ server: 'workspace', tool: 'run_project_check', codingMode: true,
+    args: { script: 'test' }, _prompt: prompt }), false);
+  assert.equal(await hitl.checkApproval({ server: 'workspace', tool: 'start_project_server', codingMode: true,
+    args: { script: 'start' }, _prompt: prompt }), false);
+  assert.equal(promptCalls.length, 3, 'one denied test-write prompt and one prompt per protected phase');
+  assert.equal(await hitl.checkApproval({ server: 'workspace', tool: 'write_file',
+    args: { path: 'tests/index.test.js' }, _prompt: prompt }), true,
+  'the coding-only test-file rule does not affect normal mode');
+  hitl.startPrompt();
+  await hitl.checkApproval({ server: 'workspace', tool: 'write_file', codingMode: true,
+    args: { path: 'tests/index.test.js' }, _prompt: prompt });
+  assert.equal(promptCalls.length, 4, 'a new prompt gets a fresh test-write decision');
+});
+
+test('HITL: shortcut row places Enter and Esc below their choices', () => {
+  const fs = require('node:fs');
+  const source = fs.readFileSync(require.resolve('../src/core/hitl/mcpApproval'), 'utf8');
+  assert.match(source, /\[Enter\].*\[Esc\]/);
+  assert.doesNotMatch(source, /\[Enter\].*Allow.*\[Esc\].*Don't allow/);
+});
+
 test('HITL: MCP readOnlyHint is not authority', async () => {
   assert.strictEqual(
     hitl.requiresApproval('inventory_snapshot', { readOnlyHint: true }),
@@ -189,11 +221,15 @@ test('HITL: routine changes stay quiet across user prompts', async () => {
   assert.strictEqual(calls, 0);
 });
 
-test('HITL: Maven test execution requires fresh approval every time', async () => {
+test('HITL: exact workspace execution retries reuse approval only within one prompt', async () => {
   let prompts = 0;
   const prompt = async () => { prompts++; return true; };
-  await hitl.checkApproval({ server: 'workspace', tool: 'run_maven_tests', args: {}, _prompt: prompt });
-  await hitl.checkApproval({ server: 'workspace', tool: 'run_maven_tests', args: {}, _prompt: prompt });
+  const args = { script: 'test:api', path: '.' };
+  await hitl.checkApproval({ server: 'workspace', tool: 'run_project_check', args, _prompt: prompt });
+  await hitl.checkApproval({ server: 'workspace', tool: 'run_project_check', args, _prompt: prompt });
+  assert.strictEqual(prompts, 1);
+  hitl.startPrompt();
+  await hitl.checkApproval({ server: 'workspace', tool: 'run_project_check', args, _prompt: prompt });
   assert.strictEqual(prompts, 2);
 });
 
@@ -278,4 +314,34 @@ test('HITL: log() behaves like console.log when no approval panel is open', () =
   }
   assert.strictEqual(seen.length, 1);
   assert.match(seen[0], /fs:read_file/);
+});
+
+test('HITL: promptApproval restores keypress listeners and enforces rawMode when TTY', async () => {
+  const stdin = process.stdin;
+  const originalIsTTY = stdin.isTTY;
+  const originalSetRawMode = stdin.setRawMode;
+  const rawModeCalls = [];
+  stdin.isTTY = true;
+  stdin.setRawMode = (mode) => { rawModeCalls.push(mode); };
+
+  let fakeEscWatcherRan = false;
+  const fakeEscWatcher = () => { fakeEscWatcherRan = true; };
+  stdin.on('keypress', fakeEscWatcher);
+
+  try {
+    const promptPromise = hitl._promptApproval({ server: 'workspace', tool: 'write_file', args: { path: 'foo.txt' } });
+    // Simulate user pressing Enter to approve
+    stdin.emit('keypress', '\r', { name: 'return' });
+    const allowed = await promptPromise;
+    assert.strictEqual(allowed, true);
+    // Keypress listener was restored
+    assert.ok(stdin.listeners('keypress').includes(fakeEscWatcher));
+    // Raw mode was kept active (last call setRawMode(true))
+    assert.strictEqual(rawModeCalls[rawModeCalls.length - 1], true);
+  } finally {
+    stdin.removeListener('keypress', fakeEscWatcher);
+    stdin.isTTY = originalIsTTY;
+    stdin.setRawMode = originalSetRawMode;
+    stdin.pause();
+  }
 });

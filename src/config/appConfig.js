@@ -1,9 +1,9 @@
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
 const { randomUUID } = require('crypto');
 
-const CONFIG_DIR = path.join(os.homedir(), '.sun2agent');
+const { getDataDir } = require('../core/deployment/dataDir');
+const CONFIG_DIR = getDataDir();
 const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
 
 const MODELS = [
@@ -15,7 +15,7 @@ const MODELS = [
 ];
 
 function ensureConfigDir() {
-  if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
+  if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true, mode: 0o700 });
 }
 
 function defaultConfig() {
@@ -67,7 +67,7 @@ function normalizeProviders(value) {
 
 function loadConfig() {
   ensureConfigDir();
-  if (!fs.existsSync(CONFIG_FILE)) return defaultConfig();
+  if (!fs.existsSync(CONFIG_FILE)) return applyEnvironment(defaultConfig());
   try {
     const raw = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8'));
     raw.providers = normalizeProviders(raw.providers);
@@ -95,10 +95,43 @@ function loadConfig() {
     };
     // Selected skills is an empty list for configs saved before the feature.
     if (!Array.isArray(raw.selectedSkills)) raw.selectedSkills = [];
-    return raw;
+    return applyEnvironment(raw);
   } catch (e) {
     throw new Error(`Cannot load ${CONFIG_FILE}: ${e.message}. Fix or restore this file before starting Sun2Agent.`);
   }
+}
+
+function applyEnvironment(config) {
+  const env = process.env;
+  const provider = env.SUN2AGENT_PROVIDER || config.activeProvider;
+  const model = env.SUN2AGENT_MODEL;
+  const apiKey = env.SUN2AGENT_API_KEY;
+  config.activeProvider = provider;
+  if (provider === 'nvidia') {
+    if (model) config.model = model;
+    if (apiKey) config.apiKey = apiKey;
+  } else if (Array.isArray(config.providers)) {
+    const selected = config.providers.find((item) => item.id === provider);
+    if (selected) {
+      if (model) selected.activeModel = model;
+      if (apiKey) selected.apiKey = apiKey;
+    }
+  }
+  const token = env.SUN2AGENT_TELEGRAM_BOT_TOKEN;
+  const chatId = env.SUN2AGENT_TELEGRAM_CHAT_ID;
+  if (token || chatId) {
+    config.telegram = { ...config.telegram,
+      botToken: token || config.telegram.botToken,
+      chatId: chatId || config.telegram.chatId,
+      enabled: Boolean((token || config.telegram.botToken) && (chatId || config.telegram.chatId))
+    };
+  }
+  if (env.TAVILY_API_KEY) config.search = { ...config.search, enabled: true, apiKey: env.TAVILY_API_KEY };
+  if (env.LANGSMITH_API_KEY) config.langsmithApiKey = env.LANGSMITH_API_KEY;
+  if (env.LANGSMITH_TRACING) {
+    config.langsmith = { ...config.langsmith, enabled: env.LANGSMITH_TRACING === 'true' };
+  }
+  return config;
 }
 
 function saveConfig(config) {
@@ -119,4 +152,4 @@ function deleteConfig() {
   if (fs.existsSync(CONFIG_DIR)) fs.rmdirSync(CONFIG_DIR, { recursive: true });
 }
 
-module.exports = { MODELS, loadConfig, saveConfig, deleteConfig, CONFIG_FILE, defaultConfig, normalizeProviders };
+module.exports = { MODELS, loadConfig, saveConfig, deleteConfig, CONFIG_FILE, defaultConfig, normalizeProviders, applyEnvironment };

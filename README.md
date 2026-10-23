@@ -19,7 +19,7 @@ Sun2Agent is a free, open-source **AI agent harness** with MCP server connection
 [![Issues Welcome](https://img.shields.io/badge/issues-welcome-brightgreen.svg)](https://github.com/snowhypers/Sun2Agent/issues)
 [![Maintained](https://img.shields.io/badge/maintained-yes-success.svg)](https://github.com/snowhypers/Sun2Agent/commits/main)
 
-**[Try Now](#try-it-now) · [Install](#install) · [Features](#features) · [MCP](#mcp-client--model-context-protocol) · [Skills](#ai-agent-skills) · [Context](#context) · [Sandbox](#docker-sandbox) · [Security](#security--guardrails) · [FAQ](#faq)**
+**[Try Now](#try-it-now) · [Install](#install) · [Features](#features) · [MCP](#mcp-client--model-context-protocol) · [Skills](#ai-agent-skills) · [Cloud / VPS](#vps-cloud-telegram-service) · [Security](#security--guardrails) · [FAQ](#faq)**
 
 ⭐ **[Star Sun2Agent on GitHub](https://github.com/snowhypers/Sun2Agent/stargazers)** — the fastest way to help other developers discover it.
 
@@ -279,7 +279,7 @@ Run `/config` and answer **Yes** to **Connect Telegram?**. Paste the bot token c
 
 Answering **No** disables the Telegram connection without deleting the saved bot token or chat ID. A later `/config` can reuse those credentials. They remain in the owner-only `~/.sun2agent/config.json` file and are never printed in the terminal.
 
-The CLI must remain running to receive Telegram messages. Beneath each user message, the bot immediately replies with `Agent is typing ...`, then progressively edits that same reply as text streams in. If Tavily web search is enabled in `/config`, Telegram can use `web_search` and shows `Agent is searching ...` while it runs. To expose a remote read-only MCP tool to the configured private chat, add its exact name to that server's `telegramTools` array in `mcp.json` (for example, `"telegramTools": ["tavily_search"]`). No MCP tools are exposed to Telegram by default; local MCP, browser, computer, and approval-required actions remain unavailable.
+The CLI must remain running to receive Telegram messages. Beneath each user message, the bot immediately replies with `Agent is typing ...`, then progressively edits that same reply as text streams in. If Tavily web search is enabled in `/config`, Telegram can use `web_search` and shows `Agent is searching ...` while it runs. To expose a remote MCP tool to the configured private chat, add its exact name to that server's `telegramTools` array in `mcp.json` (for example, `"telegramTools": ["tavily_search"]`). This explicitly trusts the listed tool to run without per-call approval, including any side effects it may have. Only HTTPS remote MCP endpoints are accepted. No MCP tools are exposed to Telegram by default; local MCP, browser, and computer tools remain unavailable.
 
 | Telegram command | Action |
 |---|---|
@@ -291,7 +291,19 @@ Stopping a turn removes its incomplete messages from Telegram history; earlier c
 
 ### Scheduled Telegram tasks
 
-With Telegram configured, try `Every day at 9 PM, summarize today’s AI news and send it to Telegram` or `Today at 8 PM, check email`. A schedule needs a task, time, and **once** or **daily** recurrence; Sun2Agent asks when one is missing or the time conflicts with words like “morning.” The saved schedule shows the machine’s detected timezone. `/schedule` lists jobs in the CLI; select one for details or confirmed deletion. Jobs are stored in `~/.sun2agent/schedules.json` and run only while the CLI stays open. Scheduled work uses only read-only Telegram tools. Sun2Agent starts preparing the result about one minute early and retries a failed preparation up to twice. If it is still working at the scheduled time, it sends a Telegram status message, then the result when ready.
+With Telegram configured, try `Every day at 9 PM, summarize today’s AI news and send it to Telegram` or `Today at 8 PM, check email`. A schedule needs a task, time, and **once** or **daily** recurrence; Sun2Agent asks when one is missing or the time conflicts with words like “morning.” Set `SUN2AGENT_TIMEZONE` to your IANA timezone before creating schedules from Telegram; CLI schedules use the machine timezone. Without that setting, Telegram asks you to configure it instead of silently using the server timezone. `/schedule` lists jobs in the CLI; select one for details or confirmed deletion. Jobs are stored in `~/.sun2agent/schedules.json` and run while the CLI or Telegram service stays open. Scheduled jobs can use web search, but remote MCP tools are withheld. Sun2Agent starts preparing the result about one minute early and retries a failed preparation up to twice. If it is still working at the scheduled time, it sends a Telegram status message, then the result when ready.
+
+### VPS / cloud Telegram service
+
+To keep the Telegram bot online when your laptop is off, deploy the Telegram service to a VPS or an always-on cloud worker. This is a separate running instance; the local CLI does not automatically connect to it. Docker is optional—the VPS guide uses `systemd` directly.
+
+1. Choose a Linux VPS or an always-on worker such as Render Background Worker. Use Node.js 20 or 22+.
+2. Set the values from [`deploy/.env.example`](deploy/.env.example) in the host's secret settings: provider, model, model API key, Telegram bot token, and Telegram user/chat ID. Add optional integration secrets only when needed.
+3. Attach persistent storage and set `SUN2AGENT_DATA_DIR` to it. Set `SUN2AGENT_AGENT_MD` to the persistent `AGENT.md` path. Place `mcp.json` and any `skills.md` in the data directory too.
+4. Start with `npm run start:service`. On a VPS, use the provided [`systemd service`](deploy/vps/sun2agent.service); on Render, use `npm ci` to build and `npm run start:service` to run.
+5. Send a Telegram test message, restart/redeploy, then confirm the bot replies and its memory/schedules persist.
+
+Keep one polling instance per bot token. Telegram only starts configured HTTPS remote MCP servers and only exposes exact tools listed in `telegramTools`; listing a tool trusts it to run without per-call approval, including possible side effects. Local filesystem, browser, and computer MCPs are not started by the cloud service. Read [the deployment guide](docs/deployment.md) for complete VPS and Render steps, environment variables, persistent files, security limits, and troubleshooting.
 
 ---
 

@@ -1,8 +1,8 @@
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
 const { spawnSync } = require('child_process');
 const guardrails = require('../guardrails');
+const { getDataDir } = require('../deployment/dataDir');
 
 const STOP_WORDS = new Set([
   'a', 'an', 'and', 'are', 'as', 'at', 'be', 'for', 'from', 'i', 'in', 'is',
@@ -10,8 +10,8 @@ const STOP_WORDS = new Set([
 ]);
 const MAX_LOCAL_MEMORIES = 200;
 
-function getMemoryPath(homeDir = os.homedir()) {
-  return path.join(homeDir, '.sun2agent', 'memory.md');
+function getMemoryPath(homeDir) {
+  return homeDir ? path.join(homeDir, '.sun2agent', 'memory.md') : path.join(getDataDir(), 'memory.md');
 }
 
 // memory.md is intentionally JSON so it stays both editor-friendly and
@@ -46,7 +46,7 @@ function uniqueEntries(entries) {
   }, []);
 }
 
-function ensureMemoryFile(homeDir = os.homedir()) {
+function ensureMemoryFile(homeDir) {
   const file = getMemoryPath(homeDir);
   fs.mkdirSync(path.dirname(file), { recursive: true });
   if (!fs.existsSync(file)) {
@@ -60,7 +60,7 @@ function ensureMemoryFile(homeDir = os.homedir()) {
   return file;
 }
 
-function loadLocalMemory(homeDir = os.homedir()) {
+function loadLocalMemory(homeDir) {
   const file = ensureMemoryFile(homeDir);
   try {
     const raw = fs.readFileSync(file, 'utf-8');
@@ -90,7 +90,7 @@ function containsSensitiveData(content) {
   return false;
 }
 
-function saveLocalMemory(memories, homeDir = os.homedir()) {
+function saveLocalMemory(memories, homeDir) {
   const file = ensureMemoryFile(homeDir);
   const safe = uniqueEntries(memories)
     .slice(-MAX_LOCAL_MEMORIES)
@@ -110,7 +110,7 @@ function addLocalMemory(content, options = {}) {
   const text = guardrails.sanitizeOutput(raw);
   if (!text || containsSensitiveData(text)) return null;
 
-  const homeDir = options.homeDir || os.homedir();
+  const homeDir = options.homeDir;
   const memories = loadLocalMemory(homeDir);
   const duplicate = memories.find((item) => item.content.toLowerCase() === text.toLowerCase());
   if (duplicate) return duplicate;
@@ -141,7 +141,7 @@ function searchLocalMemory(query, memories, limit = 5) {
     .slice(0, limit);
 }
 
-function openMemoryFile(homeDir = os.homedir()) {
+function openMemoryFile(homeDir) {
   const file = ensureMemoryFile(homeDir);
   const editor = process.env.VISUAL || process.env.EDITOR;
   let command;

@@ -2,7 +2,6 @@
 
 const axios = require('axios');
 const path = require('node:path');
-const os = require('node:os');
 const { createHash } = require('node:crypto');
 const { chatCompletion } = require('../model/api');
 const search = require('../search');
@@ -13,6 +12,7 @@ const { pollLoop } = require('./polling');
 const messageHandler = require('./messageHandler');
 const commands = require('./commands');
 const turn = require('./turn');
+const { getDataDir } = require('../deployment/dataDir');
 
 class TelegramRuntime {
   constructor({ http = axios, complete = chatCompletion, searchProvider = search, mcpProvider = mcp, onError = () => {} } = {}) {
@@ -44,7 +44,7 @@ class TelegramRuntime {
 
     this.config = config;
     this.offset = 0;
-    this.pendingFile = path.join(os.homedir(), '.sun2agent',
+    this.pendingFile = path.join(getDataDir(),
       `telegram-pending-${createHash('sha256').update(config.telegram.botToken).digest('hex').slice(0, 12)}.json`);
     const bot = await telegramRequest(this.http, config.telegram.botToken, 'getMe');
     if (generation !== this.generation) return { enabled: false };
@@ -94,8 +94,8 @@ class TelegramRuntime {
     return turn.runTurn(this, chatId, text, replyToMessageId);
   }
 
-  async completeWithSearch(systemPrompt, history, signal, stream) {
-    return turn.completeWithSearch(this, systemPrompt, history, signal, stream);
+  async completeWithSearch(systemPrompt, history, signal, stream, options = {}) {
+    return turn.completeWithSearch(this, systemPrompt, history, signal, stream, options);
   }
 
   async buildSystemPrompt(text) {
@@ -112,9 +112,9 @@ class TelegramRuntime {
     const stream = { push() {}, async showStatus() {} };
     try {
       const prompt = await this.buildSystemPrompt(job.task) +
-        '\nThis is an unattended scheduled task. Use only read-only tools; do not ask for approvals or claim to change external state.';
+        '\nThis is an unattended scheduled task. Use web search only; do not make external changes.';
       const reply = await this.completeWithSearch(prompt,
-        [{ role: 'user', content: job.task }], controller.signal, stream);
+        [{ role: 'user', content: job.task }], controller.signal, stream, { scheduled: true });
       const answer = String(reply?.content || '').trim();
       if (!answer) throw new Error('The scheduled task returned no answer.');
       return answer;

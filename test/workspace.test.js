@@ -46,6 +46,7 @@ test('workspace: bundled MCP creates and reads files in any launch folder', asyn
   assert.ok(connected.tools.some((tool) => tool.name === 'write_file'));
   assert.ok(connected.tools.some((tool) => tool.name === 'delete_file'));
   assert.ok(connected.tools.some((tool) => tool.name === 'delete_directory'));
+  assert.ok(connected.tools.some((tool) => tool.name === 'install_project_dependencies'));
   assert.ok(connected.tools.some((tool) => tool.name === 'run_maven_tests'));
 
   const invalidEdit = mcp.getOpenAiTools().routes;
@@ -78,6 +79,21 @@ test('workspace: bundled MCP creates and reads files in any launch folder', asyn
 
     assert.strictEqual(output.trim(), 'Hello from Sun2Agent');
     assert.strictEqual(fs.readFileSync(file, 'utf8'), 'Hello from Sun2Agent');
+
+    const packageJson = { name: 'todo-api', version: '1.0.0', scripts: { start: 'node src/server.js' } };
+    const packagePath = path.join(actualWorkspaceRoot, 'created-by-agent', 'package.json');
+    let approvedContent;
+    hitl.checkApproval = async ({ args }) => {
+      approvedContent = args.content;
+      return true;
+    };
+    await mcp.callTool(routes, 'workspace__write_file', {
+      path: packagePath,
+      content: packageJson
+    });
+    assert.equal(typeof approvedContent, 'string', 'normalize before approval');
+    assert.deepStrictEqual(JSON.parse(fs.readFileSync(packagePath, 'utf8')), packageJson);
+    hitl.checkApproval = async () => true;
     await assert.rejects(
       mcp.callTool(routes, 'workspace__read_text_file', {
         path: '[Docker docs](https://docs.docker.com/reference/)'
@@ -94,6 +110,14 @@ test('workspace: bundled MCP creates and reads files in any launch folder', asyn
     });
     assert.match(verifiedWrite, /Verified Java test on disk: src\/test\/java\/UserTest\.java/);
     assert.strictEqual(fs.readFileSync(testFile, 'utf8'), 'class UserTest {}\n');
+
+    // Automatically creates parent directories when writing to a non-existent subdirectory
+    const deeplyNestedFile = path.join(actualWorkspaceRoot, 'nested/sub/folder/file.js');
+    await mcp.callTool(routes, 'workspace__write_file', {
+      path: deeplyNestedFile,
+      content: 'console.log("nested ok");'
+    });
+    assert.strictEqual(fs.readFileSync(deeplyNestedFile, 'utf8'), 'console.log("nested ok");');
 
     await mcp.callTool(routes, 'workspace__delete_file', { path: file });
     assert.strictEqual(fs.existsSync(file), false);
@@ -127,6 +151,14 @@ test('workspace: bundled MCP creates and reads files in any launch folder', asyn
       /protected credential material/
     );
     assert.strictEqual(fs.existsSync(protectedFile), true);
+
+    const exampleFile = path.join(actualWorkspaceRoot, '.env.example');
+    await mcp.callTool(routes, 'workspace__write_file', {
+      path: exampleFile,
+      content: 'PORT=3000\n'
+    });
+    assert.strictEqual(fs.existsSync(exampleFile), true);
+    assert.strictEqual(fs.readFileSync(exampleFile, 'utf8'), 'PORT=3000\n');
 
     const outsideDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'sun2agent-outside-'));
     try {

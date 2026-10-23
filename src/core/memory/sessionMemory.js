@@ -1,14 +1,14 @@
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 const { randomUUID } = require('crypto');
 const guardrails = require('../guardrails');
 const { containsSensitiveData } = require('./memoryJson');
 const providers = require('../providers');
 const { chatCompletion } = require('../model/api');
+const { getDataDir } = require('../deployment/dataDir');
 
-function sessionMemoryFile(home = os.homedir()) {
-  return path.join(home, '.sun2agent', 'saved-sessions.json');
+function sessionMemoryFile(home) {
+  return home ? path.join(home, '.sun2agent', 'saved-sessions.json') : path.join(getDataDir(), 'saved-sessions.json');
 }
 
 function loadSavedSessions(home) {

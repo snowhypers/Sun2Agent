@@ -6,6 +6,7 @@ const readline = require('readline');
 const chalk = require('chalk');
 const { loadConfig } = require('../../config/appConfig');
 const { sanitizeOutput } = require('../guardrails/outputGuard');
+const { isTestFilePath } = require('../coding/workflow');
 
 const HIDE_CURSOR = '\x1b[?25l';
 const SHOW_CURSOR = '\x1b[?25h';
@@ -18,6 +19,8 @@ function isEnabled() {
 // Single pending approval at a time (simplifies continuous UI).
 let pendingEntry = null;
 let resolvePending = null;
+const approvedPromptActions = new Set();
+const deniedCodingActions = new Set();
 
 // Called by chat.js to get a continuous spinner that we can update.
 let activeSpinner = null;
@@ -26,9 +29,9 @@ function setSpinner(spinner) {
 }
 
 function updateSpinner(text) {
-  if (activeSpinner && activeSpinner.isSpinning) {
-    activeSpinner.text = chalk.gray(text);
-  }
+  if (!activeSpinner) return;
+  if (!activeSpinner.isSpinning && typeof activeSpinner.start === 'function') activeSpinner.start();
+  activeSpinner.text = chalk.gray(text);
 }
 
 const MUTATING_WORDS = new Set([
@@ -165,6 +168,9 @@ function requiresApproval(tool, annotations = {}) {
 async function promptApproval({ server, tool, args }) {
   return new Promise((resolve) => {
     const stdin = process.stdin;
+    // Stop ora's redraw while the user chooses; otherwise it can overwrite
+    // the inline Allow / Don't allow prompt on some terminals.
+    if (activeSpinner?.isSpinning && typeof activeSpinner.stop === 'function') activeSpinner.stop();
     readline.emitKeypressEvents(stdin);
     const previousKeyListeners = stdin.listeners('keypress');
     const previousRawMode = Boolean(stdin.isRaw);
@@ -179,7 +185,7 @@ async function promptApproval({ server, tool, args }) {
       `\n  ${chalk.yellow('⚠')}  ${chalk.bold(question)}\n` +
       `  ${chalk.bold(tool)}  ${chalk.gray(argsStr)}\n` +
       `  ${chalk.cyan('Allow')}  ${chalk.gray('—')}  ${chalk.red("Don't allow")}\n` +
-      `  ${chalk.gray('[Enter]')} ${chalk.cyan('Allow')}    ${chalk.gray('[Esc]')} ${chalk.red("Don't allow")}: `;
+      `  ${chalk.gray('[Enter]')}   ${chalk.gray('[Esc]')} `;
     process.stdout.write(promptLine);
 
     function onKey(str, key) {
@@ -197,8 +203,15 @@ async function promptApproval({ server, tool, args }) {
     function cleanup(allowed) {
       stdin.removeListener('keypress', onKey);
       // Resume the turn's Esc watcher after the approval UI releases stdin.
-      for (const listener of previousKeyListeners) stdin.on('keypress', listener);
-      if (stdin.isTTY) stdin.setRawMode(previousRawMode);
+      for (const listener of previousKeyListeners) {
+        if (!stdin.listeners('keypress').includes(listener)) {
+          stdin.on('keypress', listener);
+        }
+      }
+      if (stdin.isTTY) {
+        stdin.setRawMode(true);
+        stdin.resume();
+      }
       process.stdout.write(SHOW_CURSOR + '\n');
       resolve(allowed);
     }
@@ -207,19 +220,27 @@ async function promptApproval({ server, tool, args }) {
   });
 }
 
-async function checkApproval({ server, tool, args, annotations, enabled, _prompt } = {}) {
+async function checkApproval({ server, tool, args, annotations, enabled, codingMode, codingBrowserTest, _prompt } = {}) {
   const on = enabled !== undefined ? enabled : isEnabled();
   if (!on) return true;
 
   const browserDecision = (server === 'browser' || String(tool).startsWith('browser_'))
     ? browserApproval(tool, args) : null;
   const mavenRun = server === 'workspace' && tool === 'run_maven_tests';
+  const codingTestWrite = codingMode === true && server === 'workspace' &&
+    ['write_file', 'edit_file'].includes(tool) && isTestFilePath(args?.path);
+  const codingInstall = codingMode === true && server === 'workspace' && tool === 'install_project_dependencies';
+  const codingTestRun = codingMode === true && server === 'workspace' &&
+    (mavenRun || tool === 'run_project_check' || tool === 'curl_local_api');
+  const codingTestServer = codingMode === true && server === 'workspace' && tool === 'start_project_server';
   const navigationScope = server === 'computer' ? computerNavigationScope(tool, args, annotations) : null;
-  const required = annotations?.destructiveHint === true || mavenRun ? true
+  const required = codingBrowserTest === true || codingTestWrite || codingInstall || codingTestRun || codingTestServer ||
+    annotations?.destructiveHint === true || mavenRun ? true
     : server === 'computer' ? !COMPUTER_READ_ONLY.has(tool) && !navigationScope
     : browserDecision ? browserDecision.required : requiresApproval(tool, annotations);
   const words = toolWords(tool);
   const routine = server !== 'browser' && server !== 'computer' && !mavenRun &&
+    !codingTestWrite && !codingInstall && !codingTestRun && !codingTestServer && !codingBrowserTest &&
     annotations?.destructiveHint !== true &&
     !words.some((word) => HIGH_RISK_WORDS.has(word)) &&
     words.some((word) => ROUTINE_CHANGE_WORDS.has(word));
@@ -230,15 +251,33 @@ async function checkApproval({ server, tool, args, annotations, enabled, _prompt
     return true;
   }
 
+  // Exact project execution retries within one user turn reuse that approval.
+  const codingScope = codingBrowserTest === true ? 'coding:test-execution'
+    : codingTestWrite ? 'coding:test-write'
+    : codingInstall ? `coding:install:${JSON.stringify(args || {})}`
+    : codingTestRun || codingTestServer ? 'coding:test-execution' : null;
+  if (codingScope && deniedCodingActions.has(codingScope)) return false;
+  const scopedAction = codingScope || (server === 'workspace' &&
+    ['install_project_dependencies', 'run_project_check', 'curl_local_api', 'start_project_server', 'run_maven_tests'].includes(tool)
+    ? `${tool}:${JSON.stringify(args || {})}` : null);
+  if (scopedAction && approvedPromptActions.has(scopedAction)) {
+    updateSpinner(`running tool: ${tool}...`);
+    return true;
+  }
+
   // Test override
   if (_prompt) {
-    return _prompt({ server, tool, args: args || {} });
+    const allowed = await _prompt({ server, tool, args: args || {} });
+    if (allowed && scopedAction) approvedPromptActions.add(scopedAction);
+    else if (codingScope) deniedCodingActions.add(codingScope);
+    return allowed;
   }
 
   // There is no user to make the required Allow/Don't allow decision in a
   // non-interactive process, so fail closed. Users can explicitly turn this
   // feature off in config for deliberate automation.
   if (!process.stdin.isTTY) {
+    if (codingScope) deniedCodingActions.add(codingScope);
     return false;
   }
 
@@ -246,6 +285,8 @@ async function checkApproval({ server, tool, args, annotations, enabled, _prompt
   updateSpinner(`waiting for approval: ${tool}...`);
 
   const allowed = await promptApproval({ server, tool, args });
+  if (allowed && scopedAction) approvedPromptActions.add(scopedAction);
+  else if (codingScope) deniedCodingActions.add(codingScope);
 
   // Keep the indicator alive after the decision as well.  A denied call is
   // still part of the running turn, but must not claim that execution began.
@@ -261,14 +302,16 @@ function log(line) {
   console.log(line);
 }
 
-// Kept as stable callers; decisions are no longer cached across calls.
-function startPrompt() {}
-function resetApprovals() {}
+// Only exact workspace execution actions are remembered, and only for one prompt.
+function startPrompt() { approvedPromptActions.clear(); deniedCodingActions.clear(); }
+function resetApprovals() { approvedPromptActions.clear(); deniedCodingActions.clear(); }
 
 // Internal: clear session approvals (for tests only)
 function _resetForTesting() {
   pendingEntry = null;
   resolvePending = null;
+  approvedPromptActions.clear();
+  deniedCodingActions.clear();
   activeSpinner = null;
 }
 
@@ -282,5 +325,6 @@ module.exports = {
   requiresApproval,
   isComputerReadOnly,
   browserApproval,
+  _promptApproval: promptApproval,
   _resetForTesting
 };

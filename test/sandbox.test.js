@@ -160,7 +160,7 @@ test('sandbox: sun2agent automatically uses Docker when enabled (source-text che
   // startChat() must read the saved config on every launch — no re-enabling
   // needed — and show the active banner when sandbox=docker and Docker is up.
   const chatSource = fs.readFileSync(path.join(PROJECT, 'src/cli/index.js'), 'utf-8');
-  const dockerSrc = fs.readFileSync(path.join(PROJECT, 'src/cli/dockerStatus.js'), 'utf-8');
+  const dockerSrc = fs.readFileSync(path.join(PROJECT, 'src/cli/runtime/dockerStatus.js'), 'utf-8');
   // Combine the two source files in their natural evaluation order so the
   // text-position check below correctly reflects "Docker check runs first".
   const combined = dockerSrc + '\n' + chatSource;
@@ -328,7 +328,7 @@ test('sandbox: mcp.js guardrails run BEFORE sandbox wrap (source-text check)', (
 
   // Extract the connectServer function body and verify validateServer appears
   // before buildTransport within that function (runtime call order).
-  const connectStart = mcpSource.indexOf('async function connectServer(s, signal)');
+  const connectStart = mcpSource.indexOf('async function connectServer(');
   assert.ok(connectStart !== -1, 'connectServer function must exist');
   const nextFunc = mcpSource.indexOf('\nasync function ', connectStart + 1);
   const connectBody = nextFunc !== -1
@@ -416,12 +416,12 @@ test('sandbox: bin/sun2agent.js has sandbox subcommand dispatch', () => {
 });
 
 test('sandbox: chat.js detects Docker-down mid-session on tool error (source-text check)', () => {
-  // After the refactor, dockerDownWarning lives in src/cli/dockerStatus.js.
+  // dockerDownWarning lives in src/cli/runtime/dockerStatus.js.
   // The tool error catch block lives in src/cli/turn.js (one chat turn).
   // Both files are read here.
   const chatSource = fs.readFileSync(path.join(PROJECT, 'src/cli/index.js'), 'utf-8');
   const turnSource = fs.readFileSync(path.join(PROJECT, 'src/cli/turn.js'), 'utf-8');
-  const dockerSrc = fs.readFileSync(path.join(PROJECT, 'src/cli/dockerStatus.js'), 'utf-8');
+  const dockerSrc = fs.readFileSync(path.join(PROJECT, 'src/cli/runtime/dockerStatus.js'), 'utf-8');
 
   // dockerDownWarning must exist (in its own file) and turn.js must import it.
   assert.ok(dockerSrc.includes('dockerDownWarning'), 'dockerStatus.js must export dockerDownWarning');
@@ -429,7 +429,7 @@ test('sandbox: chat.js detects Docker-down mid-session on tool error (source-tex
     dockerSrc.includes('Docker sandbox is enabled but Docker is not running'),
     'dockerDownWarning must produce clear warning message'
   );
-  assert.ok(turnSource.includes("require('./dockerStatus')"), 'turn.js must require dockerStatus');
+  assert.ok(turnSource.includes("require('./runtime/dockerStatus')"), 'turn.js must require dockerStatus');
 
   // Tool error catch block must call dockerDownWarning
   const toolCatchIdx = turnSource.indexOf("'Tool error: ' + e.message");
@@ -449,10 +449,10 @@ test('sandbox: chat.js detects Docker-down mid-session on connect error (source-
   // commands/mcp.js.
   const chatSource = fs.readFileSync(path.join(PROJECT, 'src/cli/index.js'), 'utf-8');
   const mcpCmdSource = fs.readFileSync(path.join(PROJECT, 'src/cli/commands/mcp.js'), 'utf-8');
-  const dockerSrc = fs.readFileSync(path.join(PROJECT, 'src/cli/dockerStatus.js'), 'utf-8');
+  const dockerSrc = fs.readFileSync(path.join(PROJECT, 'src/cli/runtime/dockerStatus.js'), 'utf-8');
 
   // chat.js must still hand /mcp through the registry and pass dockerDownWarning.
-  assert.ok(chatSource.includes("require('./dockerStatus')"), 'chat.js must require dockerStatus');
+  assert.ok(chatSource.includes("require('./runtime/dockerStatus')"), 'chat.js must require dockerStatus');
   assert.ok(chatSource.includes('dockerDownWarning'), 'chat.js must pass dockerDownWarning into /mcp handler');
   // commands/mcp.js must call dockerDownWarning in its error paths.
   assert.ok(mcpCmdSource.includes('dockerDownWarning'), 'commands/mcp.js must call dockerDownWarning');
@@ -620,9 +620,9 @@ test('sandbox: runInSandbox refuses to fall back when Docker is down (source-tex
 });
 
 test('sandbox: chat.js skips Docker checks and shows banner inside the sandbox (source-text)', () => {
-  // After the refactor, dockerDownWarning lives in src/cli/dockerStatus.js.
+  // dockerDownWarning lives in src/cli/runtime/dockerStatus.js.
   const chatSource = fs.readFileSync(path.join(PROJECT, 'src/cli/index.js'), 'utf-8');
-  const dockerSrc = fs.readFileSync(path.join(PROJECT, 'src/cli/dockerStatus.js'), 'utf-8');
+  const dockerSrc = fs.readFileSync(path.join(PROJECT, 'src/cli/runtime/dockerStatus.js'), 'utf-8');
 
   // dockerDownWarning must short-circuit inside the container (no docker CLI)
   const warnIdx = dockerSrc.indexOf('function dockerDownWarning()');

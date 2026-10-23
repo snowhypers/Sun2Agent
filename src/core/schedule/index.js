@@ -1,14 +1,14 @@
 'use strict';
 
 const fs = require('node:fs');
-const os = require('node:os');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const guardrails = require('../guardrails');
 const { validateTelegramConfig } = require('../telegram/config');
 const { isScheduleRequest, parsePrompt } = require('./parse');
 
-const FILE = path.join(os.homedir(), '.sun2agent', 'schedules.json');
+const { getDataDir } = require('../deployment/dataDir');
+const FILE = path.join(getDataDir(), 'schedules.json');
 
 function load(file = FILE) {
   if (!fs.existsSync(file)) return [];
@@ -60,7 +60,9 @@ function create(text, config, options = {}) {
   }
   const verdict = guardrails.inputGuard(parsed.task);
   if (!verdict.ok) return { error: verdict.reason };
-  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const timeZone = options.timeZone || config.telegram.timeZone ||
+    (options.requireTimeZone ? '' : Intl.DateTimeFormat().resolvedOptions().timeZone);
+  if (!timeZone) return { error: 'Set SUN2AGENT_TIMEZONE to your IANA timezone before scheduling from Telegram.' };
   const now = options.now || new Date();
   let nextRunAt;
   try { nextRunAt = nextRun(parsed.time, timeZone, now, parsed.day); }

@@ -1,7 +1,7 @@
 const chalk = require('chalk');
 const { repairInterruptedTools } = require('../../core/sessions-management/continue');
 const { loadSession } = require('../../core/sessions-management/new');
-const { cleanHistory } = require('../history');
+const { cleanHistory } = require('../runtime/history');
 
 function handleContinue({ history }) {
   // A crash or Ctrl+C can leave the current session snapshot on disk. /new

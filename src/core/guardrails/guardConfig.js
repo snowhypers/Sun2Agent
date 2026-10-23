@@ -79,8 +79,7 @@ const blockedCommands = [
 // Credential and secret material that must never be read, written, or sent.
 // Matched against the full path, case-insensitively.
 const protectedFiles = [
-  /(^|[/\\])\.env(\.|$)/i,
-  /(^|[/\\])\.env$/i,
+  /(^|[/\\])\.env(\.(?!example|sample|template)[^/\\]*|$)/i,
   /(^|[/\\])\.ssh([/\\]|$)/i,
   /(^|[/\\])\.aws([/\\]|$)/i,
   /(^|[/\\])\.gnupg([/\\]|$)/i,

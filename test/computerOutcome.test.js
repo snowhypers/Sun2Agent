@@ -6,7 +6,7 @@ const hitl = require('../src/core/hitl/mcpApproval');
 const mcp = require('../src/core/mcp');
 const registry = require('../src/core/mcp/registry');
 const { chatTurn } = require('../src/cli/turn');
-const { resumeAfterModel500 } = require('../src/cli/modelRecovery');
+const { resumeAfterModel500 } = require('../src/cli/runtime/modelRecovery');
 const { pendingComputerOutcome } = require('../src/core/computer/outcome');
 
 afterEach(async () => { await registry.disconnectAll(); hitl._resetForTesting(); });

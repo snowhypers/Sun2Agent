@@ -22,6 +22,10 @@ async function stop() {
   return runtime.stop();
 }
 
+function pollingStopped() {
+  return runtime.pollPromise;
+}
+
 function setMcpReady(promise) {
   runtime.setMcpReady(promise);
 }
@@ -44,5 +48,6 @@ module.exports = {
   setMcpReady,
   prepareScheduled,
   sendScheduled,
-  stop
+  stop,
+  pollingStopped
 };

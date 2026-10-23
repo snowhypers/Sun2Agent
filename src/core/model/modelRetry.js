@@ -17,16 +17,20 @@ function retryDelay(error, now = Date.now()) {
 }
 
 async function requestWithRetry(send, { signal, onRetry, enabled = false, wait = delay } = {}) {
-  try { return await send(); } catch (error) {
-    if (!enabled || signal?.aborted) throw error;
-    const ms = retryDelay(error);
-    if (ms === null) throw error;
-    // Release an HTTP error stream before starting another request.
-    error.response?.data?.destroy?.();
-    onRetry?.(ms);
-    await wait(ms, undefined, { signal });
-    if (signal?.aborted) throw error;
-    return send(); // Exactly one retry; never re-run tools here.
+  for (let attempt = 0; ; attempt++) {
+    try { return await send(); } catch (error) {
+      if (signal?.aborted) throw error;
+      const rateLimited = error.response?.status === 429;
+      // Rate limits get two bounded retries for every model request. Other
+      // transient errors keep the existing opt-in, single-retry behavior.
+      if ((!rateLimited && (!enabled || attempt > 0)) || (rateLimited && attempt >= 2)) throw error;
+      const ms = retryDelay(error);
+      if (ms === null) throw error;
+      error.response?.data?.destroy?.();
+      onRetry?.(ms, attempt + 1, rateLimited);
+      await wait(ms, undefined, { signal });
+      if (signal?.aborted) throw error;
+    }
   }
 }
 module.exports = { retryDelay, requestWithRetry };

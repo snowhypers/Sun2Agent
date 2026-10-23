@@ -22,6 +22,8 @@
 // The @modelcontextprotocol/sdk is ESM-only, so it is pulled in with dynamic
 // import() from ./transports.js.
 
+const path = require('node:path');
+const fsp = require('node:fs/promises');
 const { getServers } = require('./config');
 const { version: VERSION } = require('../../../package.json');
 const guardrails = require('../guardrails');
@@ -32,9 +34,32 @@ const { loadSdk, buildTransport } = require('./transports');
 const filesystem = require('../filesystem');
 const browser = require('../browser');
 const computer = require('../computer');
+const codingBrowser = require('../coding/browser');
 const telegramPolicy = require('./telegramPolicy');
 
 const DEFAULT_MCP_CONNECTION_TIMEOUT_MS = 20000;
+const CODING_BROWSER_AUTOMATION_TOOLS = new Set([
+  'browser_click', 'browser_close', 'browser_console_messages', 'browser_find',
+  'browser_fill_form', 'browser_hover', 'browser_navigate',
+  'browser_network_requests', 'browser_press_key', 'browser_resize', 'browser_snapshot',
+  'browser_take_screenshot', 'browser_tabs', 'browser_type', 'browser_wait_for'
+]);
+
+function isLocalCodingBrowserCall(connection, route, args) {
+  if (!connection.internal || route.server !== codingBrowser.NAME ||
+      !CODING_BROWSER_AUTOMATION_TOOLS.has(route.tool)) return false;
+  const url = route.tool === 'browser_navigate' ? args?.url
+    : route.tool === 'browser_tabs' && args?.action === 'new' ? args.url : null;
+  if (url === null) return true;
+  try {
+    const parsed = new URL(url);
+    return ['http:', 'https:'].includes(parsed.protocol) &&
+      ['localhost', '127.0.0.1', '[::1]'].includes(parsed.hostname) &&
+      !parsed.username && !parsed.password;
+  } catch (_) {
+    return false;
+  }
+}
 
 function connectionTimeoutMs(server) {
   const perServer = Number(server && server.connectTimeoutMs);
@@ -48,8 +73,25 @@ function connectionTimeoutError(server, timeout) {
   return new Error(`MCP connection to "${server.name}" timed out after ${timeout}ms.`);
 }
 
+function normalizeToolArgs(route, args) {
+  if (!args || typeof args !== 'object') return {};
+  let normalized = { ...args };
+  if (!normalized.path) {
+    if (typeof normalized.projectPath === 'string') normalized.path = normalized.projectPath;
+    else if (typeof normalized.directory === 'string') normalized.path = normalized.directory;
+    else if (typeof normalized.dir === 'string') normalized.path = normalized.dir;
+    else if (typeof normalized.cwd === 'string') normalized.path = normalized.cwd;
+    else if (typeof normalized.filePath === 'string') normalized.path = normalized.filePath;
+  }
+  if (route.server === filesystem.NAME && route.tool === 'write_file' &&
+      normalized.content && typeof normalized.content === 'object') {
+    normalized.content = JSON.stringify(normalized.content, null, 2);
+  }
+  return normalized;
+}
+
 // Connect a single server definition and record its tools. Throws on failure.
-async function connectServer(s, signal) {
+async function connectServer(s, signal, options = {}) {
   if (signal?.aborted) throw new Error('Connection cancelled');
   if (computer.isReservedUserServer(s)) throw new Error(computer.reservedNameError());
   if (filesystem.isReservedUserServer(s)) {
@@ -57,6 +99,9 @@ async function connectServer(s, signal) {
   }
   if (browser.isReservedUserServer(s)) {
     throw new Error(browser.reservedNameError());
+  }
+  if (s.name === codingBrowser.NAME && !options.internal) {
+    throw new Error(`"${codingBrowser.NAME}" is reserved for Sun2Agent's coding browser`);
   }
   // A stdio server runs a real command — vet it before spawning anything.
   const verdict = guardrails.validateServer(s);
@@ -101,7 +146,8 @@ async function connectServer(s, signal) {
       transport,
       tools: availableTools,
       type: s.type,
-      builtin: Boolean(s.builtin)
+      builtin: Boolean(s.builtin),
+      internal: Boolean(options.internal)
     });
     return availableTools;
   } catch (error) {
@@ -148,10 +194,22 @@ async function disconnectBrowser() {
   return browser.disconnect();
 }
 
+async function connectCodingBrowser() {
+  return codingBrowser.connect((server) => connectServer(server, undefined, { internal: true }));
+}
+
+function isCodingBrowserConnected() {
+  return codingBrowser.isConnected();
+}
+
+async function disconnectCodingBrowser() {
+  return codingBrowser.disconnect();
+}
+
 // Connect every server in mcp.json. Returns per-server results so the caller
 // can show which connected and which failed without aborting on one bad entry.
-async function connectFromConfig() {
-  const servers = getServers();
+async function connectFromConfig(options = {}) {
+  const servers = getServers().filter((server) => !options.remoteOnly || telegramPolicy.isRemoteServer(server));
   return Promise.all(servers.map(async (s) => {
     if (computer.isReservedUserServer(s)) {
       return { name: s.name, type: s.type, ok: false, error: computer.reservedNameError() };
@@ -222,7 +280,7 @@ function getTelegramTools() {
     .map((server) => [server.name, new Set(server.telegramTools)]));
   const { specs, routes } = registry.getOpenAiTools();
   const safeRoutes = new Map([...routes].filter(([, route]) =>
-    allowedServers.get(route.server)?.has(route.tool) && telegramPolicy.isReadOnlyTool(route)));
+    allowedServers.get(route.server)?.has(route.tool)));
   return { specs: specs.filter((spec) => safeRoutes.has(spec.function.name)), routes: safeRoutes };
 }
 
@@ -237,8 +295,12 @@ async function callTelegramTool(name, args, signal) {
 async function callTool(routes, fullName, args, signal, options = {}) {
   const route = routes.get(fullName);
   if (!route) throw new Error(`no MCP tool named "${fullName}"`);
+  args = normalizeToolArgs(route, args);
   const conn = registry.get(route.server);
   if (!conn) throw new Error(`server "${route.server}" is not connected`);
+  if (route.server === filesystem.NAME && route.tool === 'curl_local_api' && options.codingMode !== true) {
+    throw new Error('curl_local_api is available only during /coding tasks');
+  }
   if (options.telegramReadOnly && !getTelegramTools().routes.has(fullName)) {
     throw new Error(`Tool "${fullName}" is unavailable in Telegram.`);
   }
@@ -262,17 +324,26 @@ async function callTool(routes, fullName, args, signal, options = {}) {
   // Human-in-the-Loop: the call is blocked unless a human approves it. This
   // sits at the execution boundary (after guardrails, before the tool runs) —
   // outside the LLM/ReAct logic — so every proposed call is vetted here.
-  const approved = options.telegramReadOnly || await hitl.checkApproval({
+  const codingBrowserCall = conn.internal && route.server === codingBrowser.NAME;
+  const approved = options.telegramReadOnly || (codingBrowserCall
+    ? isLocalCodingBrowserCall(conn, route, args) && (options.codingMode !== true ||
+      await hitl.checkApproval({ server: route.server, tool: route.tool, args, codingMode: true, codingBrowserTest: true }))
+    : await hitl.checkApproval({
     server: route.server,
     tool: route.tool,
     args: args || {},
-    annotations: route.annotations
-  });
+    annotations: route.annotations,
+    codingMode: options.codingMode === true
+    }));
   if (!approved) {
+    const reason = codingBrowserCall
+      ? 'the action is outside the safe local coding-browser policy'
+      : !process.stdin.isTTY
+        ? 'approval is required, but this terminal cannot display an interactive Allow / Don\'t allow choice'
+      : 'a human declined approval';
     return (
-      `MCP call to "${route.tool}" was NOT executed — a human declined ` +
-      `approval. Tell the user which call was blocked and why the task ` +
-      `could not proceed as proposed.`
+      `MCP call to "${route.tool}" was NOT executed — ${reason}. ` +
+      `Tell the user which call was blocked and why; do not retry it until approval is available.`
     );
   }
   if (signal?.aborted) throw new Error('Tool call cancelled before execution');
@@ -286,6 +357,13 @@ async function callTool(routes, fullName, args, signal, options = {}) {
     if (route.server === computer.NAME && computer.isLocalTool(route.tool)) {
       return computer.callLocalTool(route.tool, args, signal);
     }
+    if (route.server === filesystem.NAME && route.tool === 'write_file' && typeof args?.path === 'string') {
+      try {
+        const root = filesystem.getActiveRoot() || process.cwd();
+        const target = path.resolve(root, args.path);
+        await fsp.mkdir(path.dirname(target), { recursive: true });
+      } catch (_) {}
+    }
     // Use client.request() directly instead of client.callTool(): callTool()
     // rejects responses from servers that declare an outputSchema but return
     // only text content (spec-strict). Real-world servers often do exactly
@@ -297,7 +375,7 @@ async function callTool(routes, fullName, args, signal, options = {}) {
       const focus = await conn.client.request(
         { method: 'tools/call', params: { name: 'activate_window', arguments: { window_id: args.window_id } } },
         S.CallToolResultSchema,
-        signal ? { signal } : undefined
+        signal ? { signal, timeout: 30000 } : { timeout: 30000 }
       );
       const focusText = focus.content?.find((part) => part.type === 'text')?.text || '';
       let activated = false;
@@ -307,7 +385,7 @@ async function callTool(routes, fullName, args, signal, options = {}) {
     const result = await conn.client.request(
       { method: 'tools/call', params: { name: route.tool, arguments: args || {} } },
       S.CallToolResultSchema,
-      signal ? { signal } : undefined
+      signal ? { signal, timeout: 30000 } : { timeout: 30000 }
     );
     const formatted = require('./toolResult').formatToolResult(result, options.includeImages === true);
     if (result.isError === true) {
@@ -338,9 +416,15 @@ module.exports = {
   connectBrowser,
   isBrowserConnected,
   disconnectBrowser,
+  connectCodingBrowser,
+  isCodingBrowserConnected,
+  disconnectCodingBrowser,
+  stopProjectServer: filesystem.stopProjectServer,
+  reapStaleProcesses: filesystem.reapStaleProcesses,
   disconnectUserServers,
   hasUserConnections,
   connectFromConfig,
+  connectRemoteFromConfig: () => connectFromConfig({ remoteOnly: true }),
   connectSelected,
   connectAll,
   getActiveName: registry.getActiveName,
@@ -352,5 +436,6 @@ module.exports = {
   getTelegramTools,
   callTelegramTool,
   callTool,
+  normalizeToolArgs,
   disconnectAll: registry.disconnectAll
 };

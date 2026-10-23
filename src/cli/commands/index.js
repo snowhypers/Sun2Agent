@@ -18,6 +18,7 @@ const { handleNew } = require('./new');
 const { handleContinue } = require('./continue');
 const { handleSave } = require('./save');
 const { handleSchedule } = require('./schedule');
+const { handleCoding } = require('./coding');
 
 // name -> (ctx) => Promise<void>
 const COMMANDS = {
@@ -31,6 +32,7 @@ const COMMANDS = {
   '/mcp': handleMcp,
   '/browser': handleBrowser,
   '/computer': handleComputer,
+  '/coding': handleCoding,
   '/computer disconnect': disconnectComputer,
   '/agent': handleAgent,
   '/memory': handleMemory,
@@ -38,4 +40,4 @@ const COMMANDS = {
   '/skills': handleSkills
 };
 
-module.exports = { COMMANDS, handleConfig, handleSkills, handleBrowser };
+module.exports = { COMMANDS, handleConfig, handleSkills, handleBrowser, handleCoding };

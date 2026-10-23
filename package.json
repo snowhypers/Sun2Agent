@@ -4,15 +4,19 @@
   "description": "Open-source autonomous AI coding agent CLI & native MCP client (free Claude Code alternative). Desktop & browser automation, workspace tools, 5-layer guardrails, Docker sandbox, and custom OpenAI/NVIDIA NIM providers.",
   "main": "bin/sun2agent.js",
   "bin": {
-    "sun2agent": "./bin/sun2agent.js"
+    "sun2agent": "./bin/sun2agent.js",
+    "sun2agent-service": "./bin/sun2agent-service.js"
   },
   "files": [
     "bin/",
     "src/",
-    "README.md"
+    "README.md",
+    "docs/",
+    "deploy/"
   ],
   "scripts": {
     "start": "node bin/sun2agent.js",
+    "start:service": "node bin/sun2agent-service.js",
     "test": "node --test --test-concurrency=1 \"test/*.test.js\""
   },
   "keywords": [

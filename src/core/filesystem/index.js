@@ -9,11 +9,16 @@ const fs = require('fs');
 const fsp = require('fs/promises');
 const childProcess = require('child_process');
 const registry = require('../mcp/registry');
+const codingRunner = require('../coding/runner');
 
 const NAME = 'workspace';
 let activeRoot = null;
 
 const LOCAL_TOOLS = [
+  codingRunner.installTool,
+  codingRunner.checkTool,
+  codingRunner.curlTool,
+  codingRunner.serverTool,
   {
     name: 'run_maven_tests',
     description:
@@ -147,6 +152,14 @@ async function resolveDeleteTarget(inputPath) {
 }
 
 async function callLocalTool(name, args = {}) {
+  if (name === codingRunner.installTool.name) return codingRunner.installProjectDependencies(activeRoot, args);
+  if (name === codingRunner.checkTool.name) {
+    return codingRunner.runProjectCheck(activeRoot, args);
+  }
+  if (name === codingRunner.curlTool.name) return codingRunner.curlLocalApi({ ...args, signal: args.signal });
+  if (name === codingRunner.serverTool.name) {
+    return codingRunner.startProjectServer(activeRoot, args);
+  }
   if (name === 'run_maven_tests') return runMavenTests(args.signal);
   const target = await resolveDeleteTarget(args.path);
   const stat = await fsp.lstat(target);
@@ -231,8 +244,11 @@ module.exports = {
   hasUserConnections,
   isConnected,
   disconnect,
+  getActiveRoot: () => activeRoot,
   getLocalTools,
   isLocalTool,
   callLocalTool,
+  stopProjectServer: codingRunner.stopProjectServer,
+  reapStaleProcesses: codingRunner.reapStaleProcesses,
   verifyJavaTestWrite
 };

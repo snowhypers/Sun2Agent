@@ -19,7 +19,7 @@ const AGENT_FILENAME = 'AGENT.md';
 // resolved once at load time), so the agent and its sandbox agree on what
 // "the project" is.
 function agentMdPath(dir) {
-  return path.join(dir || process.cwd(), AGENT_FILENAME);
+  return process.env.SUN2AGENT_AGENT_MD || path.join(dir || process.cwd(), AGENT_FILENAME);
 }
 
 // Ensure AGENT.md exists so the editor has something to open. On first use we

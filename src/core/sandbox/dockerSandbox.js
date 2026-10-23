@@ -14,6 +14,7 @@
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
+const { getDataDir } = require('../deployment/dataDir');
 
 // The base image for the sandbox. node:20-slim has node + npx built in and is
 // widely available. Configurable via config.sandbox.image.
@@ -94,7 +95,7 @@ function isUnsafeProjectRoot(dir) {
 function wrapAgentRun(options = {}) {
   const projectRoot = options.projectRoot || process.cwd();
   const packageRoot = options.packageRoot || defaultPackageRoot();
-  const configDir = options.configDir || path.join(os.homedir(), '.sun2agent');
+  const configDir = options.configDir || getDataDir();
   const image = options.image || DEFAULT_IMAGE;
   // -it gives the TUI a real terminal; fall back to -i when piped (CI).
   const tty = process.stdout.isTTY ? ['-it'] : ['-i'];

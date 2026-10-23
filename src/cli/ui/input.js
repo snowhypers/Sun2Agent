@@ -26,8 +26,9 @@ function renderFooter(options = {}, stdout = process.stdout) {
   const model = options.model ? String(options.model).split('/').pop() : '';
   const tag = options.tag || '';
   const skillTag = options.skillTag || '';
+  const modeTag = options.modeTag || '';
   const contextEstimate = options.contextEstimate || '';
-  const hint = options.hint || '⎋ esc back  ·  /help  ·  /new  ·  /continue  ·  /mcp  ·  /exit';
+  const hint = options.hint || '⎋ esc back  ·  /coding  ·  /help  ·  /new  ·  /continue  ·  /mcp  ·  /exit';
   const tagRaw = tag ? `@${tag}` : '';
   const rightRaw = model ? `→ ${model}` : '';
   const tagShown = truncateToWidth(tagRaw, Math.floor(w * 0.35));
@@ -44,6 +45,14 @@ function renderFooter(options = {}, stdout = process.stdout) {
   if (skillTag && leftBudget > 2) {
     const room = leftBudget - (leftParts.length ? 2 : 0);
     const shown = truncateToWidth(skillTag, room);
+    if (shown) {
+      leftParts.push({ value: shown, color: chalk.green });
+      leftBudget -= stringWidth(shown) + (leftParts.length > 1 ? 2 : 0);
+    }
+  }
+  if (modeTag && leftBudget > 2) {
+    const room = leftBudget - (leftParts.length ? 2 : 0);
+    const shown = truncateToWidth(modeTag, room);
     if (shown) {
       leftParts.push({ value: shown, color: chalk.green });
       leftBudget -= stringWidth(shown) + (leftParts.length > 1 ? 2 : 0);

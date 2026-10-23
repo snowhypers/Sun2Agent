@@ -745,7 +745,7 @@ test('skills: end-to-end flow — selecting a skill makes its "[Skill: <name>]" 
   });
   // After save, the footer tag must include both "[Skill: <name>]" tokens.
   const config = withHome(home, ({ loadConfig }) => loadConfig());
-  const tag = skills.getTag(config);
+  const tag = withHome(home, () => skills.getTag(config));
   assert.strictEqual(tag, '[Skill: Coding] [Skill: Debugging]');
   // And the system-prompt context must include the skill content.
   const ctx = withHome(home, () => skills.buildSkillsContext('BASE', config));
@@ -816,9 +816,10 @@ test('skills: Esc backs out of opt-in tools before disconnecting automatic MCPs'
   assert.match(block, /mcp\.disconnectUserServers\(\)/);
   const mcpIndex = block.indexOf('mcp.disconnectUserServers()');
   const browserIndex = block.indexOf('mcp.disconnectBrowser()');
+  const codingIndex = block.indexOf('codingMode.toggle()');
   const skillsIndex = block.indexOf('skills.clearSelected');
-  assert.ok(mcpIndex !== -1 && browserIndex !== -1 && skillsIndex !== -1);
-  assert.ok(browserIndex < skillsIndex && skillsIndex < mcpIndex);
+  assert.ok(mcpIndex !== -1 && browserIndex !== -1 && codingIndex !== -1 && skillsIndex !== -1);
+  assert.ok(browserIndex < codingIndex && codingIndex < skillsIndex && skillsIndex < mcpIndex);
   assert.match(block, /if \(escReadyForMcp\) \{[\s\S]*mcp\.disconnectUserServers\(\)/);
   assert.match(src, /let escReadyForMcp = false;/);
   assert.doesNotMatch(block, /disconnectWorkspace\(\)/);

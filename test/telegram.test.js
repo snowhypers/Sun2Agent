@@ -213,7 +213,8 @@ test('Telegram text chat calls the model without tools and saves history', async
   assert.strictEqual(invocation[1], 'test-model');
   assert.strictEqual(invocation[3], undefined, 'No remote MCP tools are connected');
   assert.strictEqual(typeof invocation[5], 'function', 'Telegram should request streamed model tokens');
-  assert.match(invocation[2][0].content, /Only connected remote read-only MCP tools are available/);
+  assert.match(invocation[2][0].content, /Only explicitly allowlisted remote MCP tools are available/);
+  assert.match(invocation[2][0].content, /they may have side effects/);
   assert.deepStrictEqual(runtime.histories.get(CHAT_ID).map((item) => item.role), ['user', 'assistant']);
   const responseUpdates = http.calls
     .filter((call) => call.method === 'sendMessage' || call.method === 'editMessageText');

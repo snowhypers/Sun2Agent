@@ -1,15 +1,15 @@
 // Owner-only storage and keyword retrieval for user-approved lessons.
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 const guardrails = require('../guardrails');
 const { containsSensitiveData } = require('../memory/memoryJson');
+const { getDataDir } = require('../deployment/dataDir');
 
 const STOP = new Set('about after agent create does edit file files from have into make open please that this with write your'.split(' '));
 const MAX_LESSONS = 40;
 
-function lessonFile(home = os.homedir()) {
-  return path.join(home, '.sun2agent', 'lessons.json');
+function lessonFile(home) {
+  return home ? path.join(home, '.sun2agent', 'lessons.json') : path.join(getDataDir(), 'lessons.json');
 }
 
 function keywords(text) {
@@ -29,7 +29,7 @@ function normalizeLesson(value) {
   return safe === line && !safe.includes('REDACTED') ? line : null;
 }
 
-function readLessons(home = os.homedir(), strict = false) {
+function readLessons(home, strict = false) {
   try {
     const file = lessonFile(home);
     if (fs.lstatSync(file).isSymbolicLink() || fs.statSync(file).size > 131072) {
@@ -51,7 +51,7 @@ function readLessons(home = os.homedir(), strict = false) {
   }
 }
 
-function saveLesson(task, value, home = os.homedir()) {
+function saveLesson(task, value, home) {
   const lesson = normalizeLesson(value);
   if (!lesson) throw new Error('Lesson was not safe to save.');
   if (containsSensitiveData(String(task)) || guardrails.containsSecret(String(task)) ||
@@ -69,7 +69,7 @@ function saveLesson(task, value, home = os.homedir()) {
   return file;
 }
 
-function relevantLesson(task, home = os.homedir()) {
+function relevantLesson(task, home) {
   const words = new Set(keywords(task));
   if (!words.size) return null;
   return readLessons(home).reverse().find((item) => item.keywords.some((word) => words.has(word)))?.lesson || null;

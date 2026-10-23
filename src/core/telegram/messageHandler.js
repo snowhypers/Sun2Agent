@@ -73,7 +73,10 @@ async function handleUpdate(runtime, update) {
 
   if (schedule.isScheduleRequest(text)) {
     try {
-      const result = schedule.create(text, runtime.config);
+      const result = schedule.create(text, runtime.config, {
+        timeZone: process.env.SUN2AGENT_TIMEZONE,
+        requireTimeZone: true
+      });
       await runtime.send(chatId, result.job ? `✔ Scheduled: ${schedule.describe(result.job)}` :
         result.error || `I need ${result.missing.join(', ')} to schedule this task.`);
     } catch (error) {

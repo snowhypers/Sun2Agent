@@ -1,10 +1,10 @@
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
 const { spawnSync } = require('child_process');
 
 // mcp.json lives next to config.json in ~/.sun2agent/
-const CONFIG_DIR = path.join(os.homedir(), '.sun2agent');
+const { getDataDir } = require('../deployment/dataDir');
+const CONFIG_DIR = getDataDir();
 const MCP_FILE = path.join(CONFIG_DIR, 'mcp.json');
 
 // Template written on first use. `mcpServers` is what actually gets loaded;
@@ -31,7 +31,7 @@ const TEMPLATE = {
 };
 
 function ensureConfigDir() {
-  if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
+  if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true, mode: 0o700 });
 }
 
 // Create mcp.json with the template if it does not exist yet.

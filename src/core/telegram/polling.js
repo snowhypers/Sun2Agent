@@ -44,12 +44,29 @@ async function pollLoop(runtime, signal) {
     if (inFlight.has(id)) return;
     inFlight.add(id);
     // Keep polling while the model runs so /stop can interrupt the turn.
-    void runtime.handleUpdate(update).then(() => {
+    void (async () => {
+      let failure;
+      for (let attempt = 0; attempt < 3 && !signal.aborted; attempt++) {
+        try {
+          await runtime.handleUpdate(update);
+          failure = null;
+          break;
+        } catch (error) {
+          failure = error;
+          if (attempt < 2) await waitForRetry(1000 * (attempt + 1), signal);
+        }
+      }
       if (!signal.aborted) {
         pending.delete(id);
         save();
+        if (failure) {
+          runtime.onError(new Error(`Telegram update ${id} failed after 3 attempts: ${failure.message}`));
+          const chatId = update.message?.chat?.id;
+          if (chatId) await runtime.send(chatId,
+            'I could not process that message after retrying. Please send it again.').catch(runtime.onError);
+        }
       }
-    }).catch(runtime.onError).finally(() => inFlight.delete(id));
+    })().catch(runtime.onError).finally(() => inFlight.delete(id));
   }
   if (runtime.pendingFile && fs.existsSync(runtime.pendingFile)) {
     const saved = JSON.parse(fs.readFileSync(runtime.pendingFile, 'utf8'));

@@ -5,7 +5,7 @@ const computer = require('../src/core/computer');
 const mcp = require('../src/core/mcp');
 const hitl = require('../src/core/hitl/mcpApproval');
 const { formatToolResult } = require('../src/core/mcp/toolResult');
-const { selectToolSpecs } = require('../src/cli/computerTools');
+const { selectToolSpecs } = require('../src/cli/runtime/computerTools');
 const { requestWithRetry, retryDelay } = require('../src/core/model/modelRetry');
 const { sanitize } = require('../src/core/observability/langsmith');
 const connection = (builtin) => ({ builtin, type: 'stdio', tools: [], client: { close: async () => {} } });
@@ -200,6 +200,28 @@ test('computer: retry once with Retry-After; original request closure reused', a
   assert.equal(result, 'ok');
   assert.equal(calls, 2);
   assert.equal(waitMs, 2000);
+});
+
+test('model: rate limits retry twice before returning the final provider error', async () => {
+  let calls = 0;
+  const waits = [];
+  const statuses = [];
+  const finalError = Object.assign(new Error('rate limited'), {
+    response: { status: 429, headers: { 'retry-after': '1' } }
+  });
+  await assert.rejects(requestWithRetry(async () => {
+    calls++;
+    throw finalError;
+  }, {
+    wait: async (ms) => waits.push(ms),
+    onRetry: (ms, attempt, rateLimited) => statuses.push({ ms, attempt, rateLimited })
+  }), (error) => error === finalError);
+  assert.equal(calls, 3);
+  assert.deepEqual(waits, [1000, 1000]);
+  assert.deepEqual(statuses, [
+    { ms: 1000, attempt: 1, rateLimited: true },
+    { ms: 1000, attempt: 2, rateLimited: true }
+  ]);
 });
 
 test('computer: does not retry validation/auth errors or long cooldowns', async () => {

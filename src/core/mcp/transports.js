@@ -69,7 +69,7 @@ function buildStdio(s, S) {
 // Streamable HTTP. `headers` (if any) are passed through on every request.
 function buildHttp(s, S) {
   if (!s.url) throw new Error('http server needs a "url"');
-  const headers = s.headers && Object.keys(s.headers).length ? s.headers : undefined;
+  const headers = resolveHeaders(s.headers);
   return new S.StreamableHTTPClientTransport(new URL(s.url), {
     requestInit: headers ? { headers } : undefined
   });
@@ -78,7 +78,7 @@ function buildHttp(s, S) {
 // Legacy SSE transport. Same headers handling as HTTP.
 function buildSse(s, S) {
   if (!s.url) throw new Error('sse server needs a "url"');
-  const headers = s.headers && Object.keys(s.headers).length ? s.headers : undefined;
+  const headers = resolveHeaders(s.headers);
   return new S.SSEClientTransport(new URL(s.url), {
     requestInit: headers ? { headers } : undefined
   });
@@ -86,6 +86,16 @@ function buildSse(s, S) {
 
 // Dispatch: pick the right transport from the server definition. Throws on
 // unknown types so connectServer() surfaces a clear error to the user.
+function resolveHeaders(headers) {
+  if (!headers || !Object.keys(headers).length) return undefined;
+  return Object.fromEntries(Object.entries(headers).map(([key, value]) => [key,
+    String(value).replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (_, name) => {
+      if (!process.env[name]) throw new Error(`MCP header requires environment variable ${name}.`);
+      return process.env[name];
+    })
+  ]));
+}
+
 function buildTransport(s, S) {
   switch (s.type) {
     case 'stdio':
@@ -102,4 +112,4 @@ function buildTransport(s, S) {
   }
 }
 
-module.exports = { loadSdk, buildTransport };
+module.exports = { loadSdk, buildTransport, resolveHeaders };

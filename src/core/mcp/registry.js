@@ -57,8 +57,7 @@ function getActiveName() {
     .filter(([, connection]) => !connection.builtin)
     .map(([name]) => name);
   if (userNames.length > 0) return userNames[0];
-  const it = connections.keys().next();
-  return it.done ? null : it.value;
+  return [...connections].find(([, connection]) => !connection.internal)?.[0] || null;
 }
 
 // Tag shown under the input box. Automatic workspace tools stay invisible;
@@ -85,7 +84,7 @@ function getConnectionSignature() {
 
 // Snapshot of what is connected right now (for the "Connect MCP" list view).
 function getConnections() {
-  return [...connections.entries()].map(([name, c]) => ({
+  return [...connections.entries()].filter(([, c]) => !c.internal).map(([name, c]) => ({
     name,
     type: c.type,
     builtin: Boolean(c.builtin),

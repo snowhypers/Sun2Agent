@@ -1,0 +1,24 @@
+# CLI structure
+
+The CLI is the terminal interface around Sun2Agent's shared core services.
+
+## Request flow
+
+`index.js` starts the interactive session, handles slash commands, and owns
+startup/shutdown. For a normal message it calls `turn.js`, which assembles the
+prompt, requests a model response, dispatches requested tools, and returns the
+answer. The shared provider, memory, MCP, and other agent capabilities live in
+`src/core/`, not in the CLI interface.
+
+## Folders and entry files
+
+- `index.js` — CLI application lifecycle and composition root.
+- `turn.js` — one model/tool conversation turn; also used by Telegram.
+- `runtime/` — CLI-specific helpers for history, recovery, streaming,
+  terminal prompts, computer-tool selection, and Docker status.
+- `commands/` — slash-command handlers and their registry.
+- `ui/` — terminal layout, input, status, and rendering.
+
+Keep shared agent behavior in `src/core/`. Keep terminal-specific behavior in
+`src/cli/`; when moving a CLI module, update its imports and any source-level
+tests together.

@@ -351,6 +351,7 @@ tr:last-child td { border-bottom: 0; }
         <a href="#telegram">Telegram</a>
 
         <p class="nav-group">Automation</p>
+        <a href="#deployment">Cloud &amp; VPS Deployment</a>
         <a href="#schedule">Scheduled Tasks</a>
 
         <p class="nav-group">Security &amp; Sandboxing</p>
@@ -700,7 +701,7 @@ npm start</code></pre></div>
     }
   }
 }</code></pre></div>
-            <p>The optional <code>telegramTools</code> property allowlists specific remote read-only tools for Telegram. Local MCP servers, browser automation, and computer control tools are never exposed over Telegram.</p>
+            <p>The optional <code>telegramTools</code> property explicitly allows named remote tools in Telegram without per-call approval. A listed tool may have side effects; inspect and trust each one before enabling it. Only HTTPS remote MCP servers are accepted. Local MCP servers, browser automation, and computer control tools are never exposed over Telegram.</p>
             <div class="callout callout-warning"><strong>Trust boundary:</strong> Local MCP servers run real programs on your machine. Add only trusted servers; tool descriptions and “read-only” hints are not security guarantees.</div>
           </section>
 
@@ -727,8 +728,31 @@ npm start</code></pre></div>
             <div class="command-strip"><span><code>/start</code> help</span><span><code>/new</code> fresh chat</span><span><code>/stop</code> abort current reply</span></div>
           </section>
 
+          <section class="doc-section" id="deployment">
+            <div class="section-heading"><span class="section-index">14</span><div><p class="section-label">Deployment</p><h2>Deploy to a VPS or Cloud</h2></div></div>
+            <p>Run Sun2Agent's Telegram service continuously on a personal Linux VPS or an always-on cloud worker, so your bot can respond while your computer is off. This deploys a separate agent instance; your local CLI does not automatically connect to the cloud instance. Docker is not required.</p>
+
+            <h3>What you need</h3>
+            <ul class="check-list">
+              <li>A Linux VPS or an always-on worker such as Render Background Worker, plus Node.js 20 or 22+.</li>
+              <li>A model provider API key and Telegram bot token from <code>@BotFather</code>, plus your numeric Telegram user/chat ID.</li>
+              <li>Persistent writable storage for <code>config.json</code>, <code>mcp.json</code>, memory, skills, and schedules. Keep <code>AGENT.md</code> there too by setting its path explicitly.</li>
+            </ul>
+
+            <h3>Deployment steps</h3>
+            <ol class="steps">
+              <li>Copy the variable names from <a href="../deploy/.env.example"><code>deploy/.env.example</code></a> into the host's environment/secret settings. Set the provider, real model ID, API key, Telegram bot token, Telegram user/chat ID, <code>SUN2AGENT_DATA_DIR</code>, and <code>SUN2AGENT_AGENT_MD</code>. Set <code>SUN2AGENT_TIMEZONE</code> to an IANA timezone (for example <code>Asia/Kolkata</code>) before creating Telegram schedules.</li>
+              <li>On a VPS, install dependencies with <code>npm ci --omit=dev</code> and run <code>npm run start:service</code> under the provided <a href="../deploy/vps/sun2agent.service">systemd service</a>. On Render, create a Background Worker, use <code>npm ci</code> to build and <code>npm run start:service</code> to start, then attach a persistent disk at the configured data path.</li>
+              <li>Optionally add remote MCP configuration in the persistent <code>mcp.json</code> and your instructions in the persistent <code>AGENT.md</code>. For a custom OpenAI-compatible provider, also provision its provider definition in persistent <code>config.json</code>.</li>
+              <li>Check service logs, send a Telegram message, restart/redeploy, and verify the bot still responds and saved memory/schedules remain.</li>
+            </ol>
+
+            <div class="callout callout-warning"><strong>Security:</strong> Put API keys and the Telegram bot token in the host's secret settings—never in Git, this documentation, or <code>AGENT.md</code>. Use only HTTPS remote MCP servers. Each tool named in <code>telegramTools</code> is trusted to run without per-call approval and may have side effects. Local filesystem, browser, and computer MCPs are not started by the Telegram service. Run only one polling service per bot token.</div>
+            <p>See the <a href="deployment.md">complete VPS and Render deployment guide</a> for exact setup, persistence, and operational details. The service has no HTTP dashboard or health endpoint; monitor it through the host's logs.</p>
+          </section>
+
           <section class="doc-section" id="schedule">
-            <div class="section-heading"><span class="section-index">14</span><div><p class="section-label">Automation</p><h2>Scheduled Tasks</h2></div></div>
+            <div class="section-heading"><span class="section-index">15</span><div><p class="section-label">Automation</p><h2>Scheduled Tasks</h2></div></div>
             <p>Automate recurring background research, system checks, and reminders delivered directly to your Telegram chat.</p>
 
             <div class="code-block compact"><div class="code-head"><span>Example: recurring job</span><button class="copy-button" type="button" aria-label="Copy schedule example">Copy</button></div><pre><code>› Every day at 9 PM, summarize today's AI news and send it to Telegram.</code></pre></div>
@@ -747,7 +771,7 @@ npm start</code></pre></div>
           </section>
 
           <section class="doc-section" id="security">
-            <div class="section-heading"><span class="section-index">15</span><div><p class="section-label">Security &amp; Sandboxing</p><h2>Approvals &amp; Guardrails</h2></div></div>
+            <div class="section-heading"><span class="section-index">16</span><div><p class="section-label">Security &amp; Sandboxing</p><h2>Approvals &amp; Guardrails</h2></div></div>
             <p>Every tool call passes through five synchronized security guard layers before execution—sub-millisecond regex validation with zero extra LLM overhead.</p>
 
             <div class="security-flow"><span>Prompt</span><b aria-hidden="true">→</b><span>Model proposes tool</span><b aria-hidden="true">→</b><span>5 Guardrail Layers + HITL</span><b aria-hidden="true">→</b><span>Tool runs</span><b aria-hidden="true">→</b><span>outputGuard</span></div>
@@ -778,7 +802,7 @@ npm start</code></pre></div>
           </section>
 
           <section class="doc-section" id="sandbox">
-            <div class="section-heading"><span class="section-index">16</span><div><p class="section-label">Security &amp; Sandboxing</p><h2>Docker Sandbox</h2></div></div>
+            <div class="section-heading"><span class="section-index">17</span><div><p class="section-label">Security &amp; Sandboxing</p><h2>Docker Sandbox</h2></div></div>
             <p>Run the entire agent runtime inside an isolated Docker container to protect your host system during untrusted code execution.</p>
 
             <div class="code-block compact"><div class="code-head"><span>Terminal</span><button class="copy-button" type="button" aria-label="Copy Docker commands">Copy</button></div><pre><code>sun2agent sandbox enable
@@ -797,7 +821,7 @@ sun2agent sandbox disable</code></pre></div>
           </section>
 
           <section class="doc-section" id="observability">
-            <div class="section-heading"><span class="section-index">17</span><div><p class="section-label">Monitoring &amp; Troubleshooting</p><h2>Observability &amp; LangSmith</h2></div></div>
+            <div class="section-heading"><span class="section-index">18</span><div><p class="section-label">Monitoring &amp; Troubleshooting</p><h2>Observability &amp; LangSmith</h2></div></div>
             <p>Track LLM calls, tool execution times, latency, token consumption, and errors with production-grade observability via LangSmith—with privacy guardrails baked in.</p>
 
             <div class="example"><span class="example-label">Privacy guarantee</span><p>All prompts, messages, tool arguments, and results are screened through <code>outputGuard</code> before leaving your machine. API keys, tokens, and secrets are automatically redacted.</p></div>
@@ -823,7 +847,7 @@ sun2agent sandbox disable</code></pre></div>
           </section>
 
           <section class="doc-section" id="troubleshooting">
-            <div class="section-heading"><span class="section-index">18</span><div><p class="section-label">Monitoring &amp; Troubleshooting</p><h2>Troubleshooting FAQ</h2></div></div>
+            <div class="section-heading"><span class="section-index">19</span><div><p class="section-label">Monitoring &amp; Troubleshooting</p><h2>Troubleshooting FAQ</h2></div></div>
             <div class="faq">
               <details>
                 <summary>The agent answers but does not call tools</summary>
@@ -853,7 +877,7 @@ sun2agent sandbox disable</code></pre></div>
           </section>
 
           <section class="doc-section" id="commands">
-            <div class="section-heading"><span class="section-index">19</span><div><p class="section-label">CLI Reference</p><h2>Command Reference</h2></div></div>
+            <div class="section-heading"><span class="section-index">20</span><div><p class="section-label">CLI Reference</p><h2>Command Reference</h2></div></div>
             <p>Quick lookup table for all built-in slash commands and keyboard shortcuts.</p>
 
             <div class="table-wrap">

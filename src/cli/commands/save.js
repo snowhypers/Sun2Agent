@@ -1,7 +1,7 @@
 const chalk = require('chalk');
 const guardrails = require('../../core/guardrails');
 const { draftSessionSummary, saveSummary, hasSensitiveSummary } = require('../../core/memory/sessionMemory');
-const { sanitizeTerminalText } = require('../prompt');
+const { sanitizeTerminalText } = require('../runtime/prompt');
 
 async function handleSave({ history, config, promptBack, draft = draftSessionSummary, save = saveSummary }) {
   if (!history?.some((item) => item.role === 'user')) {

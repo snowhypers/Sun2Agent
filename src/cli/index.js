@@ -1,4 +1,6 @@
 const chalk = require('chalk');
+
+// Application services shared with other interfaces.
 const { loadConfig, saveConfig } = require('../config/appConfig');
 const mcp = require('../core/mcp');
 const computer = require('../core/computer');
@@ -12,23 +14,30 @@ const providers = require('../core/providers');
 const telegram = require('../core/telegram');
 const schedule = require('../core/schedule');
 const scheduleRunner = require('../core/schedule/runner');
+
+// Interactive CLI presentation and command handling.
 const { askInput, ESC_BACK } = require('./ui/input');
 const { notify, flushNotices } = require('./ui/utils');
 const { startTurnDisplay } = require('./ui/busyFooter');
 const { watchEscape, waitEnterOrEsc } = require('./ui/escapeWatcher');
 const { printBanner, printIntro } = require('./ui/banner');
-const { saveSession, loadSession, clearSession } = require('../core/sessions-management/new');
-const { cleanHistory } = require('./history');
-const { estimateConversationTokens, tokenLabel } = require('../core/tracking/tokenMeter');
 const { COMMANDS, handleConfig } = require('./commands');
-const { createTokenHandler, finalFlush } = require('./streaming');
+const codingMode = require('../core/coding/mode');
+const codingWorkflow = require('../core/coding/workflow');
+
+// Conversation lifecycle and model/tool turn helpers.
+const { saveSession, loadSession, clearSession } = require('../core/sessions-management/new');
+const { repairInterruptedTools } = require('../core/sessions-management/continue');
+const { estimateConversationTokens, tokenLabel } = require('../core/tracking/tokenMeter');
+const { cleanHistory, discardFailedTurn } = require('./runtime/history');
+const { createTokenHandler, finalFlush } = require('./runtime/streaming');
 const { chatTurn } = require('./turn');
-const { resumeAfterModel500 } = require('./modelRecovery');
-const { promptBack, printUserLine, sanitizeTerminalText } = require('./prompt');
+const { resumeAfterModel500, isProviderRateLimit, providerRateLimitMessage } = require('./runtime/modelRecovery');
+const { promptBack, printUserLine, sanitizeTerminalText } = require('./runtime/prompt');
 
 // Check whether the Docker sandbox is enabled and Docker has gone down.
-// (extracted to src/cli/dockerStatus.js so the MCP command can reuse it)
-const { dockerDownWarning } = require('./dockerStatus');
+// The MCP command reuses this helper from the CLI runtime folder.
+const { dockerDownWarning } = require('./runtime/dockerStatus');
 
 async function syncTelegram(config) {
   try {
@@ -54,11 +63,11 @@ function estimateFooter(history) {
 // Docker comes back, it sets SUN2AGENT_RESUME=1 and the agent restores the
 // saved messages, continuing exactly where the user was interrupted.
 
-// --- Empty-assistant-message hygiene is in src/cli/history.js -----------------
+// --- Empty-assistant-message hygiene is in src/cli/runtime/history.js ----------
 // (imported at the top of this file)
 
-// --- promptBack / printUserLine / sanitizeTerminalText -----------------------
-// All three are in src/cli/prompt.js (imported at the top of this file).
+// --- promptBack / printUserLine / sanitizeTerminalText -------------------------
+// All three are in src/cli/runtime/prompt.js (imported at the top of this file).
 
 // Main loop
 async function startChat() {
@@ -158,6 +167,7 @@ async function startChat() {
       // into the system prompt by turn.js, so the model applies them
       // automatically — no need to reference them in the typed message.
       skillTag: skills.getTag(config),
+      modeTag: codingMode.isEnabled() ? '@codeMode' : '',
       contextEstimate
     });
 
@@ -175,6 +185,11 @@ async function startChat() {
         await mcp.disconnectBrowser();
         escReadyForMcp = mcp.hasUserConnections();
         console.log(chalk.gray('⎋ Disconnected /browser. Browser tools are unavailable.\n'));
+        continue;
+      }
+      if (codingMode.isEnabled()) {
+        codingMode.toggle();
+        console.log(chalk.gray('⎋ Coding mode disabled. Back to normal chat.\n'));
         continue;
       }
       if (skills.getSelected(config).length) {
@@ -203,23 +218,33 @@ async function startChat() {
     escReadyForMcp = false;
 
     let text = input.trim();
+    const visibleText = text;
+    let approvedCodingPlan = null;
+    let codingPlanEdit = null;
     if (!text) continue;
 
     // Commands do not reserve a busy footer, so echo them immediately.
-    const handler = COMMANDS[text];
-    if (text === '/exit' || handler) printUserLine(text);
+    let handler = COMMANDS[text];
+    if (text === '/continue' && codingMode.isEnabled() && (codingMode.getPendingPlan() || codingMode.hasInterruptedPlan())) {
+      text = 'continue';
+      handler = null;
+    }
+    if (text === '/new') codingMode.clearAll();
 
     // Command handling
     if (text === '/exit') {
+      printUserLine(text);
       schedules?.stop();
       await telegram.stop();
       await workspaceReady;
       await userMcpReady;
+      await mcp.stopProjectServer();
       await mcp.disconnectAll();
       clearSession(); // clean exit — nothing to resume next time
       console.log(chalk.yellow('Goodbye! 👋'));
       process.exit(0);
     }
+    if (handler || visibleText === '/continue') printUserLine(visibleText);
     if (text === '/new' || text === '/continue' || text === '/save') {
       const result = await handler({ history, config, promptBack, loadConfig, saveConfig });
       if (!result?.prompt) continue;
@@ -261,6 +286,27 @@ async function startChat() {
       continue;
     }
 
+    const planDecision = codingMode.isEnabled() ? codingMode.decidePendingPlan(text) : null;
+    if (planDecision) {
+      if (planDecision.action === 'approve') {
+        approvedCodingPlan = planDecision.plan;
+        text = `${planDecision.plan.task}\n\nImplement this user-approved plan without expanding its scope:\n${planDecision.plan.plan}`;
+      } else if (planDecision.action === 'resume') {
+        approvedCodingPlan = planDecision.plan;
+        const guidance = planDecision.userGuidance ? `User guidance for this retry: ${planDecision.userGuidance}\n\n` : '';
+        text = `Resume implementing the approved plan for "${planDecision.plan.task}" exactly where it stopped or failed.\n\n${guidance}Check the current workspace state first; do not recreate files that already exist unless they need edits. Pick up from the current state and complete the remaining implementation and verification steps.\n\nApproved plan:\n${planDecision.plan.plan}`;
+      } else if (planDecision.action === 'edit') {
+        codingPlanEdit = planDecision.plan;
+        text = `Revise the proposed plan for this task only.\nOriginal task: ${planDecision.plan.task}\nUser's requested plan change: ${planDecision.instruction || 'Please suggest an improved version.'}\nCurrent plan:\n${planDecision.plan.plan}`;
+      } else if (planDecision.action === 'cancel') {
+        console.log(chalk.gray('Coding plan discarded. No project changes were made.\n'));
+        continue;
+      } else {
+        console.log(chalk.yellow('Review the pending plan: type “continue” to implement, “edit plan: …” to revise, or “cancel”.\n'));
+        continue;
+      }
+    }
+
     if (schedule.isScheduleRequest(text)) {
       printUserLine(text);
       try {
@@ -284,15 +330,16 @@ async function startChat() {
     saveSession(cleanHistory(history));
 
     const busyContext = estimateFooter(history);
-    const stopBusyFooter = startTurnDisplay(text, {
+    const stopBusyFooter = startTurnDisplay(visibleText, {
       model: providers.getActiveModel(config),
       tag: mcp.getTag(),
       skillTag: skills.getTag(config),
+      modeTag: codingMode.isEnabled() ? '@codeMode' : '',
       contextEstimate: busyContext
     });
 
     const controller = new AbortController();
-    // Streaming render layer lives in src/cli/streaming.js. See the file for
+    // Streaming render layer lives in src/cli/runtime/streaming.js. See the file for
     // the held-back-tail invariant and the secret-mask timing.
     const stream = createTokenHandler(guardrails);
     const onToken = stream.onToken;
@@ -308,9 +355,14 @@ async function startChat() {
         workspaceWarningShown = true;
         console.log(chalk.yellow(`⚠ Workspace tools unavailable: ${workspaceResult.error}\n`));
       }
-      const reply = await resumeAfterModel500(
+      let reply = await resumeAfterModel500(
         () => chatTurn(config, history, controller.signal, onToken, onToolTurn,
-          (snapshot) => saveSession(cleanHistory(snapshot))),
+          (snapshot) => saveSession(cleanHistory(snapshot)), {
+            codingMode: codingMode.isEnabled(),
+            approvedPlan: Boolean(approvedCodingPlan),
+            pendingPlan: codingPlanEdit,
+            planReviewOnly: Boolean(codingPlanEdit)
+          }),
         {
           signal: controller.signal,
           onRetry: () => {
@@ -319,9 +371,23 @@ async function startChat() {
           }
         }
       );
+      if (codingPlanEdit && !controller.signal.aborted) {
+        if (reply && codingWorkflow.hasPlanHeading(reply)) {
+          codingMode.setPendingPlan({ task: codingPlanEdit.task, plan: reply.trim() });
+          reply += '\n\nUpdated plan is awaiting approval. Type “continue” to implement it, edit it again, or cancel.';
+        } else {
+          reply = `${reply || ''}\n\nI could not identify a revised plan, so the previous plan is still pending. Type “edit plan: …” or “continue”.`;
+        }
+      }
       if (controller.signal.aborted) {
+        if (codingMode.isEnabled() && approvedCodingPlan) {
+          codingMode.markInterrupted();
+        }
         turnError = chalk.gray('⎋ stopped');
       } else {
+        if (codingMode.isEnabled() && approvedCodingPlan) {
+          codingMode.markCompleted();
+        }
         finalFlush({
           reply,
           streamRaw: stream.getStreamRaw(),
@@ -355,14 +421,32 @@ async function startChat() {
         proposedLesson = selfImprovement.draftLesson(failure);
       }
     } catch (err) {
+      if (codingMode.isEnabled() && approvedCodingPlan) {
+        codingMode.markInterrupted();
+      }
+      const rateLimited = isProviderRateLimit(err);
+      if (!rateLimited) discardFailedTurn(history, turnStart);
+      repairInterruptedTools(history);
+      saveSession(cleanHistory(history));
       if (controller.signal.aborted) {
         turnError = chalk.gray('⎋ stopped');
+      } else if (rateLimited) {
+        turnError = chalk.yellow(providerRateLimitMessage(err));
       } else {
         turnError = chalk.red('Error: ' + err.message);
       }
     } finally {
       stopWatch();
       stopBusyFooter();
+      const cleanup = await Promise.allSettled([
+        mcp.disconnectCodingBrowser(),
+        mcp.stopProjectServer()
+      ]);
+      for (const result of cleanup) {
+        if (result.status === 'rejected') {
+          console.log(chalk.yellow(`Coding cleanup warning: ${result.reason?.message || result.reason}`));
+        }
+      }
     }
     if (turnError) console.log(turnError + '\n');
     if (proposedLesson) {

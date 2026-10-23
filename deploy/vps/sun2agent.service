@@ -1,0 +1,23 @@
+[Unit]
+Description=Sun2Agent Telegram automation service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=sun2agent
+Group=sun2agent
+WorkingDirectory=/opt/sun2agent
+EnvironmentFile=/etc/sun2agent/sun2agent.env
+ExecStart=/usr/bin/node /opt/sun2agent/bin/sun2agent-service.js
+Restart=on-failure
+RestartSec=5
+StateDirectory=sun2agent
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true
+ReadWritePaths=/var/lib/sun2agent
+
+[Install]
+WantedBy=multi-user.target

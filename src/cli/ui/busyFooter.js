@@ -4,7 +4,7 @@
 const chalk = require('chalk');
 const { terminalWidth, truncateToWidth } = require('./layout');
 const { renderFooter } = require('./input');
-const { printUserLine } = require('../prompt');
+const { printUserLine } = require('../runtime/prompt');
 
 const BORDER = chalk.hex('#b5a642');
 
